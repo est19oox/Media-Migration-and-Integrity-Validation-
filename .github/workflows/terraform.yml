@@ -3,7 +3,7 @@ name: Terraform CI
 on:
   push:
     branches:
-      - dev_Youbo
+      - feature/github-action
     paths:
       - "infrastructure/terraform/**"
       - ".github/workflows/terraform.yml"
