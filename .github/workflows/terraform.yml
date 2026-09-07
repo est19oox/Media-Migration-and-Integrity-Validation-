@@ -8,6 +8,11 @@ on:
       - "infrastructure/terraform/**"
       - ".github/workflows/terraform.yml"
 
+# GitHub OIDC 必须有这个权限
+permissions:
+  contents: read
+  id-token: write
+
 jobs:
   terraform-check:
     name: Terraform Check
@@ -20,6 +25,17 @@ jobs:
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v7
+
+      # GitHub Actions 通过 OIDC 获取 AWS 临时凭证
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v5
+        with:
+          role-to-assume: arn:aws:iam::741444304127:role/GitHubActions-MMIV-Terraform
+          aws-region: ap-southeast-2
+
+      # 验证是否成功连接 AWS
+      - name: Verify AWS Connection
+        run: aws sts get-caller-identity
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v4
