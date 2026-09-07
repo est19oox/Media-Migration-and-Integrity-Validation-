@@ -1,5 +1,5 @@
 
-#waiting for merge into deploy_site
+#等待加入deploy中
 
 - name: Configure web server
   hosts: web
