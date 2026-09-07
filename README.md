@@ -1,2 +1,7 @@
-# Media-Migration-and-Integrity-Validation-
-Media Migration and Integrity Validation 
+# Media Migration and Integrity Validation
+
+MMIV migrates configured media files from local sources to Amazon S3 and verifies transfer integrity.
+
+## Jenkins
+
+The project includes a reproducible local Jenkins environment and an initial CI security pipeline. See [Local Jenkins Setup](docs/jenkins/local-setup.md) for Docker Desktop prerequisites and startup instructions.
