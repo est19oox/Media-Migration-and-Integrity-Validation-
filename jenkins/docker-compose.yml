@@ -1,0 +1,32 @@
+services:
+  jenkins:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: mmiv-jenkins:local
+    container_name: mmiv-jenkins
+    user: root
+    restart: unless-stopped
+    env_file:
+      - path: .env
+        required: true
+    environment:
+      CASC_JENKINS_CONFIG: /usr/share/jenkins/ref/casc.yaml
+      JENKINS_ADMIN_ID: ${JENKINS_ADMIN_ID:-admin}
+      JENKINS_ADMIN_PASSWORD: ${JENKINS_ADMIN_PASSWORD:?Create jenkins/.env from jenkins/.env.example}
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - jenkins_home:/var/jenkins_home
+      - ../:/project:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://localhost:8080/login"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+
+volumes:
+  jenkins_home:
+    name: mmiv_jenkins_home

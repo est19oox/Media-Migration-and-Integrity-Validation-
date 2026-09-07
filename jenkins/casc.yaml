@@ -1,0 +1,32 @@
+jenkins:
+  systemMessage: "MMIV local Jenkins managed by configuration as code."
+  numExecutors: 2
+  mode: NORMAL
+  securityRealm:
+    local:
+      allowsSignup: false
+      users:
+        - id: "${JENKINS_ADMIN_ID}"
+          password: "${JENKINS_ADMIN_PASSWORD}"
+  authorizationStrategy:
+    loggedInUsersCanDoAnything:
+      allowAnonymousRead: false
+  crumbIssuer:
+    standard:
+      excludeClientIPFromCrumb: false
+
+unclassified:
+  location:
+    url: "http://localhost:8080/"
+
+jobs:
+  - script: >
+      pipelineJob('mmiv-pipeline') {
+        description('Local MMIV build, test, and security pipeline')
+        definition {
+          cps {
+            script(new File('/project/Jenkinsfile').getText('UTF-8'))
+            sandbox()
+          }
+        }
+      }

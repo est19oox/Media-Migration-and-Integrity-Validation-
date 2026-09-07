@@ -1,0 +1,7 @@
+.ci/
+jenkins/.env
+jenkins_home/
+**/.terraform/
+*.tfstate
+*.tfstate.*
+crash.log
