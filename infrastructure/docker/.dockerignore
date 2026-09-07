@@ -1,0 +1,32 @@
+# Git
+.git
+.gitignore
+
+# Java build output
+target/
+build/
+out/
+*.class
+*.jar
+
+# IDE files
+.idea/
+.vscode/
+*.iml
+
+# macOS
+.DS_Store
+
+# Logs
+*.log
+logs/
+
+# Environment and secrets
+.env
+.env.*
+*.key
+*.pem
+
+# Temporary files
+tmp/
+temp/
