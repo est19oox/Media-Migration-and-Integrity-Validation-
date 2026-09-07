@@ -26,27 +26,27 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v7
 
-      - name: Debug OIDC Claims
-        shell: bash
-        run: |
-          RESPONSE=$(curl -sS \
-            -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
-            "$ACTIONS_ID_TOKEN_REQUEST_URL")
+      # - name: Debug OIDC Claims
+      #   shell: bash
+      #   run: |
+      #     RESPONSE=$(curl -sS \
+      #       -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+      #       "$ACTIONS_ID_TOKEN_REQUEST_URL")
 
-          TOKEN=$(echo "$RESPONSE" | jq -r '.value')
+      #     TOKEN=$(echo "$RESPONSE" | jq -r '.value')
 
-          echo "$TOKEN" \
-            | cut -d '.' -f2 \
-            | base64 -d 2>/dev/null \
-            | jq '{
-                sub,
-                aud,
-                repository,
-                repository_id,
-                repository_owner,
-                repository_owner_id,
-                ref
-              }'
+      #     echo "$TOKEN" \
+      #       | cut -d '.' -f2 \
+      #       | base64 -d 2>/dev/null \
+      #       | jq '{
+      #           sub,
+      #           aud,  
+      #           repository,
+      #           repository_id,
+      #           repository_owner,
+      #           repository_owner_id,
+      #           ref
+      #         }'
       
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v5
@@ -71,3 +71,6 @@ jobs:
 
       - name: Terraform Validate
         run: terraform validate
+
+      - name: Terraform Plan
+        run: terraform plan -input=false
