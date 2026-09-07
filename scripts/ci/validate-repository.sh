@@ -13,8 +13,8 @@ for required_path in README.md src tests scripts infrastructure; do
     fi
 done
 
-if command -v git >/dev/null 2>&1 && git -C "$ROOT" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-    tracked_files=$(git -C "$ROOT" ls-files)
+if command -v git >/dev/null 2>&1 && git -c safe.directory="$ROOT" -C "$ROOT" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    tracked_files=$(git -c safe.directory="$ROOT" -C "$ROOT" ls-files)
 else
     tracked_files=$(find "$ROOT" -type f -print)
 fi

@@ -15,7 +15,7 @@ pipeline {
                 deleteDir()
                 sh '''
                     set -eu
-                    tar --exclude=.git --exclude=docs/superpowers -C /project -cf - . | tar -xf -
+                    tar --exclude=.git --exclude=docs/superpowers --exclude=jenkins/.env -C /project -cf - . | tar -xf -
                     chmod +x scripts/ci/*.sh
                 '''
             }

@@ -28,6 +28,7 @@ $expectations = @(
     @{ File = 'jenkins/plugins.txt'; Content = $plugins; Pattern = 'configuration-as-code' },
     @{ File = 'jenkins/plugins.txt'; Content = $plugins; Pattern = 'workflow-aggregator' },
     @{ File = 'jenkins/plugins.txt'; Content = $plugins; Pattern = 'job-dsl' },
+    @{ File = 'jenkins/plugins.txt'; Content = $plugins; Pattern = 'timestamper' },
     @{ File = 'jenkins/docker-compose.yml'; Content = $compose; Pattern = '127\.0\.0\.1:8080:8080' },
     @{ File = 'jenkins/docker-compose.yml'; Content = $compose; Pattern = '/var/run/docker\.sock:/var/run/docker\.sock' },
     @{ File = 'jenkins/docker-compose.yml'; Content = $compose; Pattern = '\.\./:/project:ro' },
@@ -55,6 +56,9 @@ if ($combined -match 'AKIA[0-9A-Z]{16}') {
 }
 if ($combined -match '(?im)^\s*(password|secret)\s*[:=]\s*["'']?(?!\$\{)[^"''$<{\s][^\r\n]+$') {
     $failures.Add('Jenkins configuration appears to contain a plaintext credential.')
+}
+if ($casc -match 'excludeClientIPFromCrumb') {
+    $failures.Add('JCasC uses the unsupported DefaultCrumbIssuer attribute excludeClientIPFromCrumb.')
 }
 
 if ($failures.Count -gt 0) {

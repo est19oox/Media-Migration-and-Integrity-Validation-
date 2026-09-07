@@ -4,5 +4,6 @@ git
 job-dsl
 junit
 pipeline-stage-view
+timestamper
 workflow-aggregator
 ws-cleanup
