@@ -1,0 +1,23 @@
+#一个通过workflow自动部署Terraform的脚本，或许等待添加ansible的自动化部署功能，或许会删除
+
+name: Terraform Auto Deploy
+
+on:
+  push:
+    branches: [ "main" ] # 当代码合并到 main 分支时自动触发
+
+jobs:
+  terraform:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Terraform Apply
+        run: terraform apply -auto-approve

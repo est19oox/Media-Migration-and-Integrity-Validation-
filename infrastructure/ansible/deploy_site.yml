@@ -1,0 +1,44 @@
+- name: 自动化部署网站代码
+  hosts: webservers
+  become: yes
+  vars:
+    # 定义变量
+    repo_url: "git@github.com:yourusername/your-repo.git" # 你的 Git 仓库地址
+    dest_path: "/var/www/my_website"                     # 网站在服务器上的存放路径
+    web_user: "www-data"                                 # Nginx 运行用户
+
+  tasks:
+    - name: 1. 确保安装了 Git 和 Nginx
+      apt: # 如果是 CentOS 请使用 yum 模块
+        name:
+          - git
+          - nginx
+        state: present
+        update_cache: yes
+
+    - name: 2. 克隆或拉取最新的网站代码
+      git:
+        repo: "{{ repo_url }}"
+        dest: "{{ dest_path }}"
+        version: main # 或者指定的分支、Tag、Commit ID
+        force: yes    # 如果服务器有本地修改，强制覆盖
+      register: git_result
+
+    - name: 3. 修改网站目录的权限
+      file:
+        path: "{{ dest_path }}"
+        owner: "{{ web_user }}"
+        group: "{{ web_user }}"
+        recurse: yes
+
+    - name: 4. 确保 Nginx 服务正在运行并开机自启
+      service:
+        name: nginx
+        state: started
+        enabled: yes
+
+    - name: 5. 如果代码有更新，重启 Nginx（可选，静态网页通常不需要）
+      service:
+        name: nginx
+        state: restarted
+      when: git_result.changed
