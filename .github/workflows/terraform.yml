@@ -64,7 +64,7 @@ jobs:
           terraform_version: 1.15.8
 
       - name: Terraform Init
-        run: terraform init -backend=false
+        run: terraform init 
 
       - name: Terraform Format Check
         run: terraform fmt -check
