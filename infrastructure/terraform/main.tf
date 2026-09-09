@@ -121,3 +121,23 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "migration" {
 
 #   description = "Allow outbound traffic"
 # }
+
+resource "aws_ecr_repository" "mmiv" {
+  name                 = "mmiv"
+  image_tag_mutability = "IMMUTABLE"
+
+  image_scanning_configuration {
+    scan_on_push = true
+  }
+
+  encryption_configuration {
+    encryption_type = "AES256"
+  }
+
+  tags = {
+    Name        = "MMIV Container Repository"
+    Project     = "MMIV"
+    Environment = "dev"
+    ManagedBy   = "Terraform"
+  }
+}
