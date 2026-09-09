@@ -1,7 +1,12 @@
 name: Terraform Deploy
 
 on:
-  workflow_dispatch:
+  push:
+    branches:
+      - feature/github-action
+    paths:
+      - "infrastructure/terraform/**"
+      - ".github/workflows/terraform-deploy.yml"
 
 permissions:
   contents: read
