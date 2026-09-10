@@ -1,0 +1,28 @@
+# Trivy configuration
+# Sprint 0 DevSecOps security scanning foundation
+
+scan:
+  scanners:
+    - vuln
+    - misconfig
+    - secret
+
+severity:
+  - HIGH
+  - CRITICAL
+
+exit-code: 1ø
+≈# Trivy configuration
+# Sprint 0 DevSecOps security scanning foundation
+
+scan:
+  scanners:
+    - vuln
+    - misconfig
+    - secret
+
+severity:
+  - HIGH
+  - CRITICAL
+
+exit-code: 1

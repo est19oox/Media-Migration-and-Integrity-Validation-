@@ -1,0 +1,9 @@
+# Checkov configuration
+# Sprint 0 Infrastructure as Code security scanning foundation
+
+framework:
+  - terraform
+
+quiet: true
+compact: true
+soft-fail: true
