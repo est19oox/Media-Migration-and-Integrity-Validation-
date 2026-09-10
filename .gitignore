@@ -1,2 +1,6 @@
 # macOS
 .DS_Store
+# Local environment configuration
+.env
+.env.local
+.env.*.local

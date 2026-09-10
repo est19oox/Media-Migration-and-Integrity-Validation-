@@ -1,0 +1,33 @@
+# Example application configuration
+# Sprint 0 configuration foundation
+
+application:
+  name: media-migration-app
+  environment: development
+
+source:
+  directory: ./data/source
+
+aws:
+  region: ap-southeast-1
+  s3:
+    bucket: example-media-migration-bucket
+    prefix: migration/
+
+migration:
+  supported-file-types:
+    - mp4
+    - pdf
+    - mp3
+    - ppt
+    - png
+  concurrent-uploads: 4
+  retry:
+    max-attempts: 3
+
+validation:
+  checksum-algorithm: SHA-256
+  verify-file-size: true
+
+logging:
+  level: INFO
