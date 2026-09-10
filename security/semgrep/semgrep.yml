@@ -1,0 +1,23 @@
+# Semgrep configuration
+# Sprint 0 SAST security scanning foundation
+
+rules:
+  - id: hardcoded-sensitive-value
+    patterns:
+      - pattern-either:
+          - pattern: String $VAR = "$VALUE";
+          - pattern: var $VAR = "$VALUE";
+      - metavariable-regex:
+          metavariable: $VAR
+          regex: (?i).*(password|secret|access_key|api_key|token).*
+    message: Potential hardcoded sensitive value detected.
+    languages:
+      - java
+    severity: ERROR
+
+  - id: insecure-random
+    pattern: new java.util.Random(...)
+    message: java.util.Random should not be used for security-sensitive operations.
+    languages:
+      - java
+    severity: WARNING
