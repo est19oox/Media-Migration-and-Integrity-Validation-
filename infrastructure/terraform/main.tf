@@ -50,3 +50,41 @@ resource "aws_ecr_repository" "mmiv" {
     ManagedBy   = "Terraform"
   }
 }
+
+
+resource "aws_iam_role" "mmiv_ec2" {
+  name = "MMIV-EC2"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+
+    Statement = [
+      {
+        Effect = "Allow"
+
+        Principal = {
+          Service = "ec2.amazonaws.com"
+        }
+
+        Action = "sts:AssumeRole"
+      }
+    ]
+  })
+
+  tags = {
+    Name        = "MMIV EC2 Role"
+    Project     = "MMIV"
+    Environment = "dev"
+    ManagedBy   = "Terraform"
+  }
+}
+
+resource "aws_iam_role_policy_attachment" "mmiv_ec2_ecr" {
+  role       = aws_iam_role.mmiv_ec2.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly"
+}
+
+resource "aws_iam_instance_profile" "mmiv_ec2" {
+  name = "MMIV-EC2"
+  role = aws_iam_role.mmiv_ec2.name
+}
