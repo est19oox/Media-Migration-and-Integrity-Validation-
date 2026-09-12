@@ -1,3 +1,4 @@
+# Creates a private S3 bucket for media migration files.
 resource "aws_s3_bucket" "migration" {
   bucket_prefix = "mmiv-dev-"
 
@@ -11,6 +12,7 @@ resource "aws_s3_bucket" "migration" {
 
 }
 
+# Keeps the S3 bucket private by blocking public access.
 resource "aws_s3_bucket_public_access_block" "migration" {
   bucket = aws_s3_bucket.migration.id
 
@@ -21,6 +23,7 @@ resource "aws_s3_bucket_public_access_block" "migration" {
 }
 
 
+# Encrypts files in the S3 bucket by default.
 resource "aws_s3_bucket_server_side_encryption_configuration" "migration" {
   bucket = aws_s3_bucket.migration.id
 
@@ -31,6 +34,7 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "migration" {
   }
 }
 
+# Creates a private Amazon ECR repository for MMIV container images.
 resource "aws_ecr_repository" "mmiv" {
   name                 = "mmiv"
   image_tag_mutability = "IMMUTABLE"
@@ -52,6 +56,7 @@ resource "aws_ecr_repository" "mmiv" {
 }
 
 
+# Creates an IAM role that EC2 instances can use.
 resource "aws_iam_role" "mmiv_ec2" {
   name = "MMIV-EC2"
 
@@ -79,12 +84,78 @@ resource "aws_iam_role" "mmiv_ec2" {
   }
 }
 
+# Allows the EC2 role to pull images from Amazon ECR.
 resource "aws_iam_role_policy_attachment" "mmiv_ec2_ecr" {
   role       = aws_iam_role.mmiv_ec2.name
   policy_arn = "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly"
 }
 
+# Connects the EC2 IAM role to an instance profile.
 resource "aws_iam_instance_profile" "mmiv_ec2" {
   name = "MMIV-EC2"
   role = aws_iam_role.mmiv_ec2.name
+}
+
+# Allows the EC2 role to list the bucket and read its files.
+resource "aws_iam_role_policy" "mmiv_ec2_s3" {
+  name = "MMIV-S3-Access"
+  role = aws_iam_role.mmiv_ec2.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+
+    Statement = [
+      {
+        Effect = "Allow"
+
+        Action = [
+          "s3:ListBucket"
+        ]
+
+        Resource = aws_s3_bucket.migration.arn
+      },
+      {
+        Effect = "Allow"
+
+        Action = [
+          "s3:GetObject"
+        ]
+
+        Resource = "${aws_s3_bucket.migration.arn}/*"
+      }
+    ]
+  })
+}
+
+# Allows the MMIV EC2 role to list the bucket and read its files.
+resource "aws_iam_role_policy" "mmiv_ec2_s3" {
+  name = "MMIV-S3-Access"
+  role = aws_iam_role.mmiv_ec2.name
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "s3:ListBucket"
+        ]
+        Resource = aws_s3_bucket.migration.arn
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "s3:GetObject"
+        ]
+        Resource = "${aws_s3_bucket.migration.arn}/*"
+      }
+    ]
+  })
+}
+
+# Allows the EC2 role to be managed through AWS Systems Manager.
+resource "aws_iam_role_policy_attachment" "mmiv_ec2_ssm" {
+  role       = aws_iam_role.mmiv_ec2.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
 }
