@@ -222,3 +222,46 @@ resource "aws_security_group" "mmiv_ec2" {
     ManagedBy   = "Terraform"
   }
 }
+
+
+# Finds the latest Amazon Linux 2023 AMI.
+data "aws_ami" "amazon_linux" {
+  most_recent = true
+  owners      = ["amazon"]
+
+  filter {
+    name   = "name"
+    values = ["al2023-ami-2023.*-x86_64"]
+  }
+
+  filter {
+    name   = "architecture"
+    values = ["x86_64"]
+  }
+
+  filter {
+    name   = "virtualization-type"
+    values = ["hvm"]
+  }
+}
+
+# Creates the MMIV application server.
+resource "aws_instance" "mmiv" {
+  ami                         = data.aws_ami.amazon_linux.id
+  instance_type               = "t3.micro"
+  subnet_id                   = aws_subnet.mmiv_public.id
+  associate_public_ip_address = true
+
+  vpc_security_group_ids = [
+    aws_security_group.mmiv_ec2.id
+  ]
+
+  iam_instance_profile = aws_iam_instance_profile.mmiv_ec2.name
+
+  tags = {
+    Name        = "MMIV-EC2"
+    Project     = "MMIV"
+    Environment = "dev"
+    ManagedBy   = "Terraform"
+  }
+}
