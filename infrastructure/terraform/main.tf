@@ -96,36 +96,7 @@ resource "aws_iam_instance_profile" "mmiv_ec2" {
   role = aws_iam_role.mmiv_ec2.name
 }
 
-# Allows the EC2 role to list the bucket and read its files.
-resource "aws_iam_role_policy" "mmiv_ec2_s3" {
-  name = "MMIV-S3-Access"
-  role = aws_iam_role.mmiv_ec2.id
 
-  policy = jsonencode({
-    Version = "2012-10-17"
-
-    Statement = [
-      {
-        Effect = "Allow"
-
-        Action = [
-          "s3:ListBucket"
-        ]
-
-        Resource = aws_s3_bucket.migration.arn
-      },
-      {
-        Effect = "Allow"
-
-        Action = [
-          "s3:GetObject"
-        ]
-
-        Resource = "${aws_s3_bucket.migration.arn}/*"
-      }
-    ]
-  })
-}
 
 # Allows the MMIV EC2 role to list the bucket and read its files.
 resource "aws_iam_role_policy" "mmiv_ec2_s3" {
