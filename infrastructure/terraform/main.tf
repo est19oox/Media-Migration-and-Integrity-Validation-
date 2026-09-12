@@ -130,3 +130,95 @@ resource "aws_iam_role_policy_attachment" "mmiv_ec2_ssm" {
   role       = aws_iam_role.mmiv_ec2.name
   policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
 }
+
+
+# Creates an isolated virtual network for MMIV resources.
+resource "aws_vpc" "mmiv" {
+  cidr_block           = "10.0.0.0/16"
+  enable_dns_support   = true
+  enable_dns_hostnames = true
+
+  tags = {
+    Name        = "MMIV-VPC"
+    Project     = "MMIV"
+    Environment = "dev"
+    ManagedBy   = "Terraform"
+  }
+}
+
+# Creates a public subnet for the MMIV EC2 instance.
+resource "aws_subnet" "mmiv_public" {
+  vpc_id                  = aws_vpc.mmiv.id
+  cidr_block              = "10.0.1.0/24"
+  map_public_ip_on_launch = true
+
+  tags = {
+    Name        = "MMIV-Public-Subnet"
+    Project     = "MMIV"
+    Environment = "dev"
+    ManagedBy   = "Terraform"
+  }
+}
+
+
+# Connects the MMIV VPC to the Internet.
+resource "aws_internet_gateway" "mmiv" {
+  vpc_id = aws_vpc.mmiv.id
+
+  tags = {
+    Name        = "MMIV-IGW"
+    Project     = "MMIV"
+    Environment = "dev"
+    ManagedBy   = "Terraform"
+  }
+}
+
+# Creates a route table for the public subnet.
+resource "aws_route_table" "mmiv_public" {
+  vpc_id = aws_vpc.mmiv.id
+
+  route {
+    cidr_block = "0.0.0.0/0"
+    gateway_id = aws_internet_gateway.mmiv.id
+  }
+
+  tags = {
+    Name        = "MMIV-Public-RT"
+    Project     = "MMIV"
+    Environment = "dev"
+    ManagedBy   = "Terraform"
+  }
+}
+
+
+# Associates the public subnet with the public route table.
+resource "aws_route_table_association" "mmiv_public" {
+  subnet_id      = aws_subnet.mmiv_public.id
+  route_table_id = aws_route_table.mmiv_public.id
+}
+
+
+# Controls network traffic for the MMIV EC2 instance.
+resource "aws_security_group" "mmiv_ec2" {
+  name        = "MMIV-EC2-SG"
+  description = "Security group for MMIV EC2"
+  vpc_id      = aws_vpc.mmiv.id
+
+  # No inbound rules.
+  # The EC2 instance will be managed through SSM.
+
+  egress {
+    description = "Allow outbound HTTPS"
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Name        = "MMIV-EC2-SG"
+    Project     = "MMIV"
+    Environment = "dev"
+    ManagedBy   = "Terraform"
+  }
+}
