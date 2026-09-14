@@ -28,7 +28,7 @@ public class Main {
             response.contents().forEach(object -> System.out.println("- " + object.key()));
 
             System.out.println("S3 connection successful.");
-            System.out.println("Please ensure that the bucket name is correct and that the AWS credentials are properly configured.");
+            
 
         } catch (Exception e) {
             System.err.println("S3 connection failed.");
