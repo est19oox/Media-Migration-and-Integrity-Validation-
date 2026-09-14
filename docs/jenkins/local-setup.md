@@ -34,7 +34,13 @@ On macOS or Linux, the equivalent command is:
 cp jenkins/.env.example jenkins/.env
 ```
 
-Edit `jenkins/.env` and replace the example password with a strong password used only for this local Jenkins instance. The `.env` file is ignored by Git and must never be committed.
+Edit `jenkins/.env` and:
+
+1. Replace the example Jenkins password with a strong password used only for this local instance.
+2. Set `GITHUB_USERNAME` to your GitHub username.
+3. Set `GITHUB_TOKEN` to a fine-grained personal access token that can read repository contents for this private repository.
+
+The GitHub token needs read-only repository access; it does not need permission to push, administer the repository, or manage workflows. The `.env` file is ignored by Git and must never be committed or shared.
 
 ## Start Jenkins
 
@@ -58,6 +64,8 @@ GitHub push -> Jenkins scans within two minutes -> branch job checks out commit
 ```
 
 SCM polling is used because GitHub cannot call a Jenkins service bound to `localhost`. The computer hosting Jenkins must remain online with Docker running and must be able to reach GitHub. Other contributors need only Git and GitHub access; they do not need Docker merely to push code and trigger this Jenkins instance.
+
+Jenkins stores the token as a managed credential named `github-pat` and uses it only to discover and check out branches. If branch indexing reports an authentication failure, confirm that the token has access to this private repository, then restart Jenkins after updating `jenkins/.env`.
 
 A branch is discoverable only after it contains the root `Jenkinsfile`. In normal team workflow, new feature branches inherit it from `main` after the Jenkins feature is merged.
 

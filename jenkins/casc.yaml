@@ -14,6 +14,17 @@ jenkins:
   crumbIssuer:
     standard: {}
 
+credentials:
+  system:
+    domainCredentials:
+      - credentials:
+          - usernamePassword:
+              scope: GLOBAL
+              id: "github-pat"
+              description: "GitHub access for the private MMIV repository"
+              username: "${GITHUB_USERNAME}"
+              password: "${GITHUB_TOKEN}"
+
 unclassified:
   location:
     url: "http://localhost:8080/"
@@ -26,6 +37,7 @@ jobs:
           git {
             id('mmiv-github-heads')
             remote('https://github.com/est19oox/Media-Migration-and-Integrity-Validation-.git')
+            credentialsId('github-pat')
             includes('*')
           }
         }

@@ -14,6 +14,8 @@ services:
       CASC_JENKINS_CONFIG: /usr/share/jenkins/ref/casc.yaml
       JENKINS_ADMIN_ID: ${JENKINS_ADMIN_ID:-admin}
       JENKINS_ADMIN_PASSWORD: ${JENKINS_ADMIN_PASSWORD:?Create jenkins/.env from jenkins/.env.example}
+      GITHUB_USERNAME: ${GITHUB_USERNAME:?Set your GitHub username in jenkins/.env}
+      GITHUB_TOKEN: ${GITHUB_TOKEN:?Set a read-only GitHub token in jenkins/.env}
     ports:
       - "127.0.0.1:8080:8080"
     volumes:
