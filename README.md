@@ -4,4 +4,4 @@ MMIV migrates configured media files from local sources to Amazon S3 and verifie
 
 ## Jenkins
 
-The project includes a reproducible local Jenkins environment and an initial CI security pipeline. See [Local Jenkins Setup](docs/jenkins/local-setup.md) for Docker Desktop prerequisites and startup instructions.
+The project includes a reproducible local Jenkins environment and an automatic GitHub branch CI security pipeline. See [Local Jenkins Setup](docs/jenkins/local-setup.md) for Docker prerequisites, branch discovery, and startup instructions.

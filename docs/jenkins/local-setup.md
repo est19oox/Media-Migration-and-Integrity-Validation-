@@ -2,15 +2,15 @@
 
 ## Purpose
 
-This guide starts the MMIV Jenkins environment on Docker Desktop. Jenkins is configured from files in this repository and creates a local pipeline job named `mmiv-pipeline`.
+This guide starts the MMIV Jenkins environment on Docker Desktop. Jenkins is configured from files in this repository and creates a GitHub-backed multibranch job named `mmiv-ci`.
 
 The environment is intended only for project development and demonstration. It is not a production Jenkins deployment.
 
 ## Prerequisites
 
-- Windows with Docker Desktop using Linux containers.
+- Windows, macOS, or Linux with Docker Desktop or a compatible Linux Docker Engine.
 - Docker Compose, included with current Docker Desktop releases.
-- PowerShell 7 or Windows PowerShell 5.1.
+- PowerShell 7 or Windows PowerShell 5.1 when using the provided helper scripts.
 - At least 6 GB of free memory for the first image build and security tools.
 
 Confirm Docker Desktop is running before continuing:
@@ -28,6 +28,12 @@ From the repository root, create the local environment file:
 Copy-Item jenkins/.env.example jenkins/.env
 ```
 
+On macOS or Linux, the equivalent command is:
+
+```sh
+cp jenkins/.env.example jenkins/.env
+```
+
 Edit `jenkins/.env` and replace the example password with a strong password used only for this local Jenkins instance. The `.env` file is ignored by Git and must never be committed.
 
 ## Start Jenkins
@@ -40,20 +46,33 @@ Run:
 
 The first build downloads Jenkins, Terraform, Semgrep, Checkov, Trivy, and Jenkins plugins, so it can take several minutes. When the health check passes, open [http://localhost:8080](http://localhost:8080) and sign in with the values from `jenkins/.env`.
 
-Open `mmiv-pipeline` and select **Build Now**. The current project skeleton should pass repository validation and visibly mark application, Terraform, and container stages as `SKIPPED` until the corresponding files exist.
+Open `mmiv-ci`. Jenkins scans GitHub automatically and creates a child job for every remote branch that contains a root `Jenkinsfile`. Select **Scan Multibranch Pipeline Now** when an immediate demonstration is preferable to waiting for the next scheduled scan.
+
+## Automatic GitHub CI
+
+The local trigger flow is:
+
+```text
+GitHub push -> Jenkins scans within two minutes -> branch job checks out commit
+-> tests and security gates run -> reports are retained in the build
+```
+
+SCM polling is used because GitHub cannot call a Jenkins service bound to `localhost`. The computer hosting Jenkins must remain online with Docker running and must be able to reach GitHub. Other contributors need only Git and GitHub access; they do not need Docker merely to push code and trigger this Jenkins instance.
+
+A branch is discoverable only after it contains the root `Jenkinsfile`. In normal team workflow, new feature branches inherit it from `main` after the Jenkins feature is merged.
 
 ## Pipeline Stages
 
 The initial pipeline runs these stages in order:
 
-1. Copy the local project snapshot into the isolated Jenkins workspace.
+1. Check out the exact GitHub branch revision into an isolated Jenkins workspace.
 2. Validate the repository structure and reject tracked secret/state files.
 3. Run application unit tests when a supported project manifest exists.
 4. Run Semgrep SAST when supported source code exists.
 5. Run Trivy SCA when a supported dependency manifest exists.
 6. Format-check and validate Terraform when `.tf` files exist.
 7. Run Checkov against Terraform configuration.
-8. Build the application image when a root `Dockerfile` exists.
+8. Build the application image when a root `Dockerfile` or compatibility `dockerfile` exists.
 9. Run Trivy against the built image.
 10. Archive available scanner reports.
 
