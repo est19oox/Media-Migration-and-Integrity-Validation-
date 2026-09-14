@@ -15,6 +15,10 @@ elif [ -f "$ROOT/package.json" ]; then
     (cd "$ROOT" && npm test)
 elif [ -f "$ROOT/pom.xml" ]; then
     require_command mvn
+    JAVA_HOME=/opt/jdk-25
+    export JAVA_HOME
+    PATH="$JAVA_HOME/bin:$PATH"
+    export PATH
     (cd "$ROOT" && mvn --batch-mode test)
 else
     skip 'No supported application manifest; unit tests are not active yet.'

@@ -53,6 +53,7 @@ foreach ($script in $conditionalScripts) {
 }
 
 Assert-FileContains 'scripts/ci/run-tests.sh' @('pyproject\.toml', 'package\.json', 'pom\.xml')
+Assert-FileContains 'scripts/ci/run-tests.sh' @('/opt/jdk-25', 'JAVA_HOME')
 Assert-FileContains 'scripts/ci/run-sast.sh' @('semgrep')
 Assert-FileContains 'scripts/ci/run-sca.sh' @('trivy', 'HIGH,CRITICAL')
 Assert-FileContains 'scripts/ci/run-terraform-checks.sh' @('terraform', 'fmt', 'validate')

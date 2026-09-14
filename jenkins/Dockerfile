@@ -1,6 +1,10 @@
+FROM eclipse-temurin:25-jdk AS application-jdk
+
 FROM jenkins/jenkins:lts-jdk21
 
 USER root
+
+COPY --from=application-jdk /opt/java/openjdk /opt/jdk-25
 
 ARG SEMGREP_VERSION=1.138.0
 ARG CHECKOV_VERSION=3.2.489
@@ -12,6 +16,7 @@ RUN apt-get update \
         git \
         gnupg \
         jq \
+        maven \
         python3 \
         python3-venv \
         unzip \

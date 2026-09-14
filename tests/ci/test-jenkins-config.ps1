@@ -23,6 +23,9 @@ $gitattributes = Read-RequiredFile '.gitattributes'
 
 $expectations = @(
     @{ File = 'jenkins/Dockerfile'; Content = $dockerfile; Pattern = 'FROM jenkins/jenkins:lts-jdk21' },
+    @{ File = 'jenkins/Dockerfile'; Content = $dockerfile; Pattern = 'FROM eclipse-temurin:25-jdk AS application-jdk' },
+    @{ File = 'jenkins/Dockerfile'; Content = $dockerfile; Pattern = 'COPY --from=application-jdk /opt/java/openjdk /opt/jdk-25' },
+    @{ File = 'jenkins/Dockerfile'; Content = $dockerfile; Pattern = '\bmaven\b' },
     @{ File = 'jenkins/Dockerfile'; Content = $dockerfile; Pattern = 'jenkins-plugin-cli' },
     @{ File = 'jenkins/Dockerfile'; Content = $dockerfile; Pattern = 'docker-ce-cli' },
     @{ File = 'jenkins/plugins.txt'; Content = $plugins; Pattern = 'configuration-as-code' },
@@ -62,6 +65,9 @@ if ($combined -match '(?im)^\s*(password|secret)\s*[:=]\s*["'']?(?!\$\{)[^"''$<{
 }
 if ($casc -match 'excludeClientIPFromCrumb') {
     $failures.Add('JCasC uses the unsupported DefaultCrumbIssuer attribute excludeClientIPFromCrumb.')
+}
+if ($dockerfile -match '(?m)^ENV\s+JAVA_HOME=/opt/jdk-25') {
+    $failures.Add('The Jenkins controller must not use the application JDK 25 as its global JAVA_HOME.')
 }
 if ($casc -match "pipelineJob\('mmiv-pipeline'\)") {
     $failures.Add('JCasC still defines the obsolete local snapshot pipeline job.')
