@@ -14,5 +14,10 @@ fi
 
 require_command semgrep
 prepare_reports_directory "$ROOT"
-semgrep scan --config auto --error --json --output "$ROOT/.ci/reports/semgrep.json" "$ROOT/src"
+semgrep_config=p/java
+if [ -f "$ROOT/security/semgrep/semgrep.yml" ]; then
+    semgrep_config="$ROOT/security/semgrep/semgrep.yml"
+fi
+
+semgrep scan --config "$semgrep_config" --error --json --output "$ROOT/.ci/reports/semgrep.json" "$ROOT/src"
 pass 'Semgrep SAST completed without blocking findings.'

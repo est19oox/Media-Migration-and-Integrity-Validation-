@@ -36,4 +36,30 @@ PATH="$FIXTURE_ROOT/bin:$PATH" "$ROOT/scripts/ci/run-tests.sh" "$FIXTURE_ROOT"
 grep -qx 'JAVA_HOME=/opt/jdk-25' "$MMIV_MAVEN_LOG"
 grep -qx 'ARGS=--batch-mode test' "$MMIV_MAVEN_LOG"
 
+mkdir -p "$FIXTURE_ROOT/src/main/java" "$FIXTURE_ROOT/security/semgrep"
+printf 'class Example {}\n' > "$FIXTURE_ROOT/src/main/java/Example.java"
+printf 'rules: []\n' > "$FIXTURE_ROOT/security/semgrep/semgrep.yml"
+cat > "$FIXTURE_ROOT/bin/semgrep" <<'EOF'
+#!/usr/bin/env sh
+set -eu
+printf '%s\n' "$*" > "$MMIV_SEMGREP_LOG"
+exit "${MMIV_SEMGREP_EXIT:-0}"
+EOF
+chmod +x "$FIXTURE_ROOT/bin/semgrep"
+
+MMIV_SEMGREP_LOG="$FIXTURE_ROOT/semgrep.log"
+export MMIV_SEMGREP_LOG
+PATH="$FIXTURE_ROOT/bin:$PATH" "$ROOT/scripts/ci/run-sast.sh" "$FIXTURE_ROOT"
+
+grep -F -- "--config $FIXTURE_ROOT/security/semgrep/semgrep.yml" "$MMIV_SEMGREP_LOG"
+grep -F -- '--error' "$MMIV_SEMGREP_LOG"
+grep -F -- '--json' "$MMIV_SEMGREP_LOG"
+grep -F -- "--output $FIXTURE_ROOT/.ci/reports/semgrep.json" "$MMIV_SEMGREP_LOG"
+
+if MMIV_SEMGREP_EXIT=1 PATH="$FIXTURE_ROOT/bin:$PATH" \
+    "$ROOT/scripts/ci/run-sast.sh" "$FIXTURE_ROOT"; then
+    printf 'FAIL: SAST wrapper ignored the scanner failure exit code.\n' >&2
+    exit 1
+fi
+
 printf 'PASS: CI runtime skeleton behavior is valid.\n'

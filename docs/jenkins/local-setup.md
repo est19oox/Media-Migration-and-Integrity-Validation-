@@ -57,6 +57,12 @@ The initial pipeline runs these stages in order:
 9. Run Trivy against the built image.
 10. Archive available scanner reports.
 
+## SAST Ownership and Quality Gate
+
+The security contributor owns the Semgrep rule content and false-positive tuning in `security/semgrep/semgrep.yml`. Jenkins owns the pinned Semgrep installation, invocation, failure handling, and retention of `.ci/reports/semgrep.json`.
+
+When the team rule file exists, the pipeline uses it instead of the temporary maintained Java ruleset fallback. Semgrep configuration errors, scanner errors, and findings raised as blocking errors fail the branch build. Because an ERROR rule can block every active branch, changes to the team rule file require security review.
+
 This version deliberately does not run `terraform apply`, access AWS, deploy an application, or perform DAST.
 
 ## Stop Jenkins
