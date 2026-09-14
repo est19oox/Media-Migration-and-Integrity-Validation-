@@ -79,6 +79,14 @@ grep -Fx -- "build --file $FIXTURE_ROOT/dockerfile --tag mmiv:contract $FIXTURE_
     "$MMIV_DOCKER_LOG"
 grep -qx 'mmiv:contract' "$FIXTURE_ROOT/.ci/image-ref"
 
+GIT_COMMIT=0123456789abcdef0123456789abcdef01234567 \
+    PATH="$FIXTURE_ROOT/bin:$PATH" \
+    "$ROOT/scripts/ci/build-image.sh" "$FIXTURE_ROOT"
+
+grep -Fx -- "build --file $FIXTURE_ROOT/dockerfile --tag mmiv:0123456789abcdef0123456789abcdef01234567 $FIXTURE_ROOT" \
+    "$MMIV_DOCKER_LOG"
+grep -qx 'mmiv:0123456789abcdef0123456789abcdef01234567' "$FIXTURE_ROOT/.ci/image-ref"
+
 mkdir -p "$FIXTURE_ROOT/infrastructure"
 printf 'resource "test_resource" "example" {}\n' > "$FIXTURE_ROOT/infrastructure/main.tf"
 cat > "$FIXTURE_ROOT/bin/checkov" <<'EOF'

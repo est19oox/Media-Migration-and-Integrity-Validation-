@@ -18,7 +18,7 @@ if [ ! -f "$dockerfile" ]; then
 fi
 
 require_command docker
-image_ref=${MMIV_IMAGE:-"mmiv:${BUILD_NUMBER:-local}"}
+image_ref=${MMIV_IMAGE:-"mmiv:${GIT_COMMIT:-${BUILD_NUMBER:-local}}"}
 mkdir -p "$ROOT/.ci"
 docker build --file "$dockerfile" --tag "$image_ref" "$ROOT"
 printf '%s\n' "$image_ref" > "$ROOT/.ci/image-ref"
