@@ -6,4 +6,5 @@ junit
 pipeline-stage-view
 timestamper
 workflow-aggregator
+workflow-multibranch
 ws-cleanup

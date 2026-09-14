@@ -27,16 +27,19 @@ $expectations = @(
     @{ File = 'jenkins/Dockerfile'; Content = $dockerfile; Pattern = 'docker-ce-cli' },
     @{ File = 'jenkins/plugins.txt'; Content = $plugins; Pattern = 'configuration-as-code' },
     @{ File = 'jenkins/plugins.txt'; Content = $plugins; Pattern = 'workflow-aggregator' },
+    @{ File = 'jenkins/plugins.txt'; Content = $plugins; Pattern = 'workflow-multibranch' },
     @{ File = 'jenkins/plugins.txt'; Content = $plugins; Pattern = 'job-dsl' },
     @{ File = 'jenkins/plugins.txt'; Content = $plugins; Pattern = 'timestamper' },
     @{ File = 'jenkins/docker-compose.yml'; Content = $compose; Pattern = '127\.0\.0\.1:8080:8080' },
     @{ File = 'jenkins/docker-compose.yml'; Content = $compose; Pattern = '/var/run/docker\.sock:/var/run/docker\.sock' },
-    @{ File = 'jenkins/docker-compose.yml'; Content = $compose; Pattern = '\.\./:/project:ro' },
     @{ File = 'jenkins/docker-compose.yml'; Content = $compose; Pattern = 'healthcheck:' },
     @{ File = 'jenkins/docker-compose.yml'; Content = $compose; Pattern = 'jenkins_home:' },
     @{ File = 'jenkins/docker-compose.yml'; Content = $compose; Pattern = 'JENKINS_ADMIN_PASSWORD' },
-    @{ File = 'jenkins/casc.yaml'; Content = $casc; Pattern = 'mmiv-pipeline' },
-    @{ File = 'jenkins/casc.yaml'; Content = $casc; Pattern = '/project/Jenkinsfile' },
+    @{ File = 'jenkins/casc.yaml'; Content = $casc; Pattern = "multibranchPipelineJob\('mmiv-ci'\)" },
+    @{ File = 'jenkins/casc.yaml'; Content = $casc; Pattern = 'https://github\.com/est19oox/Media-Migration-and-Integrity-Validation-\.git' },
+    @{ File = 'jenkins/casc.yaml'; Content = $casc; Pattern = 'periodicFolderTrigger' },
+    @{ File = 'jenkins/casc.yaml'; Content = $casc; Pattern = "interval\('2m'\)" },
+    @{ File = 'jenkins/casc.yaml'; Content = $casc; Pattern = "scriptPath\('Jenkinsfile'\)" },
     @{ File = 'jenkins/.env.example'; Content = $exampleEnvironment; Pattern = 'JENKINS_ADMIN_PASSWORD=' },
     @{ File = '.gitignore'; Content = $gitignore; Pattern = 'jenkins/\.env' },
     @{ File = '.gitignore'; Content = $gitignore; Pattern = '\.ci/' },
@@ -59,6 +62,15 @@ if ($combined -match '(?im)^\s*(password|secret)\s*[:=]\s*["'']?(?!\$\{)[^"''$<{
 }
 if ($casc -match 'excludeClientIPFromCrumb') {
     $failures.Add('JCasC uses the unsupported DefaultCrumbIssuer attribute excludeClientIPFromCrumb.')
+}
+if ($casc -match "pipelineJob\('mmiv-pipeline'\)") {
+    $failures.Add('JCasC still defines the obsolete local snapshot pipeline job.')
+}
+if ($casc -match '/project/Jenkinsfile') {
+    $failures.Add('JCasC must load Jenkinsfile through SCM, not from /project.')
+}
+if ($compose -match '\.\./:/project:ro') {
+    $failures.Add('Compose must not mount the local repository as the CI source.')
 }
 
 if ($failures.Count -gt 0) {
