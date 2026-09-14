@@ -34,7 +34,7 @@ export MMIV_MAVEN_LOG
 PATH="$FIXTURE_ROOT/bin:$PATH" "$ROOT/scripts/ci/run-tests.sh" "$FIXTURE_ROOT"
 
 grep -qx 'JAVA_HOME=/opt/jdk-25' "$MMIV_MAVEN_LOG"
-grep -qx 'ARGS=--batch-mode -DfailIfNoTests=true test' "$MMIV_MAVEN_LOG"
+grep -qx 'ARGS=--batch-mode -DfailIfNoTests=true clean package' "$MMIV_MAVEN_LOG"
 
 mkdir -p "$FIXTURE_ROOT/src/main/java" "$FIXTURE_ROOT/security/semgrep"
 printf 'class Example {}\n' > "$FIXTURE_ROOT/src/main/java/Example.java"
