@@ -62,4 +62,21 @@ if MMIV_SEMGREP_EXIT=1 PATH="$FIXTURE_ROOT/bin:$PATH" \
     exit 1
 fi
 
+printf 'FROM scratch\n' > "$FIXTURE_ROOT/dockerfile"
+cat > "$FIXTURE_ROOT/bin/docker" <<'EOF'
+#!/usr/bin/env sh
+set -eu
+printf '%s\n' "$*" > "$MMIV_DOCKER_LOG"
+EOF
+chmod +x "$FIXTURE_ROOT/bin/docker"
+
+MMIV_DOCKER_LOG="$FIXTURE_ROOT/docker.log"
+export MMIV_DOCKER_LOG
+MMIV_IMAGE=mmiv:contract PATH="$FIXTURE_ROOT/bin:$PATH" \
+    "$ROOT/scripts/ci/build-image.sh" "$FIXTURE_ROOT"
+
+grep -Fx -- "build --file $FIXTURE_ROOT/dockerfile --tag mmiv:contract $FIXTURE_ROOT" \
+    "$MMIV_DOCKER_LOG"
+grep -qx 'mmiv:contract' "$FIXTURE_ROOT/.ci/image-ref"
+
 printf 'PASS: CI runtime skeleton behavior is valid.\n'

@@ -65,7 +65,7 @@ Assert-FileContains 'scripts/ci/run-sast.sh' @(
 Assert-FileContains 'scripts/ci/run-sca.sh' @('trivy', 'HIGH,CRITICAL')
 Assert-FileContains 'scripts/ci/run-terraform-checks.sh' @('terraform', 'fmt', 'validate')
 Assert-FileContains 'scripts/ci/run-iac-scan.sh' @('checkov', 'infrastructure')
-Assert-FileContains 'scripts/ci/build-image.sh' @('docker', '\.ci/image-ref')
+Assert-FileContains 'scripts/ci/build-image.sh' @('docker', 'dockerfile', '--file', '\.ci/image-ref')
 Assert-FileContains 'scripts/ci/scan-image.sh' @('trivy', '\.ci/image-ref')
 
 if ($failures.Count -gt 0) {
