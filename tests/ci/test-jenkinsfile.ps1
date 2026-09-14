@@ -27,6 +27,10 @@ $requiredPatterns = @(
     "stage\('Container Build'\)",
     "stage\('Container Scan'\)",
     'archiveArtifacts',
+    'checkout\s+scm',
+    'currentBuild\.description',
+    'BRANCH_NAME',
+    'GIT_COMMIT',
     'scripts/ci/validate-repository\.sh',
     'scripts/ci/run-tests\.sh',
     'scripts/ci/run-sast\.sh',
@@ -48,6 +52,12 @@ if ($jenkinsfile -match 'terraform\s+apply') {
 }
 if ($jenkinsfile -match '(?i)aws_access_key_id|aws_secret_access_key') {
     $failures.Add('Jenkinsfile must not contain AWS credential fields.')
+}
+if ($jenkinsfile -match '/project') {
+    $failures.Add('Jenkinsfile must not copy source from the local /project mount.')
+}
+if ($jenkinsfile -match 'tar\s+--exclude') {
+    $failures.Add('Jenkinsfile must use SCM checkout instead of creating a local tar snapshot.')
 }
 
 if ($failures.Count -gt 0) {

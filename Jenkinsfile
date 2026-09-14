@@ -13,11 +13,11 @@ pipeline {
         stage('Checkout') {
             steps {
                 deleteDir()
-                sh '''
-                    set -eu
-                    tar --exclude=.git --exclude=docs/superpowers --exclude=jenkins/.env -C /project -cf - . | tar -xf -
-                    chmod +x scripts/ci/*.sh
-                '''
+                checkout scm
+                sh 'chmod +x scripts/ci/*.sh'
+                script {
+                    currentBuild.description = "${env.BRANCH_NAME} ${env.GIT_COMMIT.take(12)}"
+                }
             }
         }
 
