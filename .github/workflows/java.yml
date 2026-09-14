@@ -16,7 +16,7 @@ permissions:
 
 jobs:
   build-test-deploy:
-    name: Build, Test and Push Image
+    name: Build, Test and Deploy
     runs-on: ubuntu-latest
 
     steps:
@@ -53,7 +53,7 @@ jobs:
           IMAGE_TAG: ${{ github.sha }}
         run: |
           docker build \
-            -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG \
+            -t "$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" \
             .
 
       - name: Push Docker Image
@@ -62,4 +62,62 @@ jobs:
           ECR_REPOSITORY: mmiv
           IMAGE_TAG: ${{ github.sha }}
         run: |
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          docker push "$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
+
+      # CD - Discover the current EC2 instance and S3 bucket
+      - name: Get Deployment Resources
+        id: deployment
+        shell: bash
+        run: |
+          INSTANCE_ID=$(aws ec2 describe-instances \
+            --region ap-southeast-1 \
+            --filters \
+              "Name=tag:Name,Values=MMIV-EC2" \
+              "Name=instance-state-name,Values=running" \
+            --query "Reservations[0].Instances[0].InstanceId" \
+            --output text)
+
+          BUCKET_NAME=$(aws s3api list-buckets \
+            --query "Buckets[?starts_with(Name, 'mmiv-dev-')].Name | [0]" \
+            --output text)
+
+          echo "instance_id=$INSTANCE_ID" >> "$GITHUB_OUTPUT"
+          echo "bucket_name=$BUCKET_NAME" >> "$GITHUB_OUTPUT"
+
+          echo "Instance: $INSTANCE_ID"
+          echo "Bucket: $BUCKET_NAME"
+
+      # CD - Deploy the new image through SSM
+      - name: Deploy to EC2
+        env:
+          INSTANCE_ID: ${{ steps.deployment.outputs.instance_id }}
+          BUCKET_NAME: ${{ steps.deployment.outputs.bucket_name }}
+          IMAGE_TAG: ${{ github.sha }}
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          ECR_REPOSITORY: mmiv
+        shell: bash
+        run: |
+          COMMAND_ID=$(aws ssm send-command \
+            --region ap-southeast-1 \
+            --instance-ids "$INSTANCE_ID" \
+            --document-name "AWS-RunShellScript" \
+            --parameters commands="[
+              \"aws ecr get-login-password --region ap-southeast-1 | docker login --username AWS --password-stdin $ECR_REGISTRY\",
+              \"docker pull $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG\",
+              \"docker rm -f mmiv || true\",
+              \"docker run -d --name mmiv -e MMIV_BUCKET_NAME=$BUCKET_NAME $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG\"
+            ]" \
+            --query "Command.CommandId" \
+            --output text)
+
+          echo "SSM Command ID: $COMMAND_ID"
+
+          aws ssm wait command-executed \
+            --region ap-southeast-1 \
+            --command-id "$COMMAND_ID" \
+            --instance-id "$INSTANCE_ID"
+
+          aws ssm get-command-invocation \
+            --region ap-southeast-1 \
+            --command-id "$COMMAND_ID" \
+            --instance-id "$INSTANCE_ID"
