@@ -53,7 +53,7 @@ foreach ($script in $conditionalScripts) {
 }
 
 Assert-FileContains 'scripts/ci/run-tests.sh' @('pyproject\.toml', 'package\.json', 'pom\.xml')
-Assert-FileContains 'scripts/ci/run-tests.sh' @('/opt/jdk-25', 'JAVA_HOME')
+Assert-FileContains 'scripts/ci/run-tests.sh' @('/opt/jdk-25', 'JAVA_HOME', 'failIfNoTests=true')
 Assert-FileContains 'scripts/ci/run-sast.sh' @(
     'semgrep',
     'security/semgrep/semgrep\.yml',
@@ -64,7 +64,7 @@ Assert-FileContains 'scripts/ci/run-sast.sh' @(
 )
 Assert-FileContains 'scripts/ci/run-sca.sh' @('trivy', 'HIGH,CRITICAL')
 Assert-FileContains 'scripts/ci/run-terraform-checks.sh' @('terraform', 'fmt', 'validate')
-Assert-FileContains 'scripts/ci/run-iac-scan.sh' @('checkov', 'infrastructure')
+Assert-FileContains 'scripts/ci/run-iac-scan.sh' @('checkov', 'infrastructure', 'checkov\.json')
 Assert-FileContains 'scripts/ci/build-image.sh' @('docker', 'dockerfile', '--file', '\.ci/image-ref')
 Assert-FileContains 'scripts/ci/scan-image.sh' @('trivy', '\.ci/image-ref')
 

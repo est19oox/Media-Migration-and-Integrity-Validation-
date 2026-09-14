@@ -19,7 +19,7 @@ elif [ -f "$ROOT/pom.xml" ]; then
     export JAVA_HOME
     PATH="$JAVA_HOME/bin:$PATH"
     export PATH
-    (cd "$ROOT" && mvn --batch-mode test)
+    (cd "$ROOT" && mvn --batch-mode -DfailIfNoTests=true test)
 else
     skip 'No supported application manifest; unit tests are not active yet.'
     exit 0

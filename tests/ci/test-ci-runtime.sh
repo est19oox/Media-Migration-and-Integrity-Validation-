@@ -34,7 +34,7 @@ export MMIV_MAVEN_LOG
 PATH="$FIXTURE_ROOT/bin:$PATH" "$ROOT/scripts/ci/run-tests.sh" "$FIXTURE_ROOT"
 
 grep -qx 'JAVA_HOME=/opt/jdk-25' "$MMIV_MAVEN_LOG"
-grep -qx 'ARGS=--batch-mode test' "$MMIV_MAVEN_LOG"
+grep -qx 'ARGS=--batch-mode -DfailIfNoTests=true test' "$MMIV_MAVEN_LOG"
 
 mkdir -p "$FIXTURE_ROOT/src/main/java" "$FIXTURE_ROOT/security/semgrep"
 printf 'class Example {}\n' > "$FIXTURE_ROOT/src/main/java/Example.java"
@@ -78,5 +78,25 @@ MMIV_IMAGE=mmiv:contract PATH="$FIXTURE_ROOT/bin:$PATH" \
 grep -Fx -- "build --file $FIXTURE_ROOT/dockerfile --tag mmiv:contract $FIXTURE_ROOT" \
     "$MMIV_DOCKER_LOG"
 grep -qx 'mmiv:contract' "$FIXTURE_ROOT/.ci/image-ref"
+
+mkdir -p "$FIXTURE_ROOT/infrastructure"
+printf 'resource "test_resource" "example" {}\n' > "$FIXTURE_ROOT/infrastructure/main.tf"
+cat > "$FIXTURE_ROOT/bin/checkov" <<'EOF'
+#!/usr/bin/env sh
+set -eu
+printf '%s\n' '{"summary":{"passed":1,"failed":0}}'
+exit "${MMIV_CHECKOV_EXIT:-0}"
+EOF
+chmod +x "$FIXTURE_ROOT/bin/checkov"
+
+PATH="$FIXTURE_ROOT/bin:$PATH" "$ROOT/scripts/ci/run-iac-scan.sh" "$FIXTURE_ROOT"
+test -f "$FIXTURE_ROOT/.ci/reports/checkov.json"
+grep -F '"failed":0' "$FIXTURE_ROOT/.ci/reports/checkov.json"
+
+if MMIV_CHECKOV_EXIT=1 PATH="$FIXTURE_ROOT/bin:$PATH" \
+    "$ROOT/scripts/ci/run-iac-scan.sh" "$FIXTURE_ROOT"; then
+    printf 'FAIL: IaC wrapper ignored the Checkov failure exit code.\n' >&2
+    exit 1
+fi
 
 printf 'PASS: CI runtime skeleton behavior is valid.\n'

@@ -14,5 +14,5 @@ fi
 
 require_command checkov
 prepare_reports_directory "$ROOT"
-checkov --directory "$ROOT/infrastructure" --framework terraform --output json --output-file-path "$ROOT/.ci/reports/checkov.json"
+checkov --directory "$ROOT/infrastructure" --framework terraform --output json > "$ROOT/.ci/reports/checkov.json"
 pass 'Checkov IaC security scan passed.'
