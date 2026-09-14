@@ -1,5 +1,5 @@
 resource "aws_s3_bucket" "terraform_state" {
-  bucket = "mmiv-terraform-state-741444304127"
+  bucket = "mmiv-terraform-state-275069781906"
 
   tags = {
     Name        = "MMIV Terraform State"
