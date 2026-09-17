@@ -63,13 +63,28 @@ resource "aws_ecr_lifecycle_policy" "mmiv" {
     rules = [
       {
         rulePriority = 1
-        description  = "Keep only the 5 most recent images"
+        description  = "Remove untagged images after 1 day"
 
         selection = {
-          tagStatus   = "tagged"
+          tagStatus   = "untagged"
+          countType   = "sinceImagePushed"
+          countUnit   = "days"
+          countNumber = 1
+        }
+
+        action = {
+          type = "expire"
+        }
+      },
+      {
+        rulePriority = 2
+        description  = "Keep only the 5 most recent tagged images"
+
+        selection = {
+          tagStatus      = "tagged"
           tagPatternList = ["*"]
-          countType   = "imageCountMoreThan"
-          countNumber = 5
+          countType      = "imageCountMoreThan"
+          countNumber    = 5
         }
 
         action = {
