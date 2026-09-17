@@ -55,6 +55,30 @@ resource "aws_ecr_repository" "mmiv" {
   }
 }
 
+# Removes old ECR images and keeps only the 5 most recent tagged images.
+resource "aws_ecr_lifecycle_policy" "mmiv" {
+  repository = aws_ecr_repository.mmiv.name
+
+  policy = jsonencode({
+    rules = [
+      {
+        rulePriority = 1
+        description  = "Keep only the 5 most recent images"
+
+        selection = {
+          tagStatus   = "tagged"
+          tagPatternList = ["*"]
+          countType   = "imageCountMoreThan"
+          countNumber = 5
+        }
+
+        action = {
+          type = "expire"
+        }
+      }
+    ]
+  })
+}
 
 # Creates an IAM role that EC2 instances can use.
 resource "aws_iam_role" "mmiv_ec2" {
