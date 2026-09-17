@@ -27,7 +27,7 @@ public class Main {
 
             response.contents().forEach(object -> System.out.println("- " + object.key()));
 
-            System.out.println("S3 connection successful.");
+            System.out.println("S3 connection successful. ");
             
 
         } catch (Exception e) {
