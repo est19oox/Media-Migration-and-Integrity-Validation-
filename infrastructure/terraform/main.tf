@@ -258,6 +258,12 @@ resource "aws_instance" "mmiv" {
 
   iam_instance_profile = aws_iam_instance_profile.mmiv_ec2.name
 
+  user_data = <<-EOF
+    #!/bin/bash
+    dnf install -y docker
+    systemctl enable --now docker
+  EOF
+
   tags = {
     Name        = "MMIV-EC2"
     Project     = "MMIV"
