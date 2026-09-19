@@ -58,6 +58,26 @@ Assert-FileContains 'docs/jenkins/local-setup.md' @(
     'jenkins-down\.ps1'
 )
 Assert-FileContains 'README.md' @('Jenkins', 'automatic', 'docs/jenkins/local-setup\.md')
+Assert-FileContains 'docs/jenkins/local-setup.md' @(
+    'checkout scm',
+    'git rev-parse HEAD',
+    'TESTED_COMMIT',
+    'Jenkins never pushes, merges, or approves pull requests',
+    'human merges `main` only after reviewing the exact-SHA evidence',
+    'scripts/cd/trigger-deployment\.sh <full-commit-sha>',
+    'DEPLOYED_COMMIT=<full-commit-sha>',
+    'DAST_TARGET_URL=<http-or-https-url>',
+    '\.ci/reports/semgrep\.json',
+    '\.ci/reports/trivy-sca\.json',
+    '\.ci/reports/zap-report\.html',
+    'Application code owner',
+    'Docker owner',
+    'Terraform owner',
+    'Ansible owner',
+    'AWS owner',
+    'returned to the relevant owner',
+    'Docker socket'
+)
 
 $setupGuide = Get-Content -Raw -LiteralPath (Join-Path $repositoryRoot 'docs/jenkins/local-setup.md')
 if ($setupGuide -match 'mmiv-pipeline') {

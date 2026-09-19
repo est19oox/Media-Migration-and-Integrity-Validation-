@@ -4,4 +4,8 @@ MMIV migrates configured media files from local sources to Amazon S3 and verifie
 
 ## Jenkins
 
-The project includes a reproducible local Jenkins environment and an automatic GitHub branch CI security pipeline. See [Local Jenkins Setup](docs/jenkins/local-setup.md) for Docker prerequisites, branch discovery, and startup instructions.
+The project includes a reproducible local Jenkins environment and an automatic GitHub multibranch CI security pipeline. Jenkins checks out and records the exact GitHub SHA, runs tests plus Semgrep, Trivy, and ZAP gates where applicable, and archives the evidence for review.
+
+Jenkins never pushes, merges, or approves pull requests. A human merges `main` only after reviewing the exact-SHA evidence from the pull-request build. Contributor-owned application, Docker, Terraform, Ansible, AWS, and deployment failures go back to their owners; Jenkins owns orchestration and evidence rather than those subsystem implementations.
+
+See [Local Jenkins Setup](docs/jenkins/local-setup.md) for prerequisites, GitHub credential configuration, branch discovery, gate behavior, the `scripts/cd/trigger-deployment.sh <full-commit-sha>` handoff, reports, local operation, and Docker-socket limitation.
