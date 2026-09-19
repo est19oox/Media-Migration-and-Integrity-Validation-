@@ -1,0 +1,5 @@
+# OWASP ZAP baseline scan rule overrides
+#
+# Sprint integration configuration.
+# Add project-specific rule overrides only after reviewing
+# findings from the deployed test environment.
