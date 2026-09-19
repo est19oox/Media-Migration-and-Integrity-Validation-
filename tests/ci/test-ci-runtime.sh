@@ -165,7 +165,74 @@ assert_semgrep_invocation
 test -f "$FIXTURE_ROOT/.ci/reports/semgrep.json"
 grep -F '"error":"scanner-error"' "$FIXTURE_ROOT/.ci/reports/semgrep.json"
 
+cat > "$FIXTURE_ROOT/bin/trivy" <<'EOF'
+#!/usr/bin/env sh
+set -eu
+printf '%s\n' "$*" > "$MMIV_TRIVY_LOG"
+output=''
+while [ "$#" -gt 0 ]; do
+    if [ "$1" = '--output' ]; then
+        shift
+        output=$1
+    fi
+    shift
+done
+case "${MMIV_TRIVY_MODE:-clean}" in
+    clean)
+        printf '%s\n' '{"Results":[]}' > "$output"
+        exit 0
+        ;;
+    vulnerable)
+        printf '%s\n' '{"Results":[{"Vulnerabilities":[{"Severity":"HIGH"}]}]}' > "$output"
+        exit 1
+        ;;
+    scanner-error)
+        printf '%s\n' '{"error":"scanner-error"}' > "$output"
+        exit 2
+        ;;
+    *)
+        printf 'FAIL: unknown fake Trivy mode: %s\n' "$MMIV_TRIVY_MODE" >&2
+        exit 1
+        ;;
+esac
+EOF
+chmod +x "$FIXTURE_ROOT/bin/trivy"
+
+MMIV_TRIVY_LOG="$FIXTURE_ROOT/trivy.log"
+export MMIV_TRIVY_LOG
+assert_succeeds "clean Trivy filesystem SCA scan" env PATH="$FIXTURE_ROOT/bin:$PATH" \
+    MMIV_TRIVY_MODE=clean "$ROOT/scripts/ci/run-sca.sh" "$FIXTURE_ROOT"
+test -f "$FIXTURE_ROOT/.ci/reports/trivy-sca.json"
+grep -F '"Results":[]' "$FIXTURE_ROOT/.ci/reports/trivy-sca.json"
+
+assert_trivy_sca_invocation() {
+    grep -F -- "fs --scanners vuln --severity HIGH,CRITICAL --exit-code 1 --format json --output $FIXTURE_ROOT/.ci/reports/trivy-sca.json $FIXTURE_ROOT" \
+        "$MMIV_TRIVY_LOG"
+}
+
+assert_trivy_sca_invocation
+
+rm -f "$MMIV_TRIVY_LOG" "$FIXTURE_ROOT/.ci/reports/trivy-sca.json"
+assert_status 1 "Trivy blocking vulnerability" env PATH="$FIXTURE_ROOT/bin:$PATH" \
+    MMIV_TRIVY_MODE=vulnerable "$ROOT/scripts/ci/run-sca.sh" "$FIXTURE_ROOT"
+assert_trivy_sca_invocation
+test -f "$FIXTURE_ROOT/.ci/reports/trivy-sca.json"
+grep -F '"Severity":"HIGH"' "$FIXTURE_ROOT/.ci/reports/trivy-sca.json"
+
+rm -f "$MMIV_TRIVY_LOG" "$FIXTURE_ROOT/.ci/reports/trivy-sca.json"
+assert_status 2 "Trivy scanner error" env PATH="$FIXTURE_ROOT/bin:$PATH" \
+    MMIV_TRIVY_MODE=scanner-error "$ROOT/scripts/ci/run-sca.sh" "$FIXTURE_ROOT"
+assert_trivy_sca_invocation
+test -f "$FIXTURE_ROOT/.ci/reports/trivy-sca.json"
+grep -F '"error":"scanner-error"' "$FIXTURE_ROOT/.ci/reports/trivy-sca.json"
+
 printf 'FROM scratch\n' > "$FIXTURE_ROOT/dockerfile"
+FIXTURE_ROOT_PATH=$(CDPATH= cd -- "$FIXTURE_ROOT" && pwd)
+if [ -f "$FIXTURE_ROOT_PATH/Dockerfile" ]; then
+    FIXTURE_DOCKERFILE="$FIXTURE_ROOT_PATH/Dockerfile"
+else
+    FIXTURE_DOCKERFILE="$FIXTURE_ROOT_PATH/dockerfile"
+fi
 cat > "$FIXTURE_ROOT/bin/docker" <<'EOF'
 #!/usr/bin/env sh
 set -eu
@@ -178,7 +245,7 @@ export MMIV_DOCKER_LOG
 MMIV_IMAGE=mmiv:contract PATH="$FIXTURE_ROOT/bin:$PATH" \
     "$ROOT/scripts/ci/build-image.sh" "$FIXTURE_ROOT"
 
-grep -Fx -- "build --file $FIXTURE_ROOT/dockerfile --tag mmiv:contract $FIXTURE_ROOT" \
+grep -Fx -- "build --file $FIXTURE_DOCKERFILE --tag mmiv:contract $FIXTURE_ROOT_PATH" \
     "$MMIV_DOCKER_LOG"
 grep -qx 'mmiv:contract' "$FIXTURE_ROOT/.ci/image-ref"
 
@@ -186,7 +253,7 @@ GIT_COMMIT=0123456789abcdef0123456789abcdef01234567 \
     PATH="$FIXTURE_ROOT/bin:$PATH" \
     "$ROOT/scripts/ci/build-image.sh" "$FIXTURE_ROOT"
 
-grep -Fx -- "build --file $FIXTURE_ROOT/dockerfile --tag mmiv:0123456789abcdef0123456789abcdef01234567 $FIXTURE_ROOT" \
+grep -Fx -- "build --file $FIXTURE_DOCKERFILE --tag mmiv:0123456789abcdef0123456789abcdef01234567 $FIXTURE_ROOT_PATH" \
     "$MMIV_DOCKER_LOG"
 grep -qx 'mmiv:0123456789abcdef0123456789abcdef01234567' "$FIXTURE_ROOT/.ci/image-ref"
 

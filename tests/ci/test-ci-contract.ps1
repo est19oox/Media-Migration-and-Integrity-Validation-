@@ -71,7 +71,15 @@ Assert-FileContains 'scripts/ci/run-sast.sh' @(
     'prepare_reports_directory',
     'semgrep\.json'
 )
-Assert-FileContains 'scripts/ci/run-sca.sh' @('trivy', 'HIGH,CRITICAL')
+Assert-FileContains 'scripts/ci/run-sca.sh' @(
+    'trivy fs',
+    '--scanners vuln',
+    '--severity HIGH,CRITICAL',
+    '--exit-code 1',
+    '--format json',
+    'prepare_reports_directory',
+    'trivy-sca\.json'
+)
 Assert-FileContains 'scripts/ci/run-terraform-checks.sh' @('terraform', 'fmt', 'validate')
 Assert-FileContains 'scripts/ci/run-iac-scan.sh' @('checkov', 'infrastructure', 'checkov\.json')
 Assert-FileContains 'scripts/ci/build-image.sh' @('docker', 'dockerfile', '--file', '\.ci/image-ref', 'GIT_COMMIT')
