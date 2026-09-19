@@ -1,0 +1,7 @@
+[webservers]
+%{ for server in servers ~}
+${server.name} ansible_host=${server.ip} ansible_user=ec2-user
+%{ endfor ~}
+
+[webservers:vars]
+ansible_ssh_private_key_file=~/.ssh/webserver-key.pem

@@ -1,0 +1,131 @@
+name: CI-CD
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    name: Build and test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java 25
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "25"
+          cache: maven
+
+      - name: Build and test
+        run: mvn -B clean verify
+
+      - name: Upload JAR artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: java-package
+          path: services/transfer-service/target/*.jar
+                services/validation-service/target/*.jar
+
+  deploy:
+    name: Deploy with Ansible
+    needs: ci
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java 25
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "25"
+          cache: maven
+
+      - name: Install Ansible
+        run: python3 -m pip install --upgrade ansible
+
+      - name: Configure SSH
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.WEB_SERVER_SSH_PRIVATE_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/webserver-key.pem
+          chmod 600 ~/.ssh/webserver-key.pem
+
+      - name: Terraform init
+        working-directory: infrastructure/terraform
+        run: terraform init
+
+      - name: Terraform apply
+        working-directory: infrastructure/terraform
+        env:
+          TF_VAR_vpc_id: ${{ secrets.AWS_VPC_ID }}
+          TF_VAR_subnet_id: ${{ secrets.AWS_SUBNET_ID }}
+          TF_VAR_ami_id: ${{ secrets.AWS_AMI_ID }}
+          TF_VAR_key_name: ${{ secrets.AWS_KEY_NAME }}
+          TF_VAR_allowed_ssh_cidr: ${{ secrets.ANSIBLE_SSH_CIDR }}
+        run: terraform apply -auto-approve
+
+      - name: Generate inventory
+        working-directory: infrastructure/terraform
+        run: terraform output -raw ansible_inventory
+
+      - name: Patch generated inventory SSH key path
+        run: |
+          sed -i "s#ansible_ssh_private_key_file=.*#ansible_ssh_private_key_file=$HOME/.ssh/webserver-key.pem#" infrastructure/ansible/inventory.ini
+
+      - name: Wait for SSH
+        working-directory: infrastructure/ansible
+        run: |
+          for i in {1..30}; do
+            if ansible webservers -m ping; then
+              exit 0
+            fi
+            sleep 10
+          done
+          exit 1
+
+      - name: Deploy
+        working-directory: infrastructure/ansible
+        run: |
+          set -e
+          if ! ansible-playbook site.yml; then
+            echo "Deployment failed. Attempting automatic rollback..."
+            ansible-playbook rollback.yml || true
+            exit 1
+          fi
+
+      - name: Smoke test deployed Transfer Service
+        run: |
+          set -e
+          if ! ansible webservers -m shell -a 'curl --fail --silent --show-error http://127.0.0.1:8081/actuator/health' | grep -q '\"status\":\"UP\"'; then
+            echo "Smoke test failed. Attempting automatic rollback..."
+            ansible-playbook -i infrastructure/ansible/inventory.ini infrastructure/ansible/rollback.yml || true
+            exit 1
+          fi
+          ansible webservers -m shell -a 'curl --fail --silent --show-error http://127.0.0.1:8081/api/v1/health'
+
+      # validation-service is currently a structural placeholder and is intentionally
+      # not built, deployed, or smoke-tested until executable code is added.
+#      - name: Smoke test deployed Validation Service
+#        run: |
+#          set -e
+#          if ! ansible webservers -m shell -a 'curl --fail --silent --show-error http://127.0.0.1:8082/actuator/health' | grep -q '"status":"UP"'; then
+#            echo "Validation Service smoke test failed. Attempting automatic rollback..."
+#            ansible-playbook -i infrastructure/ansible/inventory.ini infrastructure/ansible/rollback.yml || true
+#            exit 1
+#          fi
+
+      - name: Cleanup SSH key
+        if: always()
+        run: rm -f ~/.ssh/webserver-key.pem

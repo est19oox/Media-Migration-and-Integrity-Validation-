@@ -1,0 +1,15 @@
+[Unit]
+Description=Media Migration Transfer Microservice
+After=network.target
+
+[Service]
+User={{ app_user }}
+Group={{ app_user }}
+WorkingDirectory={{ app_current_link }}
+ExecStart={{ app_start_command }}
+SuccessExitStatus=143
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

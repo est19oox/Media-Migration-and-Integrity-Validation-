@@ -1,0 +1,23 @@
+---
+# Structural Ansible role for the future Validation microservice.
+# The service is disabled until executable application code and a deployable
+# artifact are available.
+
+- name: Skip validation service deployment when not implemented
+  ansible.builtin.debug:
+    msg: "validation-service is currently a structural placeholder; no deployment performed."
+  when: not validation_service_enabled | bool
+
+- name: Create validation service application directory
+  ansible.builtin.file:
+    path: "{{ validation_service_directory }}"
+    state: directory
+    owner: "{{ app_user }}"
+    group: "{{ app_user }}"
+    mode: "0755"
+  when: validation_service_enabled | bool
+
+- name: Fail until validation service has a deployable artifact
+  ansible.builtin.fail:
+    msg: "validation-service is enabled, but no executable artifact/deployment tasks have been configured yet."
+  when: validation_service_enabled | bool

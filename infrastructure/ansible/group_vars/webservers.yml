@@ -1,0 +1,47 @@
+---
+# Transfer Service
+app_name: transfer-service
+app_user: mediaapp
+app_directory: /opt/transfer-service
+app_source_directory: "{{ app_directory }}/source"
+app_release_directory: "{{ app_directory }}/releases"
+app_current_link: "{{ app_directory }}/current"
+app_port: 8081
+app_health_url: "http://127.0.0.1:{{ app_port }}/actuator/health"
+app_smoke_url: "http://127.0.0.1:{{ app_port }}/api/v1/health"
+app_release_id: "{{ ansible_date_time.iso8601_basic_short }}"
+app_release_path: "{{ app_release_directory }}/{{ app_release_id }}"
+app_previous_release_file: "{{ app_directory }}/previous_release"
+
+# Validation Service
+# Set to true only after executable Validation Service code/artifact is added.
+validation_service_enabled: false
+validation_service_name: validation-service
+validation_service_directory: /opt/validation-service
+validation_service_source_directory: "{{ validation_service_directory }}/source"
+validation_service_release_directory: "{{ validation_service_directory }}/releases"
+validation_service_current_link: "{{ validation_service_directory }}/current"
+validation_service_port: 8082
+validation_service_health_url: "http://127.0.0.1:{{ validation_service_port }}/actuator/health"
+validation_service_release_id: "{{ ansible_date_time.iso8601_basic_short }}"
+validation_service_release_path: "{{ validation_service_release_directory }}/{{ validation_service_release_id }}"
+validation_service_previous_release_file: "{{ validation_service_directory }}/previous_release"
+
+repository_url: "https://github.com/est19oox/Media-Migration-and-Integrity-Validation-.git"
+repository_branch: "main"
+
+java_package: java-25-amazon-corretto-devel
+java_command: java
+maven_command: mvn
+
+# Transfer Service build
+app_build_command: "{{ maven_command }} -B -f services/transfer-service/pom.xml clean package -DskipTests"
+app_built_jar: "{{ app_source_directory }}/services/transfer-service/target/transfer-service.jar"
+app_jar: "{{ app_current_link }}/transfer-service.jar"
+app_start_command: "{{ java_command }} -jar {{ app_jar }}"
+
+# Validation Service build
+validation_service_build_command: "{{ maven_command }} -B -f services/validation-service/pom.xml clean package -DskipTests"
+validation_service_built_jar: "{{ validation_service_source_directory }}/services/validation-service/target/validation-service.jar"
+validation_service_jar: "{{ validation_service_current_link }}/validation-service.jar"
+validation_service_start_command: "{{ java_command }} -jar {{ validation_service_jar }}"

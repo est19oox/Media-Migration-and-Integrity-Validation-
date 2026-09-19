@@ -1,0 +1,7 @@
+---
+- name: Deploy Media Migration microservices
+  hosts: webservers
+  become: true
+  roles:
+    - transfer_service
+    - validation_service

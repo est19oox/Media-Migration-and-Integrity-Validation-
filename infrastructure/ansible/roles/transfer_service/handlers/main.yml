@@ -1,0 +1,7 @@
+---
+- name: Restart transfer service
+  ansible.builtin.systemd:
+    name: "{{ app_name }}"
+    state: restarted
+    enabled: true
+    daemon_reload: true

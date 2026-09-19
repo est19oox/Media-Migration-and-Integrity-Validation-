@@ -1,0 +1,25 @@
+# Terraform
+infrastructure/terraform/.terraform/
+infrastructure/terraform/*.tfstate
+infrastructure/terraform/*.tfstate.*
+infrastructure/terraform/terraform.tfvars
+
+# Generated inventory
+infrastructure/ansible/inventory.ini
+
+# SSH keys
+*.pem
+*.key
+id_rsa
+id_ed25519
+
+# Java
+target/
+
+# IDE
+.idea/
+.vscode/
+
+#README
+README.md
+README-CICD.md

@@ -1,0 +1,8 @@
+aws_region       = "ap-southeast-1"
+vpc_id           = "vpc-xxxxxxxx"
+subnet_id        = "subnet-xxxxxxxx"
+ami_id           = "ami-xxxxxxxx"
+instance_type    = "t3.micro"
+key_name         = "your-existing-keypair"
+web_server_count = 2
+allowed_ssh_cidr = "10.0.1.0/24"

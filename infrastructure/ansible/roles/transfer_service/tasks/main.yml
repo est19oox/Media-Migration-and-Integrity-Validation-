@@ -1,0 +1,131 @@
+---
+- name: Install Java, Maven, Git and curl
+  ansible.builtin.dnf:
+    name:
+      - "{{ java_package }}"
+      - maven
+      - git
+      - curl
+    state: present
+
+- name: Create application user
+  ansible.builtin.user:
+    name: "{{ app_user }}"
+    system: true
+    shell: /sbin/nologin
+    create_home: false
+
+- name: Create application directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ app_user }}"
+    group: "{{ app_user }}"
+    mode: "0755"
+  loop:
+    - "{{ app_directory }}"
+    - "{{ app_source_directory }}"
+    - "{{ app_release_directory }}"
+
+- name: Check current release
+  ansible.builtin.stat:
+    path: "{{ app_current_link }}"
+  register: current_release
+
+- name: Record current release for rollback
+  ansible.builtin.shell: "readlink -f {{ app_current_link }}"
+  register: previous_release
+  changed_when: false
+  when: current_release.stat.exists
+
+- name: Save previous release path
+  ansible.builtin.copy:
+    content: "{{ previous_release.stdout | default('') }}\n"
+    dest: "{{ app_previous_release_file }}"
+    owner: "{{ app_user }}"
+    group: "{{ app_user }}"
+    mode: "0644"
+  when: current_release.stat.exists
+
+- name: Clone or update application repository
+  ansible.builtin.git:
+    repo: "{{ repository_url }}"
+    dest: "{{ app_source_directory }}"
+    version: "{{ repository_branch }}"
+    update: true
+    force: true
+  become_user: "{{ app_user }}"
+
+- name: Build transfer microservice
+  ansible.builtin.command:
+    cmd: "{{ app_build_command }}"
+    chdir: "{{ app_source_directory }}"
+  become_user: "{{ app_user }}"
+
+- name: Verify application JAR exists
+  ansible.builtin.stat:
+    path: "{{ app_built_jar }}"
+  register: application_jar
+
+- name: Stop deployment if JAR was not produced
+  ansible.builtin.fail:
+    msg: "Maven build completed but expected transfer-service JAR was not found."
+  when: not application_jar.stat.exists
+
+- name: Create immutable release directory
+  ansible.builtin.file:
+    path: "{{ app_release_path }}"
+    state: directory
+    owner: "{{ app_user }}"
+    group: "{{ app_user }}"
+    mode: "0755"
+
+- name: Copy JAR into release
+  ansible.builtin.copy:
+    src: "{{ app_built_jar }}"
+    dest: "{{ app_release_path }}/transfer-service.jar"
+    remote_src: true
+    owner: "{{ app_user }}"
+    group: "{{ app_user }}"
+    mode: "0755"
+
+- name: Switch current release symlink
+  ansible.builtin.file:
+    src: "{{ app_release_path }}"
+    dest: "{{ app_current_link }}"
+    state: link
+    force: true
+  notify: Restart transfer service
+
+- name: Deploy systemd service
+  ansible.builtin.template:
+    src: transfer-service.service.j2
+    dest: "/etc/systemd/system/{{ app_name }}.service"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart transfer service
+
+- name: Flush service handler
+  ansible.builtin.meta: flush_handlers
+
+- name: Wait for transfer service health endpoint
+  ansible.builtin.uri:
+    url: "{{ app_health_url }}"
+    status_code: 200
+    return_content: false
+  register: health_result
+  retries: 12
+  delay: 5
+  until: health_result.status == 200
+
+- name: Smoke test transfer service endpoint
+  ansible.builtin.uri:
+    url: "{{ app_smoke_url }}"
+    method: GET
+    status_code: 200
+    return_content: true
+  register: smoke_result
+  retries: 3
+  delay: 2
+  until: smoke_result.status == 200

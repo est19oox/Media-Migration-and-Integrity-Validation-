@@ -1,0 +1,14 @@
+[Unit]
+Description=Media Migration Validation Microservice
+After=network.target
+
+[Service]
+User={{ app_user }}
+Group={{ app_user }}
+WorkingDirectory={{ validation_service_directory }}
+ExecStart={{ validation_service_start_command }}
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

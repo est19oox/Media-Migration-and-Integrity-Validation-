@@ -1,0 +1,5 @@
+[webservers]
+web01 ansible_host=YOUR_SERVER_IP ansible_user=ec2-user
+
+[webservers:vars]
+ansible_ssh_private_key_file=~/.ssh/webserver-key.pem

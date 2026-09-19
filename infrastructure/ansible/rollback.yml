@@ -1,0 +1,136 @@
+---
+- name: Roll back Media Migration Microservices
+  hosts: webservers
+  become: true
+
+  tasks:
+    # =========================
+    # Transfer Service Rollback
+    # =========================
+
+    - name: Check whether previous Transfer Service release exists
+      ansible.builtin.stat:
+        path: "{{ app_previous_release_file }}"
+      register: transfer_previous_release_file
+
+    - name: Read previous Transfer Service release
+      ansible.builtin.slurp:
+        src: "{{ app_previous_release_file }}"
+      register: transfer_previous_release
+      when: transfer_previous_release_file.stat.exists
+
+    - name: Set previous Transfer Service release path
+      ansible.builtin.set_fact:
+        transfer_rollback_release: >-
+          {{ transfer_previous_release.content | b64decode | trim }}
+      when: transfer_previous_release_file.stat.exists
+
+    - name: Roll back Transfer Service when previous release is available
+      when:
+        - transfer_previous_release_file.stat.exists
+        - transfer_rollback_release | length > 0
+      block:
+
+        - name: Verify previous Transfer Service JAR exists
+          ansible.builtin.stat:
+            path: "{{ transfer_rollback_release }}/transfer-service.jar"
+          register: transfer_rollback_jar
+
+        - name: Stop if Transfer Service previous release is missing
+          ansible.builtin.fail:
+            msg: >-
+              Previous Transfer Service release JAR does not exist:
+              {{ transfer_rollback_release }}
+          when: not transfer_rollback_jar.stat.exists
+
+        - name: Point Transfer Service current symlink to previous release
+          ansible.builtin.file:
+            src: "{{ transfer_rollback_release }}"
+            dest: "{{ app_current_link }}"
+            state: link
+            force: true
+
+        - name: Restart Transfer Service after rollback
+          ansible.builtin.systemd:
+            name: "{{ app_name }}"
+            state: restarted
+            enabled: true
+            daemon_reload: true
+
+        - name: Verify rolled-back Transfer Service health
+          ansible.builtin.uri:
+            url: "{{ app_health_url }}"
+            status_code: 200
+          register: transfer_rollback_health
+          retries: 12
+          delay: 5
+          until: transfer_rollback_health.status == 200
+
+    # ===========================
+    # Validation Service Rollback
+    # ===========================
+
+    - name: Check whether previous Validation Service release exists
+      ansible.builtin.stat:
+        path: "{{ validation_service_previous_release_file }}"
+      register: validation_previous_release_file
+      when: validation_service_enabled | bool
+
+    - name: Read previous Validation Service release
+      ansible.builtin.slurp:
+        src: "{{ validation_service_previous_release_file }}"
+      register: validation_previous_release
+      when:
+        - validation_service_enabled | bool
+        - validation_previous_release_file.stat.exists
+
+    - name: Set previous Validation Service release path
+      ansible.builtin.set_fact:
+        validation_rollback_release: >-
+          {{ validation_previous_release.content | b64decode | trim }}
+      when:
+        - validation_service_enabled | bool
+        - validation_previous_release_file.stat.exists
+
+    - name: Roll back Validation Service when previous release is available
+      when:
+        - validation_service_enabled | bool
+        - validation_previous_release_file.stat.exists
+        - validation_rollback_release | length > 0
+      block:
+
+        - name: Verify previous Validation Service JAR exists
+          ansible.builtin.stat:
+            path: "{{ validation_rollback_release }}/validation-service.jar"
+          register: validation_rollback_jar
+
+        - name: Stop if Validation Service previous release is missing
+          ansible.builtin.fail:
+            msg: >-
+              Previous Validation Service release JAR does not exist:
+              {{ validation_rollback_release }}
+          when: not validation_rollback_jar.stat.exists
+
+        - name: Point Validation Service current symlink to previous release
+          ansible.builtin.file:
+            src: "{{ validation_rollback_release }}"
+            dest: "{{ validation_service_current_link }}"
+            state: link
+            force: true
+
+        - name: Restart Validation Service after rollback
+          ansible.builtin.systemd:
+            name: "{{ validation_service_name }}"
+            state: restarted
+            enabled: true
+            daemon_reload: true
+
+        - name: Verify rolled-back Validation Service health
+          ansible.builtin.uri:
+            url: "{{ validation_service_health_url }}"
+            status_code: 200
+          register: validation_rollback_health
+          retries: 12
+          delay: 5
+          until: validation_rollback_health.status == 200
+
