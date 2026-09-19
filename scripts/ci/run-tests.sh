@@ -23,6 +23,8 @@ elif [ -f "$ROOT/pom.xml" ]; then
 
     REPORT_DIR="$ROOT/target/surefire-reports"
     total_tests=0
+    total_failures=0
+    total_errors=0
     if [ -d "$REPORT_DIR" ]; then
         for report in "$REPORT_DIR"/TEST-*.xml; do
             [ -f "$report" ] || continue
@@ -37,11 +39,37 @@ elif [ -f "$ROOT/pom.xml" ]; then
                 END { print total + 0 }
             ' "$report")
             total_tests=$((total_tests + report_tests))
+            report_failures=$(awk '
+                {
+                    line = $0
+                    while (match(line, /failures="[0-9][0-9]*"/)) {
+                        total += substr(line, RSTART + 10, RLENGTH - 11)
+                        line = substr(line, RSTART + RLENGTH)
+                    }
+                }
+                END { print total + 0 }
+            ' "$report")
+            total_failures=$((total_failures + report_failures))
+            report_errors=$(awk '
+                {
+                    line = $0
+                    while (match(line, /errors="[0-9][0-9]*"/)) {
+                        total += substr(line, RSTART + 8, RLENGTH - 9)
+                        line = substr(line, RSTART + RLENGTH)
+                    }
+                }
+                END { print total + 0 }
+            ' "$report")
+            total_errors=$((total_errors + report_errors))
         done
     fi
 
     if [ "$total_tests" -eq 0 ]; then
         fail 'No application tests were executed'
+        exit 1
+    fi
+    if [ "$total_failures" -ne 0 ] || [ "$total_errors" -ne 0 ]; then
+        fail "Application test reports contain $total_failures failure(s) and $total_errors error(s)"
         exit 1
     fi
 else

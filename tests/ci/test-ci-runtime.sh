@@ -105,6 +105,14 @@ case "${FAKE_MVN_MODE:-success-two-tests}" in
     failed-test)
         exit 1
         ;;
+    ignored-failed-test)
+        mkdir -p target/surefire-reports
+        printf '<testsuite name="unit" tests="1" failures="1" errors="0"/>\n' > target/surefire-reports/TEST-unit.xml
+        ;;
+    ignored-test-error)
+        mkdir -p target/surefire-reports
+        printf '<testsuite name="unit" tests="1" failures="0" errors="1"/>\n' > target/surefire-reports/TEST-unit.xml
+        ;;
     missing-report)
         ;;
     zero-tests)
@@ -126,6 +134,10 @@ assert_succeeds "two application tests" env PATH="$FIXTURE_ROOT/bin:$PATH" \
     FAKE_MVN_MODE=success-two-tests "$ROOT/scripts/ci/run-tests.sh" "$FIXTURE_ROOT"
 assert_fails "Maven test failure" env PATH="$FIXTURE_ROOT/bin:$PATH" \
     FAKE_MVN_MODE=failed-test "$ROOT/scripts/ci/run-tests.sh" "$FIXTURE_ROOT"
+assert_fails "ignored Maven test failure in Surefire XML" env PATH="$FIXTURE_ROOT/bin:$PATH" \
+    FAKE_MVN_MODE=ignored-failed-test "$ROOT/scripts/ci/run-tests.sh" "$FIXTURE_ROOT"
+assert_fails "ignored Maven test error in Surefire XML" env PATH="$FIXTURE_ROOT/bin:$PATH" \
+    FAKE_MVN_MODE=ignored-test-error "$ROOT/scripts/ci/run-tests.sh" "$FIXTURE_ROOT"
 assert_fails "missing Surefire report" env PATH="$FIXTURE_ROOT/bin:$PATH" \
     FAKE_MVN_MODE=missing-report "$ROOT/scripts/ci/run-tests.sh" "$FIXTURE_ROOT"
 assert_fails "zero application tests" env PATH="$FIXTURE_ROOT/bin:$PATH" \

@@ -98,8 +98,11 @@ foreach ($stage in $stageContracts.Keys) {
 $post = ($jenkinsfile -split 'post\s*\{', 2)[-1]
 foreach ($pattern in @('always\s*\{', 'scripts/ci/collect-evidence\.sh', 'MMIV_BUILD_RESULT=\$\{currentBuild.currentResult\}',
         "junit testResults: '\*\*/target/surefire-reports/\*\.xml', allowEmptyResults: true",
-        "archiveArtifacts artifacts: '\.ci/reports/\*\*/\*,\*\*/target/surefire-reports/\*\*/\*'", 'finally\s*\{')) {
+        "archiveArtifacts artifacts: '\.ci/reports/\*\*/\*,\*\*/target/surefire-reports/\*\*/\*'")) {
     if ($post -notmatch $pattern) { $failures.Add("Post/always must publish evidence even after failure: $pattern") }
+}
+if ($post -notmatch '(?s)finally\s*\{\s*try\s*\{.*?scripts/ci/collect-evidence\.sh.*?\}\s*finally\s*\{\s*archiveArtifacts') {
+    $failures.Add('Post/always must archive evidence from a nested finally even when metadata collection fails.')
 }
 if ($jenkinsfile -match 'returnStatus|catchError|\|\|\s*(true|:)') {
     $failures.Add('Jenkins security gates must propagate nonzero statuses.')
