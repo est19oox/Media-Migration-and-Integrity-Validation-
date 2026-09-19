@@ -54,13 +54,13 @@ Configuration as code creates `mmiv-ci` as a GitHub multibranch pipeline and sto
 
 Jenkins runs the branch job from GitHub SCM, not from a local project snapshot. The Checkout stage uses `checkout scm`, records `TESTED_COMMIT` with `git rev-parse HEAD`, and retains that full SHA as evidence. A job tests the exact GitHub revision checked out into its isolated workspace, even when later commits arrive on the branch.
 
-Feature branches should inherit `Jenkinsfile` from `main`; without that root file they are not discoverable. The deployment, verification, and DAST gates run for `main`, `feature/*`, and pull-request jobs. Other discovered branches still run the common validation, test, and security stages.
+Feature branches should inherit `Jenkinsfile` from `main`; without that root file they are not discoverable. The deployment, verification, and DAST gates run for pushed `main` and `feature/*` branch jobs. Pull requests are not separately discovered by this branch-only configuration. Other discovered branches still run the common validation, test, and security stages.
 
 ## Pipeline gates and merge authority
 
 The pipeline validates repository hygiene, runs supported application tests, Semgrep SAST, Trivy filesystem SCA, Terraform formatting/validation and Checkov when Terraform exists, builds and scans a supported container image with Trivy, requests a test deployment, verifies its tested SHA, and runs ZAP baseline DAST. A missing supported manifest or source type is reported as `SKIPPED`; a configured gate failure fails the build.
 
-Jenkins never pushes, merges, or approves pull requests. A human merges `main` only after reviewing the exact-SHA evidence from the relevant pull-request build. Jenkins does not fix, rewrite, or bypass failed contributor-owned application, Docker, Terraform, Ansible, or AWS work to make a gate pass.
+Jenkins never pushes, merges, or approves pull requests. A human reviews and merges the pull request into `main` only after reviewing the exact-SHA evidence from the corresponding pushed branch job. Jenkins does not fix, rewrite, or bypass failed contributor-owned application, Docker, Terraform, Ansible, or AWS work to make a gate pass.
 
 ## Contributor-owned deployment contract
 
@@ -70,7 +70,7 @@ The deployment implementation is owned outside the Jenkins CI files. Jenkins inv
 scripts/cd/trigger-deployment.sh <full-commit-sha>
 ```
 
-The deployment owner must write a nonempty `.ci/deployment.env` with exactly these two keys, once each:
+The deployment owner must write a nonempty `.ci/deployment.env` containing exactly one occurrence each of these required keys; additional entries are permitted:
 
 ```text
 DEPLOYED_COMMIT=<full-commit-sha>
@@ -81,7 +81,7 @@ DAST_TARGET_URL=<http-or-https-url>
 
 ## Evidence and report retrieval
 
-Open the branch or pull-request build in `mmiv-ci`, then use its **Console Output** for stage messages and **Artifacts** for retained evidence. Jenkins archives `.ci/reports/**/*` and Maven Surefire XML under `**/target/surefire-reports/**/*`, including:
+Open the pushed branch build in `mmiv-ci`, then use its **Console Output** for stage messages and **Artifacts** for retained evidence. Jenkins archives `.ci/reports/**/*` and Maven Surefire XML under `**/target/surefire-reports/**/*`, including:
 
 - `.ci/reports/build-metadata.json` — branch, `tested_commit`, build URL, timestamp, and result.
 - `.ci/reports/semgrep.json` — Semgrep SAST results when supported source is present.
@@ -91,7 +91,7 @@ Open the branch or pull-request build in `mmiv-ci`, then use its **Console Outpu
 - `.ci/reports/deployment.log` — contributor deployment trigger output.
 - `.ci/reports/zap.log`, `.ci/reports/zap-report.json`, and `.ci/reports/zap-report.html` — ZAP DAST evidence.
 
-The Jenkins **Test Result** view presents any retained Maven Surefire results. Use `build-metadata.json` and the console's recorded checkout to review the exact SHA before approving a human merge.
+The Jenkins **Test Result** view presents any retained Maven Surefire results. Use `build-metadata.json` and the console's recorded checkout to review the exact SHA before a human reviews and merges the corresponding pull request into `main`.
 
 ## Gate-to-owner troubleshooting
 

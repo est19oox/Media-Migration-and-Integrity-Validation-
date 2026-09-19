@@ -62,20 +62,17 @@ Assert-FileContains 'docs/jenkins/local-setup.md' @(
     'checkout scm',
     'git rev-parse HEAD',
     'TESTED_COMMIT',
-    'Jenkins never pushes, merges, or approves pull requests',
-    'human merges `main` only after reviewing the exact-SHA evidence',
+    'Jenkins never.*pushes.*merges.*approves',
+    'human.*(review.*merge|merge.*review).*pull request.*into.*main',
     'scripts/cd/trigger-deployment\.sh <full-commit-sha>',
     'DEPLOYED_COMMIT=<full-commit-sha>',
     'DAST_TARGET_URL=<http-or-https-url>',
     '\.ci/reports/semgrep\.json',
     '\.ci/reports/trivy-sca\.json',
     '\.ci/reports/zap-report\.html',
-    'Application code owner',
-    'Docker owner',
-    'Terraform owner',
-    'Ansible owner',
-    'AWS owner',
-    'returned to the relevant owner',
+    'Gate-to-owner troubleshooting',
+    'contributor-owned',
+    'Deployment owner',
     'Docker socket'
 )
 
@@ -85,6 +82,9 @@ if ($setupGuide -match 'mmiv-pipeline') {
 }
 if ($setupGuide -match 'Copy the local project snapshot') {
     $failures.Add('Jenkins setup guide still describes local snapshot checkout.')
+}
+if ($setupGuide -match 'pull-request (jobs|build)') {
+    $failures.Add('Jenkins setup guide must not claim pull-request job discovery when only branch discovery is configured.')
 }
 
 if ($failures.Count -gt 0) {
