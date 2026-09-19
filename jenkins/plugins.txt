@@ -1,6 +1,7 @@
 configuration-as-code
 credentials-binding
 git
+github-branch-source
 job-dsl
 junit
 pipeline-stage-view

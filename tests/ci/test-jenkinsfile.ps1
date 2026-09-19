@@ -28,6 +28,9 @@ $requiredPatterns = @(
     "stage\('Container Scan'\)",
     'archiveArtifacts',
     'checkout\s+scm',
+    'env\.TESTED_COMMIT\s*=\s*sh\s*\(',
+    "script:\s*'git rev-parse HEAD'",
+    'returnStdout:\s*true',
     'currentBuild\.description',
     'BRANCH_NAME',
     'GIT_COMMIT',
@@ -58,6 +61,9 @@ if ($jenkinsfile -match '/project') {
 }
 if ($jenkinsfile -match 'tar\s+--exclude') {
     $failures.Add('Jenkinsfile must use SCM checkout instead of creating a local tar snapshot.')
+}
+if ($jenkinsfile -notmatch 'if\s*\(\s*!env\.TESTED_COMMIT\s*\)') {
+    $failures.Add('Jenkinsfile must fail validation when TESTED_COMMIT is empty.')
 }
 
 if ($failures.Count -gt 0) {

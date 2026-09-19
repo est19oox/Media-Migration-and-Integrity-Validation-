@@ -14,15 +14,24 @@ pipeline {
             steps {
                 deleteDir()
                 checkout scm
-                sh 'chmod +x scripts/ci/*.sh'
                 script {
+                    env.TESTED_COMMIT = sh(
+                        script: 'git rev-parse HEAD',
+                        returnStdout: true
+                    ).trim()
                     currentBuild.description = "${env.BRANCH_NAME} ${env.GIT_COMMIT.take(12)}"
                 }
+                sh 'chmod +x scripts/ci/*.sh'
             }
         }
 
         stage('Validate') {
             steps {
+                script {
+                    if (!env.TESTED_COMMIT) {
+                        error('TESTED_COMMIT was not captured after SCM checkout.')
+                    }
+                }
                 sh './scripts/ci/validate-repository.sh .'
             }
         }

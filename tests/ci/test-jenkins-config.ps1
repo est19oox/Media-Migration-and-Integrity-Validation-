@@ -31,6 +31,7 @@ $expectations = @(
     @{ File = 'jenkins/plugins.txt'; Content = $plugins; Pattern = 'configuration-as-code' },
     @{ File = 'jenkins/plugins.txt'; Content = $plugins; Pattern = 'workflow-aggregator' },
     @{ File = 'jenkins/plugins.txt'; Content = $plugins; Pattern = 'workflow-multibranch' },
+    @{ File = 'jenkins/plugins.txt'; Content = $plugins; Pattern = 'github-branch-source' },
     @{ File = 'jenkins/plugins.txt'; Content = $plugins; Pattern = 'job-dsl' },
     @{ File = 'jenkins/plugins.txt'; Content = $plugins; Pattern = 'timestamper' },
     @{ File = 'jenkins/docker-compose.yml'; Content = $compose; Pattern = '127\.0\.0\.1:8080:8080' },
@@ -40,18 +41,22 @@ $expectations = @(
     @{ File = 'jenkins/docker-compose.yml'; Content = $compose; Pattern = 'JENKINS_ADMIN_PASSWORD' },
     @{ File = 'jenkins/docker-compose.yml'; Content = $compose; Pattern = 'GITHUB_USERNAME' },
     @{ File = 'jenkins/docker-compose.yml'; Content = $compose; Pattern = 'GITHUB_TOKEN' },
+    @{ File = 'jenkins/docker-compose.yml'; Content = $compose; Pattern = 'GITHUB_REPOSITORY_URL' },
     @{ File = 'jenkins/casc.yaml'; Content = $casc; Pattern = 'id:\s*[''"]?github-pat' },
     @{ File = 'jenkins/casc.yaml'; Content = $casc; Pattern = 'username:\s*"\$\{GITHUB_USERNAME\}"' },
     @{ File = 'jenkins/casc.yaml'; Content = $casc; Pattern = 'password:\s*"\$\{GITHUB_TOKEN\}"' },
     @{ File = 'jenkins/casc.yaml'; Content = $casc; Pattern = "credentialsId\('github-pat'\)" },
     @{ File = 'jenkins/casc.yaml'; Content = $casc; Pattern = "multibranchPipelineJob\('mmiv-ci'\)" },
-    @{ File = 'jenkins/casc.yaml'; Content = $casc; Pattern = 'https://github\.com/est19oox/Media-Migration-and-Integrity-Validation-\.git' },
+    @{ File = 'jenkins/casc.yaml'; Content = $casc; Pattern = 'github\s*\{' },
+    @{ File = 'jenkins/casc.yaml'; Content = $casc; Pattern = "repositoryUrl\('\$\{GITHUB_REPOSITORY_URL\}'\)" },
+    @{ File = 'jenkins/casc.yaml'; Content = $casc; Pattern = 'gitHubBranchDiscovery\s*\{' },
     @{ File = 'jenkins/casc.yaml'; Content = $casc; Pattern = 'periodicFolderTrigger' },
     @{ File = 'jenkins/casc.yaml'; Content = $casc; Pattern = "interval\('2m'\)" },
     @{ File = 'jenkins/casc.yaml'; Content = $casc; Pattern = "scriptPath\('Jenkinsfile'\)" },
     @{ File = 'jenkins/.env.example'; Content = $exampleEnvironment; Pattern = 'JENKINS_ADMIN_PASSWORD=' },
     @{ File = 'jenkins/.env.example'; Content = $exampleEnvironment; Pattern = 'GITHUB_USERNAME=' },
     @{ File = 'jenkins/.env.example'; Content = $exampleEnvironment; Pattern = 'GITHUB_TOKEN=' },
+    @{ File = 'jenkins/.env.example'; Content = $exampleEnvironment; Pattern = 'GITHUB_REPOSITORY_URL=https://github\.com/est19oox/Media-Migration-and-Integrity-Validation-\.git' },
     @{ File = '.gitignore'; Content = $gitignore; Pattern = 'jenkins/\.env' },
     @{ File = '.gitignore'; Content = $gitignore; Pattern = '\.ci/' },
     @{ File = '.gitattributes'; Content = $gitattributes; Pattern = '\*\.sh\s+text\s+eol=lf' },
@@ -82,6 +87,9 @@ if ($casc -match "pipelineJob\('mmiv-pipeline'\)") {
 }
 if ($casc -match '/project/Jenkinsfile') {
     $failures.Add('JCasC must load Jenkinsfile through SCM, not from /project.')
+}
+if ($casc -match "new File\('/project/Jenkinsfile'\)") {
+    $failures.Add('JCasC must not define a local /project Jenkinsfile job.')
 }
 if ($compose -match '\.\./:/project:ro') {
     $failures.Add('Compose must not mount the local repository as the CI source.')
