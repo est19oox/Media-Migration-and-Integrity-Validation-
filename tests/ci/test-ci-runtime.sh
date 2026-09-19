@@ -15,6 +15,22 @@ assert_fails() {
     fi
 }
 
+assert_status() {
+    expected_status=$1
+    description=$2
+    shift 2
+    if "$@"; then
+        actual_status=0
+    else
+        actual_status=$?
+    fi
+    if [ "$actual_status" -ne "$expected_status" ]; then
+        printf 'FAIL: expected %s to exit %s, got %s.\n' \
+            "$description" "$expected_status" "$actual_status" >&2
+        exit 1
+    fi
+}
+
 assert_succeeds() {
     description=$1
     shift
@@ -108,6 +124,7 @@ case "${MMIV_SEMGREP_MODE:-clean}" in
         exit 1
         ;;
     scanner-error)
+        printf '%s\n' '{"error":"scanner-error"}' > "$output"
         exit 2
         ;;
     *)
@@ -125,15 +142,28 @@ assert_succeeds "clean Semgrep scan" env PATH="$FIXTURE_ROOT/bin:$PATH" \
 test -f "$FIXTURE_ROOT/.ci/reports/semgrep.json"
 grep -F '"results":[]' "$FIXTURE_ROOT/.ci/reports/semgrep.json"
 
-grep -F -- "--config $FIXTURE_ROOT/security/semgrep/semgrep.yml" "$MMIV_SEMGREP_LOG"
-grep -F -- '--error' "$MMIV_SEMGREP_LOG"
-grep -F -- '--json' "$MMIV_SEMGREP_LOG"
-grep -F -- "--output $FIXTURE_ROOT/.ci/reports/semgrep.json" "$MMIV_SEMGREP_LOG"
+assert_semgrep_invocation() {
+    grep -F -- "scan --config $FIXTURE_ROOT/security/semgrep/semgrep.yml" "$MMIV_SEMGREP_LOG"
+    grep -F -- '--error' "$MMIV_SEMGREP_LOG"
+    grep -F -- '--json' "$MMIV_SEMGREP_LOG"
+    grep -F -- "--output $FIXTURE_ROOT/.ci/reports/semgrep.json" "$MMIV_SEMGREP_LOG"
+}
 
-assert_fails "Semgrep blocking finding" env PATH="$FIXTURE_ROOT/bin:$PATH" \
+assert_semgrep_invocation
+
+rm -f "$MMIV_SEMGREP_LOG" "$FIXTURE_ROOT/.ci/reports/semgrep.json"
+assert_status 1 "Semgrep blocking finding" env PATH="$FIXTURE_ROOT/bin:$PATH" \
     MMIV_SEMGREP_MODE=finding "$ROOT/scripts/ci/run-sast.sh" "$FIXTURE_ROOT"
-assert_fails "Semgrep scanner error" env PATH="$FIXTURE_ROOT/bin:$PATH" \
+assert_semgrep_invocation
+test -f "$FIXTURE_ROOT/.ci/reports/semgrep.json"
+grep -F '"check_id":"test-rule"' "$FIXTURE_ROOT/.ci/reports/semgrep.json"
+
+rm -f "$MMIV_SEMGREP_LOG" "$FIXTURE_ROOT/.ci/reports/semgrep.json"
+assert_status 2 "Semgrep scanner error" env PATH="$FIXTURE_ROOT/bin:$PATH" \
     MMIV_SEMGREP_MODE=scanner-error "$ROOT/scripts/ci/run-sast.sh" "$FIXTURE_ROOT"
+assert_semgrep_invocation
+test -f "$FIXTURE_ROOT/.ci/reports/semgrep.json"
+grep -F '"error":"scanner-error"' "$FIXTURE_ROOT/.ci/reports/semgrep.json"
 
 printf 'FROM scratch\n' > "$FIXTURE_ROOT/dockerfile"
 cat > "$FIXTURE_ROOT/bin/docker" <<'EOF'

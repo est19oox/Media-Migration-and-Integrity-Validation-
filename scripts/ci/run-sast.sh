@@ -23,6 +23,6 @@ if semgrep scan --config "$semgrep_config" --error --json --output "$ROOT/.ci/re
     pass 'Semgrep SAST completed without blocking findings.'
 else
     status=$?
-    fail "Semgrep SAST failed with exit status $status."
+    printf 'FAIL: Semgrep SAST failed with exit status %s.\n' "$status" >&2
     exit "$status"
 fi
