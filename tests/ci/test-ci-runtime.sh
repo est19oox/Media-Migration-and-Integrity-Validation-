@@ -90,24 +90,50 @@ cat > "$FIXTURE_ROOT/bin/semgrep" <<'EOF'
 #!/usr/bin/env sh
 set -eu
 printf '%s\n' "$*" > "$MMIV_SEMGREP_LOG"
-exit "${MMIV_SEMGREP_EXIT:-0}"
+output=''
+while [ "$#" -gt 0 ]; do
+    if [ "$1" = '--output' ]; then
+        shift
+        output=$1
+    fi
+    shift
+done
+case "${MMIV_SEMGREP_MODE:-clean}" in
+    clean)
+        printf '%s\n' '{"results":[]}' > "$output"
+        exit 0
+        ;;
+    finding)
+        printf '%s\n' '{"results":[{"check_id":"test-rule"}]}' > "$output"
+        exit 1
+        ;;
+    scanner-error)
+        exit 2
+        ;;
+    *)
+        printf 'FAIL: unknown fake Semgrep mode: %s\n' "$MMIV_SEMGREP_MODE" >&2
+        exit 1
+        ;;
+esac
 EOF
 chmod +x "$FIXTURE_ROOT/bin/semgrep"
 
 MMIV_SEMGREP_LOG="$FIXTURE_ROOT/semgrep.log"
 export MMIV_SEMGREP_LOG
-PATH="$FIXTURE_ROOT/bin:$PATH" "$ROOT/scripts/ci/run-sast.sh" "$FIXTURE_ROOT"
+assert_succeeds "clean Semgrep scan" env PATH="$FIXTURE_ROOT/bin:$PATH" \
+    MMIV_SEMGREP_MODE=clean "$ROOT/scripts/ci/run-sast.sh" "$FIXTURE_ROOT"
+test -f "$FIXTURE_ROOT/.ci/reports/semgrep.json"
+grep -F '"results":[]' "$FIXTURE_ROOT/.ci/reports/semgrep.json"
 
 grep -F -- "--config $FIXTURE_ROOT/security/semgrep/semgrep.yml" "$MMIV_SEMGREP_LOG"
 grep -F -- '--error' "$MMIV_SEMGREP_LOG"
 grep -F -- '--json' "$MMIV_SEMGREP_LOG"
 grep -F -- "--output $FIXTURE_ROOT/.ci/reports/semgrep.json" "$MMIV_SEMGREP_LOG"
 
-if MMIV_SEMGREP_EXIT=1 PATH="$FIXTURE_ROOT/bin:$PATH" \
-    "$ROOT/scripts/ci/run-sast.sh" "$FIXTURE_ROOT"; then
-    printf 'FAIL: SAST wrapper ignored the scanner failure exit code.\n' >&2
-    exit 1
-fi
+assert_fails "Semgrep blocking finding" env PATH="$FIXTURE_ROOT/bin:$PATH" \
+    MMIV_SEMGREP_MODE=finding "$ROOT/scripts/ci/run-sast.sh" "$FIXTURE_ROOT"
+assert_fails "Semgrep scanner error" env PATH="$FIXTURE_ROOT/bin:$PATH" \
+    MMIV_SEMGREP_MODE=scanner-error "$ROOT/scripts/ci/run-sast.sh" "$FIXTURE_ROOT"
 
 printf 'FROM scratch\n' > "$FIXTURE_ROOT/dockerfile"
 cat > "$FIXTURE_ROOT/bin/docker" <<'EOF'

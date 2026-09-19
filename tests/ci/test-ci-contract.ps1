@@ -63,10 +63,12 @@ Assert-FileContains 'scripts/ci/run-tests.sh' @(
 )
 Assert-FileContains 'scripts/ci/run-sast.sh' @(
     'semgrep',
+    'semgrep scan',
     'security/semgrep/semgrep\.yml',
     'p/java',
     '--error',
     '--json',
+    'prepare_reports_directory',
     'semgrep\.json'
 )
 Assert-FileContains 'scripts/ci/run-sca.sh' @('trivy', 'HIGH,CRITICAL')

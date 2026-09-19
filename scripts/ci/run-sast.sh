@@ -19,5 +19,10 @@ if [ -f "$ROOT/security/semgrep/semgrep.yml" ]; then
     semgrep_config="$ROOT/security/semgrep/semgrep.yml"
 fi
 
-semgrep scan --config "$semgrep_config" --error --json --output "$ROOT/.ci/reports/semgrep.json" "$ROOT/src"
-pass 'Semgrep SAST completed without blocking findings.'
+if semgrep scan --config "$semgrep_config" --error --json --output "$ROOT/.ci/reports/semgrep.json" "$ROOT/src"; then
+    pass 'Semgrep SAST completed without blocking findings.'
+else
+    status=$?
+    fail "Semgrep SAST failed with exit status $status."
+    exit "$status"
+fi
