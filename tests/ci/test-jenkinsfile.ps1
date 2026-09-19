@@ -32,9 +32,9 @@ $requiredPatterns = @(
     'env\.TESTED_COMMIT\s*=\s*sh\s*\(',
     "script:\s*'git rev-parse HEAD'",
     'returnStdout:\s*true',
-    'currentBuild\.description',
+    'currentBuild\.description\s*=\s*"\$\{env\.BRANCH_NAME\}\s+\$\{env\.TESTED_COMMIT\.take\(12\)\}"',
     'BRANCH_NAME',
-    'GIT_COMMIT',
+    'TESTED_COMMIT',
     'scripts/ci/validate-repository\.sh',
     'scripts/ci/run-tests\.sh',
     'scripts/ci/run-sast\.sh',
@@ -116,6 +116,9 @@ if ($jenkinsfile -match '/project') {
 }
 if ($jenkinsfile -match 'tar\s+--exclude') {
     $failures.Add('Jenkinsfile must use SCM checkout instead of creating a local tar snapshot.')
+}
+if ($jenkinsfile -match 'env\.GIT_COMMIT\.take\(') {
+    $failures.Add('Jenkinsfile must build its description from TESTED_COMMIT because checkout scm does not guarantee env.GIT_COMMIT.')
 }
 if ($jenkinsfile -notmatch 'if\s*\(\s*!env\.TESTED_COMMIT\s*\)') {
     $failures.Add('Jenkinsfile must fail validation when TESTED_COMMIT is empty.')

@@ -19,7 +19,7 @@ pipeline {
                         script: 'git rev-parse HEAD',
                         returnStdout: true
                     ).trim()
-                    currentBuild.description = "${env.BRANCH_NAME} ${env.GIT_COMMIT.take(12)}"
+                    currentBuild.description = "${env.BRANCH_NAME} ${env.TESTED_COMMIT.take(12)}"
                 }
                 sh 'chmod +x scripts/ci/*.sh'
             }
