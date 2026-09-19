@@ -90,6 +90,15 @@ Assert-FileContains 'scripts/ci/verify-deployment.sh' @(
     'https\?://',
     'expected-commit'
 )
+Assert-FileContains 'scripts/ci/run-dast.sh' @(
+    'curl --fail --silent --show-error --max-time 10',
+    'ghcr\.io/zaproxy/zaproxy:stable',
+    'zap-baseline\.py',
+    '-J zap-report\.json',
+    '-r zap-report\.html',
+    'zap\.log',
+    'tee'
+)
 
 $deploymentTriggerInterface = 'scripts/cd/trigger-deployment.sh <full-commit-sha>'
 $deploymentTriggerPath = Join-Path $repositoryRoot 'scripts/cd/trigger-deployment.sh'

@@ -312,4 +312,107 @@ if MMIV_CHECKOV_EXIT=1 PATH="$FIXTURE_ROOT/bin:$PATH" \
     exit 1
 fi
 
+cat > "$FIXTURE_ROOT/bin/curl" <<'EOF'
+#!/usr/bin/env sh
+set -eu
+printf '%s\n' "$*" > "$MMIV_ZAP_CURL_LOG"
+case "${MMIV_CURL_MODE:-reachable}" in
+    reachable)
+        exit 0
+        ;;
+    unreachable)
+        printf 'curl: target is unreachable\n' >&2
+        exit 22
+        ;;
+    *)
+        printf 'FAIL: unknown fake curl mode: %s\n' "$MMIV_CURL_MODE" >&2
+        exit 1
+        ;;
+esac
+EOF
+chmod +x "$FIXTURE_ROOT/bin/curl"
+
+cat > "$FIXTURE_ROOT/bin/docker" <<'EOF'
+#!/usr/bin/env sh
+set -eu
+printf '%s\n' "$*" > "$MMIV_ZAP_DOCKER_LOG"
+reports_dir=''
+for argument in "$@"; do
+    case "$argument" in
+        *:/zap/wrk)
+            reports_dir=${argument%:/zap/wrk}
+            ;;
+    esac
+done
+[ -n "$reports_dir" ] || exit 2
+mkdir -p "$reports_dir"
+printf '<html>fake ZAP report</html>\n' > "$reports_dir/zap-report.html"
+printf '{"site":"fake-zap"}\n' > "$reports_dir/zap-report.json"
+printf 'fake ZAP console output\n'
+case "${MMIV_ZAP_MODE:-clean}" in
+    clean) exit 0 ;;
+    policy-failure) exit 1 ;;
+    execution-error) exit 3 ;;
+    *)
+        printf 'FAIL: unknown fake ZAP mode: %s\n' "$MMIV_ZAP_MODE" >&2
+        exit 2
+        ;;
+esac
+EOF
+chmod +x "$FIXTURE_ROOT/bin/docker"
+
+MMIV_ZAP_CURL_LOG="$FIXTURE_ROOT/zap-curl.log"
+MMIV_ZAP_DOCKER_LOG="$FIXTURE_ROOT/zap-docker.log"
+export MMIV_ZAP_CURL_LOG MMIV_ZAP_DOCKER_LOG
+
+rm -f "$MMIV_ZAP_CURL_LOG" "$MMIV_ZAP_DOCKER_LOG"
+assert_status 1 "empty DAST target URL" env PATH="$FIXTURE_ROOT/bin:$PATH" \
+    sh -c 'cd "$1" && exec "$2" "$3"' sh "$FIXTURE_ROOT" "$ROOT/scripts/ci/run-dast.sh" ''
+test ! -e "$MMIV_ZAP_CURL_LOG"
+test ! -e "$MMIV_ZAP_DOCKER_LOG"
+
+rm -f "$MMIV_ZAP_CURL_LOG" "$MMIV_ZAP_DOCKER_LOG"
+assert_status 1 "file DAST target URL" env PATH="$FIXTURE_ROOT/bin:$PATH" \
+    sh -c 'cd "$1" && exec "$2" "$3"' sh "$FIXTURE_ROOT" "$ROOT/scripts/ci/run-dast.sh" 'file:///tmp/not-a-target'
+test ! -e "$MMIV_ZAP_CURL_LOG"
+test ! -e "$MMIV_ZAP_DOCKER_LOG"
+
+rm -f "$MMIV_ZAP_CURL_LOG" "$MMIV_ZAP_DOCKER_LOG"
+assert_status 1 "unreachable DAST target URL" env PATH="$FIXTURE_ROOT/bin:$PATH" \
+    MMIV_CURL_MODE=unreachable sh -c 'cd "$1" && exec "$2" "$3"' sh "$FIXTURE_ROOT" "$ROOT/scripts/ci/run-dast.sh" 'https://dast.example.test/health'
+grep -Fx -- '--fail --silent --show-error --max-time 10 https://dast.example.test/health' "$MMIV_ZAP_CURL_LOG"
+test ! -e "$MMIV_ZAP_DOCKER_LOG"
+
+assert_zap_invocation() {
+    grep -Fx -- "run --rm -v $FIXTURE_ROOT/.ci/reports:/zap/wrk ghcr.io/zaproxy/zaproxy:stable zap-baseline.py -t https://dast.example.test/health -J zap-report.json -r zap-report.html" \
+        "$MMIV_ZAP_DOCKER_LOG"
+}
+
+rm -f "$MMIV_ZAP_CURL_LOG" "$MMIV_ZAP_DOCKER_LOG" "$FIXTURE_ROOT/.ci/reports/zap-report.html" \
+    "$FIXTURE_ROOT/.ci/reports/zap-report.json" "$FIXTURE_ROOT/.ci/reports/zap.log"
+assert_succeeds "clean ZAP baseline scan" env PATH="$FIXTURE_ROOT/bin:$PATH" \
+    sh -c 'cd "$1" && exec "$2" "$3"' sh "$FIXTURE_ROOT" "$ROOT/scripts/ci/run-dast.sh" 'https://dast.example.test/health'
+grep -Fx -- '--fail --silent --show-error --max-time 10 https://dast.example.test/health' "$MMIV_ZAP_CURL_LOG"
+assert_zap_invocation
+test -f "$FIXTURE_ROOT/.ci/reports/zap-report.html"
+test -f "$FIXTURE_ROOT/.ci/reports/zap-report.json"
+test -f "$FIXTURE_ROOT/.ci/reports/zap.log"
+grep -F 'fake ZAP console output' "$FIXTURE_ROOT/.ci/reports/zap.log"
+
+rm -f "$MMIV_ZAP_DOCKER_LOG"
+assert_status 1 "ZAP policy failure" env PATH="$FIXTURE_ROOT/bin:$PATH" \
+    MMIV_ZAP_MODE=policy-failure sh -c 'cd "$1" && exec "$2" "$3"' sh "$FIXTURE_ROOT" "$ROOT/scripts/ci/run-dast.sh" 'https://dast.example.test/health'
+assert_zap_invocation
+test -f "$FIXTURE_ROOT/.ci/reports/zap-report.html"
+test -f "$FIXTURE_ROOT/.ci/reports/zap-report.json"
+grep -F 'fake ZAP console output' "$FIXTURE_ROOT/.ci/reports/zap.log"
+
+rm -f "$MMIV_ZAP_DOCKER_LOG"
+assert_status 3 "ZAP execution error" env PATH="$FIXTURE_ROOT/bin:$PATH" \
+    MMIV_ZAP_MODE=execution-error sh -c 'cd "$1" && exec "$2" "$3"' sh "$FIXTURE_ROOT" "$ROOT/scripts/ci/run-dast.sh" 'https://dast.example.test/health'
+assert_zap_invocation
+test -f "$FIXTURE_ROOT/.ci/reports/zap-report.html"
+test -f "$FIXTURE_ROOT/.ci/reports/zap-report.json"
+grep -F 'fake ZAP console output' "$FIXTURE_ROOT/.ci/reports/zap.log"
+
 printf 'PASS: CI runtime skeleton behavior is valid.\n'
