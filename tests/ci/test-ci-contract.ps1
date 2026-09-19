@@ -53,7 +53,14 @@ foreach ($script in $conditionalScripts) {
 }
 
 Assert-FileContains 'scripts/ci/run-tests.sh' @('pyproject\.toml', 'package\.json', 'pom\.xml')
-Assert-FileContains 'scripts/ci/run-tests.sh' @('/opt/jdk-25', 'JAVA_HOME', 'failIfNoTests=true')
+Assert-FileContains 'scripts/ci/run-tests.sh' @(
+    '/opt/jdk-25',
+    'JAVA_HOME',
+    'mvn --batch-mode test',
+    'surefire-reports',
+    'TEST-\*\.xml',
+    'No application tests were executed'
+)
 Assert-FileContains 'scripts/ci/run-sast.sh' @(
     'semgrep',
     'security/semgrep/semgrep\.yml',

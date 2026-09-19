@@ -2,9 +2,27 @@
 
 set -eu
 
-ROOT=${1:-/repo}
+ROOT=${1:-$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)}
 FIXTURE_ROOT=$(mktemp -d)
 trap 'rm -rf "$FIXTURE_ROOT"' EXIT
+
+assert_fails() {
+    description=$1
+    shift
+    if "$@"; then
+        printf 'FAIL: expected %s to fail.\n' "$description" >&2
+        exit 1
+    fi
+}
+
+assert_succeeds() {
+    description=$1
+    shift
+    if ! "$@"; then
+        printf 'FAIL: expected %s to succeed.\n' "$description" >&2
+        exit 1
+    fi
+}
 
 for script in "$ROOT"/scripts/ci/*.sh; do
     sh -n "$script"
@@ -26,15 +44,44 @@ cat > "$FIXTURE_ROOT/bin/mvn" <<'EOF'
 set -eu
 printf 'JAVA_HOME=%s\n' "${JAVA_HOME:-}" > "$MMIV_MAVEN_LOG"
 printf 'ARGS=%s\n' "$*" >> "$MMIV_MAVEN_LOG"
+rm -rf target
+case "${FAKE_MVN_MODE:-success-two-tests}" in
+    success-two-tests)
+        mkdir -p target/surefire-reports
+        printf '<testsuite name="unit" tests="1"/>\n' > target/surefire-reports/TEST-unit.xml
+        printf '<testsuite name="integration" tests="1"/>\n' > target/surefire-reports/TEST-integration.xml
+        ;;
+    failed-test)
+        exit 1
+        ;;
+    missing-report)
+        ;;
+    zero-tests)
+        mkdir -p target/surefire-reports
+        printf '<testsuite tests="0"/>\n' > target/surefire-reports/TEST-app.xml
+        printf '<testsuite tests="100"/>\n' > target/surefire-reports/dependency-check-junit.xml
+        ;;
+    *)
+        printf 'FAIL: unknown fake Maven mode: %s\n' "$FAKE_MVN_MODE" >&2
+        exit 1
+        ;;
+esac
 EOF
 chmod +x "$FIXTURE_ROOT/bin/mvn"
 
 MMIV_MAVEN_LOG="$FIXTURE_ROOT/maven.log"
 export MMIV_MAVEN_LOG
-PATH="$FIXTURE_ROOT/bin:$PATH" "$ROOT/scripts/ci/run-tests.sh" "$FIXTURE_ROOT"
+assert_succeeds "two application tests" env PATH="$FIXTURE_ROOT/bin:$PATH" \
+    FAKE_MVN_MODE=success-two-tests "$ROOT/scripts/ci/run-tests.sh" "$FIXTURE_ROOT"
+assert_fails "Maven test failure" env PATH="$FIXTURE_ROOT/bin:$PATH" \
+    FAKE_MVN_MODE=failed-test "$ROOT/scripts/ci/run-tests.sh" "$FIXTURE_ROOT"
+assert_fails "missing Surefire report" env PATH="$FIXTURE_ROOT/bin:$PATH" \
+    FAKE_MVN_MODE=missing-report "$ROOT/scripts/ci/run-tests.sh" "$FIXTURE_ROOT"
+assert_fails "zero application tests" env PATH="$FIXTURE_ROOT/bin:$PATH" \
+    FAKE_MVN_MODE=zero-tests "$ROOT/scripts/ci/run-tests.sh" "$FIXTURE_ROOT"
 
 grep -qx 'JAVA_HOME=/opt/jdk-25' "$MMIV_MAVEN_LOG"
-grep -qx 'ARGS=--batch-mode -DfailIfNoTests=true clean package' "$MMIV_MAVEN_LOG"
+grep -qx 'ARGS=--batch-mode test' "$MMIV_MAVEN_LOG"
 
 mkdir -p "$FIXTURE_ROOT/src/main/java" "$FIXTURE_ROOT/security/semgrep"
 printf 'class Example {}\n' > "$FIXTURE_ROOT/src/main/java/Example.java"
