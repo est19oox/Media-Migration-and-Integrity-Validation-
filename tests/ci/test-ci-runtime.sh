@@ -53,6 +53,41 @@ done
 "$ROOT/scripts/ci/build-image.sh" "$ROOT"
 "$ROOT/scripts/ci/scan-image.sh" "$ROOT"
 
+DEPLOYMENT_COMMIT=0123456789abcdef0123456789abcdef01234567
+DEPLOYMENT_URL=https://dast.example.test/health
+DEPLOYMENT_VALID_ENV="$FIXTURE_ROOT/deployment-valid.env"
+printf 'DEPLOYED_COMMIT=%s\nDAST_TARGET_URL=%s\n' \
+    "$DEPLOYMENT_COMMIT" "$DEPLOYMENT_URL" > "$DEPLOYMENT_VALID_ENV"
+
+"$ROOT/scripts/ci/verify-deployment.sh" "$DEPLOYMENT_VALID_ENV" "$DEPLOYMENT_COMMIT" \
+    > "$FIXTURE_ROOT/deployment-url.out" \
+    2> "$FIXTURE_ROOT/deployment-url.err"
+printf '%s\n' "$DEPLOYMENT_URL" > "$FIXTURE_ROOT/deployment-url.expected"
+cmp "$FIXTURE_ROOT/deployment-url.expected" "$FIXTURE_ROOT/deployment-url.out"
+test ! -s "$FIXTURE_ROOT/deployment-url.err"
+
+assert_fails "missing deployment environment file" \
+    "$ROOT/scripts/ci/verify-deployment.sh" "$FIXTURE_ROOT/missing-deployment.env" "$DEPLOYMENT_COMMIT"
+
+printf 'DEPLOYED_COMMIT=%s\n' "$DEPLOYMENT_COMMIT" > "$FIXTURE_ROOT/deployment-missing-key.env"
+assert_fails "deployment environment missing DAST target URL" \
+    "$ROOT/scripts/ci/verify-deployment.sh" "$FIXTURE_ROOT/deployment-missing-key.env" "$DEPLOYMENT_COMMIT"
+
+printf 'DEPLOYED_COMMIT=%s\nDEPLOYED_COMMIT=%s\nDAST_TARGET_URL=%s\n' \
+    "$DEPLOYMENT_COMMIT" "$DEPLOYMENT_COMMIT" "$DEPLOYMENT_URL" > "$FIXTURE_ROOT/deployment-duplicate-key.env"
+assert_fails "deployment environment with duplicate deployed commit" \
+    "$ROOT/scripts/ci/verify-deployment.sh" "$FIXTURE_ROOT/deployment-duplicate-key.env" "$DEPLOYMENT_COMMIT"
+
+printf 'DEPLOYED_COMMIT=%s\nDAST_TARGET_URL=ftp://dast.example.test/health\n' \
+    "$DEPLOYMENT_COMMIT" > "$FIXTURE_ROOT/deployment-ftp-url.env"
+assert_fails "deployment environment with FTP DAST target URL" \
+    "$ROOT/scripts/ci/verify-deployment.sh" "$FIXTURE_ROOT/deployment-ftp-url.env" "$DEPLOYMENT_COMMIT"
+
+printf 'DEPLOYED_COMMIT=abcdef0123456789abcdef0123456789abcdef01\nDAST_TARGET_URL=%s\n' \
+    "$DEPLOYMENT_URL" > "$FIXTURE_ROOT/deployment-mismatched-commit.env"
+assert_fails "deployment environment with mismatched full commit SHA" \
+    "$ROOT/scripts/ci/verify-deployment.sh" "$FIXTURE_ROOT/deployment-mismatched-commit.env" "$DEPLOYMENT_COMMIT"
+
 mkdir -p "$FIXTURE_ROOT/bin"
 : > "$FIXTURE_ROOT/pom.xml"
 cat > "$FIXTURE_ROOT/bin/mvn" <<'EOF'

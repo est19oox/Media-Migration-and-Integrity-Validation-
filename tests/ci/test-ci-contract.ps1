@@ -84,6 +84,18 @@ Assert-FileContains 'scripts/ci/run-terraform-checks.sh' @('terraform', 'fmt', '
 Assert-FileContains 'scripts/ci/run-iac-scan.sh' @('checkov', 'infrastructure', 'checkov\.json')
 Assert-FileContains 'scripts/ci/build-image.sh' @('docker', 'dockerfile', '--file', '\.ci/image-ref', 'GIT_COMMIT')
 Assert-FileContains 'scripts/ci/scan-image.sh' @('trivy', '\.ci/image-ref')
+Assert-FileContains 'scripts/ci/verify-deployment.sh' @(
+    'DEPLOYED_COMMIT',
+    'DAST_TARGET_URL',
+    'https\?://',
+    'expected-commit'
+)
+
+$deploymentTriggerInterface = 'scripts/cd/trigger-deployment.sh <full-commit-sha>'
+$deploymentTriggerPath = Join-Path $repositoryRoot 'scripts/cd/trigger-deployment.sh'
+if (Test-Path -LiteralPath $deploymentTriggerPath -PathType Leaf) {
+    $failures.Add("$deploymentTriggerInterface is externally owned and must not be implemented by this CI branch.")
+}
 
 if ($failures.Count -gt 0) {
     $failures | ForEach-Object { Write-Error $_ -ErrorAction Continue }
