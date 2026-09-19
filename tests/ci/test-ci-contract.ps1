@@ -82,7 +82,7 @@ Assert-FileContains 'scripts/ci/run-sca.sh' @(
 )
 Assert-FileContains 'scripts/ci/run-terraform-checks.sh' @('terraform', 'fmt', 'validate')
 Assert-FileContains 'scripts/ci/run-iac-scan.sh' @('checkov', 'infrastructure', 'checkov\.json')
-Assert-FileContains 'scripts/ci/build-image.sh' @('docker', 'dockerfile', '--file', '\.ci/image-ref', 'GIT_COMMIT')
+Assert-FileContains 'scripts/ci/build-image.sh' @('docker', 'dockerfile', '--file', '\.ci/image-ref', 'TESTED_COMMIT')
 Assert-FileContains 'scripts/ci/scan-image.sh' @('trivy', '\.ci/image-ref')
 Assert-FileContains 'scripts/ci/verify-deployment.sh' @(
     'DEPLOYED_COMMIT',

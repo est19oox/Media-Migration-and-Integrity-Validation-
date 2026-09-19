@@ -284,7 +284,9 @@ grep -Fx -- "build --file $FIXTURE_DOCKERFILE --tag mmiv:contract $FIXTURE_ROOT_
     "$MMIV_DOCKER_LOG"
 grep -qx 'mmiv:contract' "$FIXTURE_ROOT/.ci/image-ref"
 
-GIT_COMMIT=0123456789abcdef0123456789abcdef01234567 \
+TESTED_COMMIT=0123456789abcdef0123456789abcdef01234567 \
+    GIT_COMMIT=ffffffffffffffffffffffffffffffffffffffff \
+    BUILD_NUMBER=99 \
     PATH="$FIXTURE_ROOT/bin:$PATH" \
     "$ROOT/scripts/ci/build-image.sh" "$FIXTURE_ROOT"
 
