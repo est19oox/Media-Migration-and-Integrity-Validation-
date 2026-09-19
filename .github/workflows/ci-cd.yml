@@ -40,6 +40,12 @@ jobs:
     needs: ci
     runs-on: ubuntu-latest
 
+    strategy:
+      matrix:
+        target:
+          - http://127.0.0.1:8081
+          - http://127.0.0.1:8082
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -109,7 +115,7 @@ jobs:
         run: |
           set -e
           if ! ansible webservers -m shell -a 'curl --fail --silent --show-error http://127.0.0.1:8081/actuator/health' | grep -q '\"status\":\"UP\"'; then
-            echo "Smoke test failed. Attempting automatic rollback..."
+            echo "Transfer Service smoke test failed. Attempting automatic rollback..."
             ansible-playbook -i infrastructure/ansible/inventory.ini infrastructure/ansible/rollback.yml || true
             exit 1
           fi
@@ -125,6 +131,20 @@ jobs:
 #            ansible-playbook -i infrastructure/ansible/inventory.ini infrastructure/ansible/rollback.yml || true
 #            exit 1
 #          fi
+
+      - name: OWASP ZAP DAST
+        uses: zaproxy/action-baseline@v0.15.0
+#       uses: zaproxy/action-full-scan@v0.12.0 for full scan
+        with:
+          target: ${{ matrix.target }}
+          fail_action: true
+
+      - name: Rollback deployment
+        if: failure()
+        run: |
+          echo "ZAP DAST failed. Rolling back deployment..."
+          ansible-playbook -i infrastructure/ansible/inventory.ini infrastructure/ansible/rollback.yml
+
 
       - name: Cleanup SSH key
         if: always()
