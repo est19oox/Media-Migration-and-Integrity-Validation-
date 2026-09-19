@@ -415,4 +415,98 @@ test -f "$FIXTURE_ROOT/.ci/reports/zap-report.html"
 test -f "$FIXTURE_ROOT/.ci/reports/zap-report.json"
 grep -F 'fake ZAP console output' "$FIXTURE_ROOT/.ci/reports/zap.log"
 
+# Evidence must serialize hostile strings as data, exclude all unrelated secrets,
+# survive early failure with empty SCM fields, and preserve old output on error.
+test -f "$ROOT/scripts/ci/collect-evidence.sh" || {
+    printf 'FAIL: missing collect-evidence.sh.\n' >&2
+    exit 1
+}
+if command -v python3 >/dev/null 2>&1; then
+    JSON_PYTHON=python3
+else
+    JSON_PYTHON=python
+fi
+(
+    cd "$FIXTURE_ROOT"
+    BRANCH_NAME='feature/"quoted"\path
+$(touch metadata-injection)' TESTED_COMMIT="$DEPLOYMENT_COMMIT" \
+        BUILD_NUMBER=17 BUILD_URL='https://ci.example.test/job/"gate"/17/' MMIV_BUILD_RESULT=FAILURE \
+        PRIVATE_KEY=key-sentinel API_TOKEN=token-sentinel CLIENT_SECRET=secret-sentinel \
+        DB_PASSWORD=password-sentinel OTHER_PRIVATE_VALUE=private-sentinel \
+        sh "$ROOT/scripts/ci/collect-evidence.sh"
+    "$JSON_PYTHON" - <<'PY'
+import json
+import re
+from pathlib import Path
+raw = Path('.ci/reports/build-metadata.json').read_text(encoding='utf-8')
+data = json.loads(raw)
+assert set(data) == {'branch', 'tested_commit', 'build_number', 'build_url', 'timestamp', 'result'}
+assert data['branch'] == 'feature/"quoted"\\path\n$(touch metadata-injection)'
+assert data['tested_commit'] == '0123456789abcdef0123456789abcdef01234567'
+assert data['build_number'] == '17'
+assert data['build_url'] == 'https://ci.example.test/job/"gate"/17/'
+assert data['result'] == 'FAILURE'
+assert re.fullmatch(r'\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ', data['timestamp'])
+assert not re.search(r'KEY|TOKEN|SECRET|PASSWORD', raw, re.I)
+assert 'sentinel' not in raw
+assert not Path('metadata-injection').exists()
+PY
+    cp .ci/reports/build-metadata.json metadata-before.json
+    mkdir -p broken-json
+    printf '#!/usr/bin/env sh\nprintf "partial JSON"\nexit 23\n' > broken-json/python3
+    chmod +x broken-json/python3
+    assert_status 23 'metadata encoder failure' env PATH="$FIXTURE_ROOT/broken-json:$PATH" \
+        sh "$ROOT/scripts/ci/collect-evidence.sh"
+    cmp metadata-before.json .ci/reports/build-metadata.json
+    test "$(find .ci/reports -name '.build-metadata.*' | wc -l | tr -d ' ')" = 0
+    unset BRANCH_NAME TESTED_COMMIT BUILD_NUMBER BUILD_URL
+    MMIV_BUILD_RESULT=FAILURE sh "$ROOT/scripts/ci/collect-evidence.sh"
+    "$JSON_PYTHON" - <<'PY'
+import json
+from pathlib import Path
+data = json.loads(Path('.ci/reports/build-metadata.json').read_text(encoding='utf-8'))
+assert [data[k] for k in ('branch', 'tested_commit', 'build_number', 'build_url')] == ['', '', '', '']
+assert data['result'] == 'FAILURE'
+PY
+)
+printf 'PASS: metadata allow-list, JSON escaping, early failure, and atomic replacement.\n'
+
+# Execute the actual Jenkins shell body; the external trigger is mocked only in
+# the temporary workspace. Dropping fail-closed handling must break these tests.
+awk '/label: '\''Trigger deployment'\''/ { block=1; next }
+    block && /'\'''\'''\''/ { exit }
+    block { print }' "$ROOT/Jenkinsfile" > "$FIXTURE_ROOT/jenkins-deployment.sh"
+test -s "$FIXTURE_ROOT/jenkins-deployment.sh"
+mkdir -p "$FIXTURE_ROOT/scripts/cd"
+(
+    cd "$FIXTURE_ROOT"
+    export TESTED_COMMIT="$DEPLOYMENT_COMMIT"
+    assert_status 1 'required missing deployment script' sh jenkins-deployment.sh
+    grep -F 'Missing required deployment script' .ci/reports/deployment.log
+    cat > scripts/cd/trigger-deployment.sh <<'EOF'
+#!/usr/bin/env bash
+set -eu
+commit_args=("$@")
+test "${#commit_args[@]}" -eq 1
+test "$1" = '0123456789abcdef0123456789abcdef01234567'
+printf 'deployment output\n'
+printf 'deployment diagnostic\n' >&2
+case "${DEPLOYMENT_MODE:-valid}" in
+    failure) exit 29 ;;
+    no-env) exit 0 ;;
+    valid) printf 'DEPLOYED_COMMIT=%s\nDAST_TARGET_URL=https://dast.example.test/health\n' "$1" > .ci/deployment.env ;;
+esac
+EOF
+    chmod +x scripts/cd/trigger-deployment.sh
+    assert_status 29 'external deployment failure' env DEPLOYMENT_MODE=failure sh jenkins-deployment.sh
+    grep -Fx 'deployment output' .ci/reports/deployment.log
+    grep -Fx 'deployment diagnostic' .ci/reports/deployment.log
+    printf 'stale deployment\n' > .ci/deployment.env
+    assert_status 1 'deployment did not create its environment file' env DEPLOYMENT_MODE=no-env sh jenkins-deployment.sh
+    test ! -e .ci/deployment.env
+    assert_succeeds 'external deployment exact commit handoff' sh jenkins-deployment.sh
+    "$ROOT/scripts/ci/verify-deployment.sh" .ci/deployment.env "$TESTED_COMMIT" > verified-url
+    grep -Fx 'https://dast.example.test/health' verified-url
+)
+printf 'PASS: Jenkins deployment shell propagates failures and enforces fresh exact-commit evidence.\n'
 printf 'PASS: CI runtime skeleton behavior is valid.\n'
