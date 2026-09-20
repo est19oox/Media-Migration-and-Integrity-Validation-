@@ -104,7 +104,13 @@ case "${FAKE_MVN_MODE:-success-two-tests}" in
         ;;
     success-output-mentions-error-attribute)
         mkdir -p target/surefire-reports
-        printf '%s\n' '<testsuite name="unit" tests="1" failures="0" errors="0"><system-out><![CDATA[downstream parser observed errors="1" and failures="2"]]></system-out></testsuite>' > target/surefire-reports/TEST-unit.xml
+        printf '%s\n' \
+            '<testsuite name="unit"' \
+            ' tests="1"' \
+            ' failures="0"' \
+            ' errors="0">' \
+            '<system-out><![CDATA[downstream parser observed errors="1" and failures="2"]]></system-out>' \
+            '</testsuite>' > target/surefire-reports/TEST-unit.xml
         ;;
     failed-test)
         exit 1
