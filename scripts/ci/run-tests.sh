@@ -28,38 +28,44 @@ elif [ -f "$ROOT/pom.xml" ]; then
     if [ -d "$REPORT_DIR" ]; then
         for report in "$REPORT_DIR"/TEST-*.xml; do
             [ -f "$report" ] || continue
-            report_tests=$(awk '
+            report_counts=$(awk '
+                function attribute_value(name, pattern) {
+                    pattern = name "=\"[0-9][0-9]*\""
+                    if (match(suite_tag, pattern)) {
+                        return substr(suite_tag, RSTART + length(name) + 2, RLENGTH - length(name) - 3) + 0
+                    }
+                    return 0
+                }
                 {
-                    line = $0
-                    while (match(line, /tests="[0-9][0-9]*"/)) {
-                        total += substr(line, RSTART + 7, RLENGTH - 8)
-                        line = substr(line, RSTART + RLENGTH)
+                    remaining = $0
+                    if (!capturing) {
+                        if (!match(remaining, /<testsuite[[:space:]>]/)) {
+                            next
+                        }
+                        remaining = substr(remaining, RSTART)
+                        capturing = 1
+                    }
+                    suite_tag = suite_tag remaining " "
+                    tag_end = index(suite_tag, ">")
+                    if (tag_end > 0) {
+                        suite_tag = substr(suite_tag, 1, tag_end)
+                        print attribute_value("tests"), attribute_value("failures"), attribute_value("errors")
+                        found = 1
+                        exit
                     }
                 }
-                END { print total + 0 }
+                END {
+                    if (!found) {
+                        print "0 0 0"
+                    }
+                }
             ' "$report")
+            set -- $report_counts
+            report_tests=${1:-0}
+            report_failures=${2:-0}
+            report_errors=${3:-0}
             total_tests=$((total_tests + report_tests))
-            report_failures=$(awk '
-                {
-                    line = $0
-                    while (match(line, /failures="[0-9][0-9]*"/)) {
-                        total += substr(line, RSTART + 10, RLENGTH - 11)
-                        line = substr(line, RSTART + RLENGTH)
-                    }
-                }
-                END { print total + 0 }
-            ' "$report")
             total_failures=$((total_failures + report_failures))
-            report_errors=$(awk '
-                {
-                    line = $0
-                    while (match(line, /errors="[0-9][0-9]*"/)) {
-                        total += substr(line, RSTART + 8, RLENGTH - 9)
-                        line = substr(line, RSTART + RLENGTH)
-                    }
-                }
-                END { print total + 0 }
-            ' "$report")
             total_errors=$((total_errors + report_errors))
         done
     fi

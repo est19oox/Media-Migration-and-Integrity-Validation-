@@ -102,6 +102,10 @@ case "${FAKE_MVN_MODE:-success-two-tests}" in
         printf '<testsuite name="unit" tests="1"/>\n' > target/surefire-reports/TEST-unit.xml
         printf '<testsuite name="integration" tests="1"/>\n' > target/surefire-reports/TEST-integration.xml
         ;;
+    success-output-mentions-error-attribute)
+        mkdir -p target/surefire-reports
+        printf '%s\n' '<testsuite name="unit" tests="1" failures="0" errors="0"><system-out><![CDATA[downstream parser observed errors="1" and failures="2"]]></system-out></testsuite>' > target/surefire-reports/TEST-unit.xml
+        ;;
     failed-test)
         exit 1
         ;;
@@ -132,6 +136,8 @@ MMIV_MAVEN_LOG="$FIXTURE_ROOT/maven.log"
 export MMIV_MAVEN_LOG
 assert_succeeds "two application tests" env PATH="$FIXTURE_ROOT/bin:$PATH" \
     FAKE_MVN_MODE=success-two-tests "$ROOT/scripts/ci/run-tests.sh" "$FIXTURE_ROOT"
+assert_succeeds "passing Surefire summary despite attribute-like captured output" env PATH="$FIXTURE_ROOT/bin:$PATH" \
+    FAKE_MVN_MODE=success-output-mentions-error-attribute "$ROOT/scripts/ci/run-tests.sh" "$FIXTURE_ROOT"
 assert_fails "Maven test failure" env PATH="$FIXTURE_ROOT/bin:$PATH" \
     FAKE_MVN_MODE=failed-test "$ROOT/scripts/ci/run-tests.sh" "$FIXTURE_ROOT"
 assert_fails "ignored Maven test failure in Surefire XML" env PATH="$FIXTURE_ROOT/bin:$PATH" \
