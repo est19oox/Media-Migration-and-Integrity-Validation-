@@ -92,13 +92,17 @@ Assert-FileContains 'scripts/ci/verify-deployment.sh' @(
 )
 Assert-FileContains 'scripts/ci/run-dast.sh' @(
     'curl --fail --silent --show-error --max-time 10',
-    'ghcr\.io/zaproxy/zaproxy:stable',
+    'ghcr\.io/zaproxy/zaproxy@sha256:781a2bdaea47324e7bab583e2263f21d257b0aee61ed51521a5be45f5f5081ef',
     'zap-baseline\.py',
     '-J zap-report\.json',
     '-r zap-report\.html',
     'zap\.log',
     'tee'
 )
+$dastScript = Get-Content -Raw -LiteralPath (Join-Path $repositoryRoot 'scripts/ci/run-dast.sh')
+if ($dastScript -match 'ghcr\.io/zaproxy/zaproxy:(stable|latest)') {
+    $failures.Add('scripts/ci/run-dast.sh must not use a floating ZAP image tag.')
+}
 
 $deploymentTriggerInterface = 'scripts/cd/trigger-deployment.sh <full-commit-sha>'
 $deploymentTriggerPath = Join-Path $repositoryRoot 'scripts/cd/trigger-deployment.sh'

@@ -2,7 +2,7 @@
 
 ## Scope and prerequisites
 
-This is a reproducible, local development and demonstration Jenkins controller. It is not a production Jenkins deployment. The Jenkins host needs Docker Desktop (or a compatible Linux Docker Engine), Docker Compose, PowerShell 7 or Windows PowerShell 5.1, internet access for the initial image and scanner downloads, and at least 6 GB free memory.
+This is a reproducible, local development and demonstration Jenkins controller. It is not a production Jenkins deployment. The Jenkins host needs Docker Desktop (or a compatible Linux Docker Engine), Docker Compose, internet access for the initial image and scanner downloads, and at least 6 GB free memory. Windows users need PowerShell 7 or Windows PowerShell 5.1; macOS and Linux users need a POSIX-compatible shell.
 
 Confirm that Docker Desktop is ready before starting:
 
@@ -17,6 +17,12 @@ Create the ignored local configuration file from the repository root:
 Copy-Item jenkins/.env.example jenkins/.env
 ```
 
+On macOS and Linux, use:
+
+```sh
+cp jenkins/.env.example jenkins/.env
+```
+
 Set a strong local `JENKINS_ADMIN_PASSWORD`, `GITHUB_USERNAME`, and `GITHUB_TOKEN` in `jenkins/.env`. The GitHub token is a fine-grained, read-only repository token. It must be able to read this private repository, but needs no push, administration, workflow, or pull-request approval permission. Do not commit or share `jenkins/.env`.
 
 ## Start, smoke test, stop, and persistence
@@ -27,6 +33,12 @@ Start and smoke-test the configured controller:
 ./scripts/jenkins-up.ps1
 ```
 
+The equivalent macOS and Linux command is:
+
+```sh
+./scripts/jenkins-up.sh
+```
+
 The helper builds the image, starts Jenkins, and verifies both `http://localhost:8080/login` and the `mmiv-ci` job. Sign in at [http://localhost:8080](http://localhost:8080) with the credentials in `jenkins/.env`.
 
 Stop Jenkins while retaining jobs, credentials, configuration, and build history in the named `mmiv_jenkins_home` Docker volume:
@@ -35,11 +47,15 @@ Stop Jenkins while retaining jobs, credentials, configuration, and build history
 ./scripts/jenkins-down.ps1
 ```
 
+On macOS and Linux, run `./scripts/jenkins-down.sh`.
+
 For a deliberately clean local controller, use the irreversible purge option:
 
 ```powershell
 ./scripts/jenkins-down.ps1 -Purge
 ```
+
+The macOS and Linux purge command is `./scripts/jenkins-down.sh --purge`.
 
 `-Purge` deletes `mmiv_jenkins_home` and its Jenkins configuration and build history. For container state or startup diagnostics, use:
 
@@ -47,6 +63,12 @@ For a deliberately clean local controller, use the irreversible purge option:
 docker compose --env-file jenkins/.env -f jenkins/docker-compose.yml ps
 docker compose --env-file jenkins/.env -f jenkins/docker-compose.yml logs jenkins
 ```
+
+## Reproducibility boundary
+
+The Jenkins-owned runtime is pinned to Jenkins 2.568.3, application Java 25.0.4+7, Trivy 0.74.0, Semgrep 1.138.0, and Checkov 3.2.489. The ZAP container is pinned to the multi-platform digest beginning `sha256:781a2bda`, and all directly requested Jenkins plugin versions are pinned in `jenkins/plugins.txt`. Jenkins and Java base images are also selected by immutable multi-platform digests so Docker can choose the correct `linux/amd64` or `linux/arm64` image on Intel/AMD and Apple Silicon hosts.
+
+Terraform and Maven remain contributor-owned integration tools: this Jenkins work does not choose or change their project version constraints. Their owners must validate compatible versions for the final integrated repository. The POSIX helpers have automated shell-contract coverage on Windows, but real macOS host validation is pending and must be recorded by a teammate using Docker Desktop for Mac before the final demonstration.
 
 ## GitHub multibranch configuration and discovery
 

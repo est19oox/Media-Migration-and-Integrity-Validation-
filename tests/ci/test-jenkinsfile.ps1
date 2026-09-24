@@ -36,6 +36,7 @@ $requiredPatterns = @(
     'BRANCH_NAME',
     'TESTED_COMMIT',
     'scripts/ci/validate-repository\.sh',
+    'tests/ci/test-jenkins-posix-runtime\.sh',
     'scripts/ci/run-tests\.sh',
     'scripts/ci/run-sast\.sh',
     'scripts/ci/run-sca\.sh',
@@ -80,7 +81,7 @@ foreach ($stage in @('Deploy to Test Environment', 'Verify Deployment', 'DAST'))
     }
 }
 $stageContracts = @{
-    'Validate' = @('sh ''\./scripts/ci/validate-repository\.sh \.' )
+    'Validate' = @('sh ''\./scripts/ci/validate-repository\.sh \.' , 'sh ''tests/ci/test-jenkins-posix-runtime\.sh''' )
     'Build and Unit Test' = @('sh ''\./scripts/ci/run-tests\.sh \.' )
     'SAST' = @('sh ''\./scripts/ci/run-sast\.sh \.' )
     'SCA' = @('sh ''\./scripts/ci/run-sca\.sh \.' )

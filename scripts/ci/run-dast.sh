@@ -32,7 +32,7 @@ zap_output=$(mktemp "${TMPDIR:-/tmp}/mmiv-zap.XXXXXX")
 trap 'rm -f "$zap_output"' EXIT HUP INT TERM
 
 if docker run --rm -v "$reports_directory:/zap/wrk" \
-    "${ZAP_IMAGE:-ghcr.io/zaproxy/zaproxy:stable}" \
+    "${ZAP_IMAGE:-ghcr.io/zaproxy/zaproxy@sha256:781a2bdaea47324e7bab583e2263f21d257b0aee61ed51521a5be45f5f5081ef}" \
     zap-baseline.py -t "$target_url" -J zap-report.json -r zap-report.html \
     > "$zap_output" 2>&1; then
     zap_status=0

@@ -22,12 +22,15 @@ $gitignore = Read-RequiredFile '.gitignore'
 $gitattributes = Read-RequiredFile '.gitattributes'
 
 $expectations = @(
-    @{ File = 'jenkins/Dockerfile'; Content = $dockerfile; Pattern = 'FROM jenkins/jenkins:lts-jdk21' },
-    @{ File = 'jenkins/Dockerfile'; Content = $dockerfile; Pattern = 'FROM eclipse-temurin:25-jdk AS application-jdk' },
+    @{ File = 'jenkins/Dockerfile'; Content = $dockerfile; Pattern = 'FROM jenkins/jenkins:2\.568\.3-lts-jdk21@sha256:c1e4c349365f6d16d88595b2c5f7e8ff39b8ae1d061f62420bac193b4b9616d0' },
+    @{ File = 'jenkins/Dockerfile'; Content = $dockerfile; Pattern = 'FROM eclipse-temurin:25\.0\.4_7-jdk@sha256:97014c4b396021f9ddb7d592a7dbedb0c4e4215c29e03dc01c393558aefb71c2 AS application-jdk' },
     @{ File = 'jenkins/Dockerfile'; Content = $dockerfile; Pattern = 'COPY --from=application-jdk /opt/java/openjdk /opt/jdk-25' },
     @{ File = 'jenkins/Dockerfile'; Content = $dockerfile; Pattern = '\bmaven\b' },
-    @{ File = 'jenkins/Dockerfile'; Content = $dockerfile; Pattern = 'jenkins-plugin-cli' },
+    @{ File = 'jenkins/Dockerfile'; Content = $dockerfile; Pattern = 'ARG TRIVY_VERSION=0\.74\.0' },
+    @{ File = 'jenkins/Dockerfile'; Content = $dockerfile; Pattern = 'trivy=\$\{TRIVY_VERSION\}' },
+    @{ File = 'jenkins/Dockerfile'; Content = $dockerfile; Pattern = 'jenkins-plugin-cli --latest=false' },
     @{ File = 'jenkins/Dockerfile'; Content = $dockerfile; Pattern = 'docker-ce-cli' },
+    @{ File = 'jenkins/docker-compose.yml'; Content = (Read-RequiredFile 'jenkins/docker-compose.yml'); Pattern = 'path:\s+\$\{MMIV_JENKINS_ENV_FILE:-\.env\}' },
     @{ File = 'jenkins/plugins.txt'; Content = $plugins; Pattern = 'configuration-as-code' },
     @{ File = 'jenkins/plugins.txt'; Content = $plugins; Pattern = 'workflow-aggregator' },
     @{ File = 'jenkins/plugins.txt'; Content = $plugins; Pattern = 'workflow-multibranch' },
@@ -79,8 +82,31 @@ if ($combined -match '(?im)^\s*(password|secret)\s*[:=]\s*["'']?(?!\$\{)[^"''$<{
 if ($casc -match 'excludeClientIPFromCrumb') {
     $failures.Add('JCasC uses the unsupported DefaultCrumbIssuer attribute excludeClientIPFromCrumb.')
 }
+
+$pluginLines = $plugins -split '\r?\n' | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+foreach ($pluginLine in $pluginLines) {
+    if ($pluginLine -notmatch '^[a-z0-9][a-z0-9-]*:[^\s:]+$') {
+        $failures.Add("jenkins/plugins.txt contains an unpinned plugin entry: $pluginLine")
+    }
+}
+$securityDependencyPins = @(
+    'git-client:6.6.1',
+    'github:1.47.0',
+    'jakarta-mail-api:2.1.5-1',
+    'pipeline-build-step:601.v6d4c6d1a_9dc7',
+    'pipeline-groovy-lib:806.v408277b_33d1d',
+    'script-security:1429.v0810f1b_530f5'
+)
+foreach ($securityDependencyPin in $securityDependencyPins) {
+    if ($pluginLines -notcontains $securityDependencyPin) {
+        $failures.Add("jenkins/plugins.txt is missing the security-reviewed dependency pin: $securityDependencyPin")
+    }
+}
 if ($dockerfile -match '(?m)^ENV\s+JAVA_HOME=/opt/jdk-25') {
     $failures.Add('The Jenkins controller must not use the application JDK 25 as its global JAVA_HOME.')
+}
+if ($dockerfile -match '(?m)^FROM\s+(jenkins/jenkins:lts-jdk21|eclipse-temurin:25-jdk)(\s|$)') {
+    $failures.Add('Jenkins Dockerfile must not use floating base-image tags.')
 }
 if ($casc -match "pipelineJob\('mmiv-pipeline'\)") {
     $failures.Add('JCasC still defines the obsolete local snapshot pipeline job.')

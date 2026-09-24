@@ -33,6 +33,7 @@ pipeline {
                     }
                 }
                 sh './scripts/ci/validate-repository.sh .'
+                sh 'tests/ci/test-jenkins-posix-runtime.sh'
             }
         }
 

@@ -47,6 +47,27 @@ Assert-FileContains 'scripts/jenkins-smoke-test.ps1' @(
     'Start-Sleep',
     'PASS:'
 )
+Assert-FileContains 'scripts/jenkins-up.sh' @(
+    'docker info',
+    'MMIV_JENKINS_ENV_FILE',
+    'replace-with-a-strong-local-password',
+    'compose',
+    '--build',
+    'jenkins-smoke-test\.sh'
+)
+Assert-FileContains 'scripts/jenkins-down.sh' @(
+    '--purge',
+    '--volumes',
+    'compose',
+    'down'
+)
+Assert-FileContains 'scripts/jenkins-smoke-test.sh' @(
+    'MMIV_JENKINS_ENV_FILE',
+    'http://localhost:8080/login',
+    '/job/mmiv-ci/api/json',
+    'curl',
+    'PASS:'
+)
 Assert-FileContains 'docs/jenkins/local-setup.md' @(
     'Docker Desktop',
     'jenkins-up\.ps1',
@@ -74,6 +95,20 @@ Assert-FileContains 'docs/jenkins/local-setup.md' @(
     'contributor-owned',
     'Deployment owner',
     'Docker socket'
+)
+Assert-FileContains 'docs/jenkins/local-setup.md' @(
+    'macOS and Linux',
+    'jenkins-up\.sh',
+    'jenkins-down\.sh --purge',
+    'Jenkins 2\.568\.3',
+    'Java 25\.0\.4\+7',
+    'Trivy 0\.74\.0',
+    'Semgrep 1\.138\.0',
+    'Checkov 3\.2\.489',
+    'ZAP.*sha256:781a2bda',
+    'plugin versions',
+    'Terraform and Maven.*contributor-owned',
+    'macOS.*validation.*pending'
 )
 
 $setupGuide = Get-Content -Raw -LiteralPath (Join-Path $repositoryRoot 'docs/jenkins/local-setup.md')
