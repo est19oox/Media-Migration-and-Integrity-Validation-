@@ -28,4 +28,12 @@ if ! docker compose --env-file "$ENVIRONMENT_FILE" -f "$COMPOSE_FILE" up --detac
 fi
 
 MMIV_JENKINS_ENV_FILE="$ENVIRONMENT_FILE" sh "$SCRIPT_DIRECTORY/jenkins-smoke-test.sh"
-echo 'Jenkins is available at http://localhost:8080'
+PORT_MAPPING=$(docker port mmiv-jenkins 8080/tcp 2>/dev/null | sed -n '1p' || true)
+JENKINS_PORT=${PORT_MAPPING##*:}
+case $JENKINS_PORT in
+    ''|*[!0-9]*)
+        echo 'ERROR: Cannot determine the published Jenkins port from the mmiv-jenkins container.' >&2
+        exit 1
+        ;;
+esac
+echo "Jenkins is available at http://localhost:$JENKINS_PORT"

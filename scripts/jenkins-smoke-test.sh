@@ -5,8 +5,6 @@ SCRIPT_DIRECTORY=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 REPOSITORY_ROOT=$(CDPATH= cd -- "$SCRIPT_DIRECTORY/.." && pwd)
 ENVIRONMENT_FILE=${MMIV_JENKINS_ENV_FILE:-"$REPOSITORY_ROOT/jenkins/.env"}
 TIMEOUT_SECONDS=${1:-180}
-HEALTH_URL=http://localhost:8080/login
-JOB_URL=http://localhost:8080/job/mmiv-ci/api/json
 
 case $TIMEOUT_SECONDS in
     ''|*[!0-9]*)
@@ -23,6 +21,21 @@ if [ ! -f "$ENVIRONMENT_FILE" ]; then
     echo 'ERROR: Create jenkins/.env before running the Jenkins smoke test.' >&2
     exit 1
 fi
+
+PORT_MAPPING=$(docker port mmiv-jenkins 8080/tcp 2>/dev/null | sed -n '1p' || true)
+JENKINS_PORT=${PORT_MAPPING##*:}
+case $JENKINS_PORT in
+    ''|*[!0-9]*)
+        echo 'ERROR: Cannot determine the published Jenkins port from the mmiv-jenkins container.' >&2
+        exit 1
+        ;;
+esac
+if [ "$JENKINS_PORT" -lt 1 ] || [ "$JENKINS_PORT" -gt 65535 ]; then
+    echo 'ERROR: The published Jenkins port is outside the valid TCP port range.' >&2
+    exit 1
+fi
+HEALTH_URL="http://localhost:$JENKINS_PORT/login"
+JOB_URL="http://localhost:$JENKINS_PORT/job/mmiv-ci/api/json"
 
 AUTHORIZATION=$(docker exec mmiv-jenkins sh -c '
     [ -n "$JENKINS_ADMIN_ID" ] && [ -n "$JENKINS_ADMIN_PASSWORD" ] || exit 1

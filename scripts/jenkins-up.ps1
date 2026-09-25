@@ -32,5 +32,9 @@ if ($LASTEXITCODE -ne 0) {
     exit $LASTEXITCODE
 }
 
-Write-Output 'Jenkins is available at http://localhost:8080'
+$portMapping = @(& docker port mmiv-jenkins 8080/tcp 2>$null) | Select-Object -First 1
+if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($portMapping) -or $portMapping -notmatch ':(\d+)$') {
+    throw 'Cannot determine the published Jenkins port from the mmiv-jenkins container.'
+}
+Write-Output "Jenkins is available at http://localhost:$($matches[1])"
 exit 0

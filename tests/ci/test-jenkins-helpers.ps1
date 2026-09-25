@@ -39,7 +39,9 @@ Assert-FileContains 'scripts/jenkins-down.ps1' @(
 )
 Assert-FileContains 'scripts/jenkins-smoke-test.ps1' @(
     'TimeoutSeconds',
-    'http://localhost:8080/login',
+    'docker port',
+    'jenkinsPort',
+    'http://localhost:',
     'jenkins\\\.env',
     '/job/mmiv-ci/api/json',
     'Authorization',
@@ -63,7 +65,9 @@ Assert-FileContains 'scripts/jenkins-down.sh' @(
 )
 Assert-FileContains 'scripts/jenkins-smoke-test.sh' @(
     'MMIV_JENKINS_ENV_FILE',
-    'http://localhost:8080/login',
+    'docker port',
+    'JENKINS_PORT',
+    'http://localhost:',
     '/job/mmiv-ci/api/json',
     'curl',
     'PASS:'
@@ -108,7 +112,9 @@ Assert-FileContains 'docs/jenkins/local-setup.md' @(
     'ZAP.*sha256:781a2bda',
     'plugin versions',
     'Terraform and Maven.*contributor-owned',
-    'macOS.*validation.*pending'
+    'macOS.*validation.*pending',
+    'JENKINS_PORT',
+    'localhost:18080'
 )
 
 $setupGuide = Get-Content -Raw -LiteralPath (Join-Path $repositoryRoot 'docs/jenkins/local-setup.md')

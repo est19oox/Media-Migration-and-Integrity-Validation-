@@ -5,8 +5,6 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$healthUrl = 'http://localhost:8080/login'
-$jobUrl = 'http://localhost:8080/job/mmiv-ci/api/json'
 $repositoryRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $environmentFile = Join-Path $repositoryRoot 'jenkins\.env'
 
@@ -26,6 +24,17 @@ $adminPassword = $settings['JENKINS_ADMIN_PASSWORD']
 if ([string]::IsNullOrWhiteSpace($adminId) -or [string]::IsNullOrWhiteSpace($adminPassword)) {
     throw 'jenkins/.env must define JENKINS_ADMIN_ID and JENKINS_ADMIN_PASSWORD.'
 }
+
+$portMapping = @(& docker port mmiv-jenkins 8080/tcp 2>$null) | Select-Object -First 1
+if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($portMapping) -or $portMapping -notmatch ':(\d+)$') {
+    throw 'Cannot determine the published Jenkins port from the mmiv-jenkins container.'
+}
+$jenkinsPort = [int] $matches[1]
+if ($jenkinsPort -lt 1 -or $jenkinsPort -gt 65535) {
+    throw 'The published Jenkins port is outside the valid TCP port range.'
+}
+$healthUrl = "http://localhost:$jenkinsPort/login"
+$jobUrl = "http://localhost:$jenkinsPort/job/mmiv-ci/api/json"
 
 $credentialBytes = [Text.Encoding]::UTF8.GetBytes("${adminId}:${adminPassword}")
 $headers = @{

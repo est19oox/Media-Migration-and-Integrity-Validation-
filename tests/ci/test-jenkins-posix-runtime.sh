@@ -30,6 +30,8 @@ cat > "$FAKE_BIN/docker" <<'EOF'
 printf '%s\n' "$*" >> "$MMIV_TEST_DOCKER_LOG"
 if [ "${1-}" = exec ] && [ "${2-}" = mmiv-jenkins ] && [ "${3-}" = sh ]; then
     printf '%s\n' "$MMIV_TEST_AUTHORIZATION"
+elif [ "${1-}" = port ] && [ "${2-}" = mmiv-jenkins ] && [ "${3-}" = 8080/tcp ]; then
+    printf '127.0.0.1:%s\n' "$MMIV_TEST_JENKINS_PORT"
 fi
 exit "${MMIV_TEST_DOCKER_EXIT:-0}"
 EOF
@@ -77,6 +79,7 @@ export MMIV_TEST_DATE_STATE="$DATE_STATE"
 export MMIV_TEST_ADMIN_ID='local-admin'
 export MMIV_TEST_ADMIN_PASSWORD='complex #$"quote'
 export MMIV_TEST_AUTHORIZATION=$(printf '%s' "$MMIV_TEST_ADMIN_ID:$MMIV_TEST_ADMIN_PASSWORD" | base64 | tr -d '\r\n')
+export MMIV_TEST_JENKINS_PORT=18080
 export MMIV_TEST_REAL_DATE="$REAL_DATE"
 export MMIV_TEST_REAL_SLEEP="$REAL_SLEEP"
 export MMIV_JENKINS_ENV_FILE="$ENV_FILE"
@@ -84,8 +87,8 @@ export MMIV_JENKINS_ENV_FILE="$ENV_FILE"
 sh "$UP_SCRIPT" >/dev/null
 grep -F -- "info" "$DOCKER_LOG" >/dev/null
 grep -F -- "compose --env-file $ENV_FILE -f $REPOSITORY_ROOT/jenkins/docker-compose.yml up --detach --build" "$DOCKER_LOG" >/dev/null
-grep -F -- "http://localhost:8080/login" "$CURL_LOG" >/dev/null
-grep -F -- "http://localhost:8080/job/mmiv-ci/api/json" "$CURL_LOG" >/dev/null
+grep -F -- "http://localhost:18080/login" "$CURL_LOG" >/dev/null
+grep -F -- "http://localhost:18080/job/mmiv-ci/api/json" "$CURL_LOG" >/dev/null
 expected_authorization=$(printf '%s' "$MMIV_TEST_ADMIN_ID:$MMIV_TEST_ADMIN_PASSWORD" | base64 | tr -d '\r\n')
 grep -F -- "Authorization: Basic $expected_authorization" "$CURL_CONFIG_LOG" >/dev/null
 if grep -F -- "$MMIV_TEST_ADMIN_PASSWORD" "$CURL_LOG" "$DOCKER_LOG" >/dev/null; then

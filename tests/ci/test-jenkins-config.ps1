@@ -31,13 +31,16 @@ $expectations = @(
     @{ File = 'jenkins/Dockerfile'; Content = $dockerfile; Pattern = 'jenkins-plugin-cli --latest=false' },
     @{ File = 'jenkins/Dockerfile'; Content = $dockerfile; Pattern = 'docker-ce-cli' },
     @{ File = 'jenkins/docker-compose.yml'; Content = (Read-RequiredFile 'jenkins/docker-compose.yml'); Pattern = 'path:\s+\$\{MMIV_JENKINS_ENV_FILE:-\.env\}' },
+    @{ File = 'jenkins/docker-compose.yml'; Content = $compose; Pattern = '127\.0\.0\.1:\$\{JENKINS_PORT:-18080\}:8080' },
+    @{ File = 'jenkins/docker-compose.yml'; Content = $compose; Pattern = 'JENKINS_EXTERNAL_URL:\s+http://localhost:\$\{JENKINS_PORT:-18080\}/' },
+    @{ File = 'jenkins/casc.yaml'; Content = $casc; Pattern = 'url:\s+"?\$\{JENKINS_EXTERNAL_URL\}"?' },
+    @{ File = 'jenkins/.env.example'; Content = $exampleEnvironment; Pattern = '(?m)^JENKINS_PORT=18080$' },
     @{ File = 'jenkins/plugins.txt'; Content = $plugins; Pattern = 'configuration-as-code' },
     @{ File = 'jenkins/plugins.txt'; Content = $plugins; Pattern = 'workflow-aggregator' },
     @{ File = 'jenkins/plugins.txt'; Content = $plugins; Pattern = 'workflow-multibranch' },
     @{ File = 'jenkins/plugins.txt'; Content = $plugins; Pattern = 'github-branch-source' },
     @{ File = 'jenkins/plugins.txt'; Content = $plugins; Pattern = 'job-dsl' },
     @{ File = 'jenkins/plugins.txt'; Content = $plugins; Pattern = 'timestamper' },
-    @{ File = 'jenkins/docker-compose.yml'; Content = $compose; Pattern = '127\.0\.0\.1:8080:8080' },
     @{ File = 'jenkins/docker-compose.yml'; Content = $compose; Pattern = '/var/run/docker\.sock:/var/run/docker\.sock' },
     @{ File = 'jenkins/docker-compose.yml'; Content = $compose; Pattern = 'healthcheck:' },
     @{ File = 'jenkins/docker-compose.yml'; Content = $compose; Pattern = 'jenkins_home:' },
@@ -104,6 +107,9 @@ foreach ($securityDependencyPin in $securityDependencyPins) {
 }
 if ($dockerfile -match '(?m)^ENV\s+JAVA_HOME=/opt/jdk-25') {
     $failures.Add('The Jenkins controller must not use the application JDK 25 as its global JAVA_HOME.')
+}
+if ($compose -match '127\.0\.0\.1:8080:8080') {
+    $failures.Add('Docker Compose must not expose Jenkins on the commonly occupied host port 8080.')
 }
 if ($dockerfile -match '(?m)^FROM\s+(jenkins/jenkins:lts-jdk21|eclipse-temurin:25-jdk)(\s|$)') {
     $failures.Add('Jenkins Dockerfile must not use floating base-image tags.')

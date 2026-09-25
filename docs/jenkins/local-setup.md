@@ -23,7 +23,7 @@ On macOS and Linux, use:
 cp jenkins/.env.example jenkins/.env
 ```
 
-Set a strong local `JENKINS_ADMIN_PASSWORD`, `GITHUB_USERNAME`, and `GITHUB_TOKEN` in `jenkins/.env`. The GitHub token is a fine-grained, read-only repository token. It must be able to read this private repository, but needs no push, administration, workflow, or pull-request approval permission. Do not commit or share `jenkins/.env`.
+Set a strong local `JENKINS_ADMIN_PASSWORD`, `GITHUB_USERNAME`, and `GITHUB_TOKEN` in `jenkins/.env`. The default `JENKINS_PORT=18080` avoids the commonly occupied host port 8080; change it to another unused local port if needed. The GitHub token is a fine-grained, read-only repository token. It must be able to read this private repository, but needs no push, administration, workflow, or pull-request approval permission. Do not commit or share `jenkins/.env`.
 
 ## Start, smoke test, stop, and persistence
 
@@ -39,7 +39,7 @@ The equivalent macOS and Linux command is:
 ./scripts/jenkins-up.sh
 ```
 
-The helper builds the image, starts Jenkins, and verifies both `http://localhost:8080/login` and the `mmiv-ci` job. Sign in at [http://localhost:8080](http://localhost:8080) with the credentials in `jenkins/.env`.
+The helper builds the image, starts Jenkins, detects the configured published port, and verifies both `http://localhost:18080/login` and the `mmiv-ci` job. With the default `JENKINS_PORT`, sign in at [http://localhost:18080](http://localhost:18080) using the credentials in `jenkins/.env`.
 
 Stop Jenkins while retaining jobs, credentials, configuration, and build history in the named `mmiv_jenkins_home` Docker volume:
 

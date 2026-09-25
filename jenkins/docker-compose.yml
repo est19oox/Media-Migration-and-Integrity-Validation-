@@ -14,11 +14,13 @@ services:
       CASC_JENKINS_CONFIG: /usr/share/jenkins/ref/casc.yaml
       JENKINS_ADMIN_ID: ${JENKINS_ADMIN_ID:-admin}
       JENKINS_ADMIN_PASSWORD: ${JENKINS_ADMIN_PASSWORD:?Create jenkins/.env from jenkins/.env.example}
+      JENKINS_PORT: ${JENKINS_PORT:-18080}
+      JENKINS_EXTERNAL_URL: http://localhost:${JENKINS_PORT:-18080}/
       GITHUB_USERNAME: ${GITHUB_USERNAME:?Set your GitHub username in jenkins/.env}
       GITHUB_TOKEN: ${GITHUB_TOKEN:?Set a read-only GitHub token in jenkins/.env}
       GITHUB_REPOSITORY_URL: ${GITHUB_REPOSITORY_URL:-https://github.com/est19oox/Media-Migration-and-Integrity-Validation-.git}
     ports:
-      - "127.0.0.1:8080:8080"
+      - "127.0.0.1:${JENKINS_PORT:-18080}:8080"
     volumes:
       - jenkins_home:/var/jenkins_home
       - /var/run/docker.sock:/var/run/docker.sock

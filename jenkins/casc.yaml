@@ -27,7 +27,7 @@ credentials:
 
 unclassified:
   location:
-    url: "http://localhost:8080/"
+    url: "${JENKINS_EXTERNAL_URL}"
 
 jobs:
   - script: >
