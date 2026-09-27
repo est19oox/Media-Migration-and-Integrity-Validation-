@@ -1,0 +1,71 @@
+jenkins:
+  systemMessage: "MMIV local Jenkins managed by configuration as code."
+  numExecutors: 2
+  mode: NORMAL
+  securityRealm:
+    local:
+      allowsSignup: false
+      users:
+        - id: "${JENKINS_ADMIN_ID}"
+          password: "${JENKINS_ADMIN_PASSWORD}"
+  authorizationStrategy:
+    loggedInUsersCanDoAnything:
+      allowAnonymousRead: false
+  crumbIssuer:
+    standard: {}
+
+credentials:
+  system:
+    domainCredentials:
+      - credentials:
+          - usernamePassword:
+              scope: GLOBAL
+              id: "github-pat"
+              description: "GitHub access for the private MMIV repository"
+              username: "${GITHUB_USERNAME}"
+              password: "${GITHUB_TOKEN}"
+
+unclassified:
+  location:
+    url: "${JENKINS_EXTERNAL_URL}"
+
+jobs:
+  - script: >
+      multibranchPipelineJob('mmiv-ci') {
+        description('MMIV GitHub branch CI: build, test, and security validation')
+        branchSources {
+          branchSource {
+            source {
+              github {
+                id('mmiv-github-branches')
+                apiUri('https://api.github.com')
+                credentialsId('github-pat')
+                repoOwner('est19oox')
+                repository('Media-Migration-and-Integrity-Validation-')
+                repositoryUrl('${GITHUB_REPOSITORY_URL}')
+                configuredByUrl(true)
+                traits {
+                  gitHubBranchDiscovery {
+                    strategyId(3)
+                  }
+                }
+              }
+            }
+          }
+        }
+        orphanedItemStrategy {
+          discardOldItems {
+            numToKeep(10)
+          }
+        }
+        triggers {
+          periodicFolderTrigger {
+            interval('2m')
+          }
+        }
+        factory {
+          workflowBranchProjectFactory {
+            scriptPath('Jenkinsfile')
+          }
+        }
+      }

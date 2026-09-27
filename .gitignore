@@ -23,3 +23,10 @@ target/
 # =========================
 .DS_Store
 Thumbs.db
+.ci/
+jenkins/.env
+jenkins_home/
+**/.terraform/
+*.tfstate
+*.tfstate.*
+crash.log
