@@ -47,6 +47,10 @@ module "s3" {
 # IAM
 # ============================================================
 
+data "aws_ecr_repository" "mmiv" {
+  name = "mmiv"
+}
+
 module "iam" {
   source = "../../modules/iam"
 
@@ -54,4 +58,6 @@ module "iam" {
 
   bucket_arn  = module.s3.bucket_arn
   environment = "dev"
+
+  ecr_repository_arn = data.aws_ecr_repository.mmiv.arn
 }
