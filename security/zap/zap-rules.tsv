@@ -1,5 +1,29 @@
 # OWASP ZAP baseline scan rule overrides
 #
-# Sprint integration configuration.
-# Add project-specific rule overrides only after reviewing
-# findings from the deployed test environment.
+# STATUS
+#   No project-specific rule overrides are currently configured.
+#
+#   This file is NOT currently consumed by scripts/ci/run-dast.sh. There is no
+#   `-c` argument in the ZAP invocation, so nothing in this file affects scan
+#   results today. It is a documented placeholder only.
+#
+#   Adding approved overrides and wiring `-c` into the ZAP invocation is future
+#   work. Both belong in the same change, so the file cannot silently claim an
+#   effect it does not have.
+#
+# WHY IT IS EMPTY
+#   Suppressing an alert or downgrading its severity is a security decision that
+#   needs review, not a build fix. No suppressions have been reviewed or
+#   approved for this project, and none should be added to make a scan pass.
+#
+# FORMAT, once approved overrides exist
+#   <rule-id>\t<action>\t[<parameter>\t<value>]\t# <reason>
+#
+#    10038\tIGNORE\t\t# Reviewed YYYY-MM-DD: not applicable to this deployment.
+#    10063\tWARN\t\t# Downgraded pending server-header configuration.
+#
+#   Actions: IGNORE (never report), WARN (report but do not fail), FAIL.
+#
+# BEFORE ADDING A RULE
+#   Confirm the finding against the deployed test environment, and record the
+#   reason and date inline above the rule.
