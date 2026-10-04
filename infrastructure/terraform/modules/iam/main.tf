@@ -1,32 +1,91 @@
-resource "aws_iam_user" "developers" {
-  for_each = var.developers
+locals {
+  csv_users_raw = csvdecode(file(var.csv_file))
 
-  name = each.value
+  csv_users = {
+    for user in local.csv_users_raw :
+    user.username => user
+  }
 
-  tags = {
-    Project     = "Media-Migration"
-    Environment = "dev"
-    Role        = "Developer"
+  permission_actions = {
+    "s3-read" = [
+      "s3:GetObject"
+    ]
+
+    "s3-read-write" = [
+      "s3:GetObject",
+      "s3:PutObject",
+      "s3:DeleteObject"
+    ]
+
+    "s3-admin" = [
+      "s3:GetObject",
+      "s3:PutObject",
+      "s3:DeleteObject",
+      "s3:GetObjectVersion",
+      "s3:DeleteObjectVersion"
+    ]
   }
 }
 
-resource "aws_iam_group" "developers" {
-  name = "media-migration-developers"
+
+# ============================================================
+# CSV-MANAGED IAM USERS
+# ============================================================
+
+resource "aws_iam_user" "users" {
+  for_each = local.csv_users
+
+  name = each.value.username
+
+  tags = {
+    Name        = each.value.name
+    Role        = each.value.role
+    Permission  = each.value.permission
+    Project     = "Media-Migration"
+    Environment = var.environment
+    ManagedBy   = "Terraform-CSV"
+  }
 }
 
-resource "aws_iam_user_group_membership" "developers" {
-  for_each = aws_iam_user.developers
 
-  user = each.value.name
+# ============================================================
+# PERMISSION GROUPS
+# ============================================================
+
+resource "aws_iam_group" "permission_groups" {
+  for_each = local.permission_actions
+
+  name = "media-migration-${var.environment}-${each.key}"
+}
+
+
+# ============================================================
+# USER -> GROUP
+# ============================================================
+
+resource "aws_iam_user_group_membership" "users" {
+  for_each = local.csv_users
+
+  user = aws_iam_user.users[each.key].name
 
   groups = [
-    aws_iam_group.developers.name
+    aws_iam_group.permission_groups[
+      each.value.permission
+    ].name
   ]
 }
 
-resource "aws_iam_policy" "s3_access" {
-  name        = "media-migration-dev-s3-access"
-  description = "Allows developers to access the Media Migration dev S3 bucket"
+
+# ============================================================
+# S3 PERMISSION POLICIES
+# ============================================================
+
+resource "aws_iam_policy" "s3_permissions" {
+  for_each = local.permission_actions
+
+  name = "media-migration-${var.environment}-${each.key}"
+
+  description = "Media Migration ${each.key} access to the ${var.environment} S3 bucket"
 
   policy = jsonencode({
     Version = "2012-10-17"
@@ -36,27 +95,79 @@ resource "aws_iam_policy" "s3_access" {
         Effect = "Allow"
 
         Action = [
-          "s3:ListBucket"
+          "s3:ListAllMyBuckets"
         ]
 
-        Resource = var.bucket_arn
+        Resource = "*"
       },
+
       {
         Effect = "Allow"
 
         Action = [
-          "s3:GetObject",
-          "s3:PutObject",
-          "s3:DeleteObject"
+          "s3:ListBucket",
+          "s3:GetBucketLocation"
         ]
 
+        Resource = var.bucket_arn
+      },
+
+      {
+        Effect   = "Allow"
+        Action   = each.value
         Resource = "${var.bucket_arn}/*"
       }
     ]
   })
 }
 
-resource "aws_iam_group_policy_attachment" "s3_access" {
-  group      = aws_iam_group.developers.name
-  policy_arn = aws_iam_policy.s3_access.arn
+
+# ============================================================
+# POLICY -> GROUP
+# ============================================================
+
+resource "aws_iam_group_policy_attachment" "s3_permissions" {
+  for_each = local.permission_actions
+
+  group = aws_iam_group.permission_groups[each.key].name
+
+  policy_arn = aws_iam_policy.s3_permissions[
+    each.key
+  ].arn
+}
+
+# ============================================================
+# ECR READ POLICY
+# ============================================================
+
+resource "aws_iam_policy" "ecr_read" {
+  name        = "media-migration-${var.environment}-ecr-read"
+  description = "Allows MMIV developers to pull container images from ECR"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+
+    Statement = [
+      {
+        Effect = "Allow"
+
+        Action = [
+          "ecr:GetAuthorizationToken"
+        ]
+
+        Resource = "*"
+      },
+      {
+        Effect = "Allow"
+
+        Action = [
+          "ecr:BatchCheckLayerAvailability",
+          "ecr:GetDownloadUrlForLayer",
+          "ecr:BatchGetImage"
+        ]
+
+        Resource = var.ecr_repository_arn
+      }
+    ]
+  })
 }
