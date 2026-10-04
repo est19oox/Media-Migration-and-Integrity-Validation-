@@ -123,7 +123,7 @@ resource "aws_iam_policy" "s3_permissions" {
 
 
 # ============================================================
-# POLICY -> GROUP
+# S3 POLICY -> GROUP
 # ============================================================
 
 resource "aws_iam_group_policy_attachment" "s3_permissions" {
@@ -135,6 +135,7 @@ resource "aws_iam_group_policy_attachment" "s3_permissions" {
     each.key
   ].arn
 }
+
 
 # ============================================================
 # ECR READ POLICY
@@ -157,6 +158,7 @@ resource "aws_iam_policy" "ecr_read" {
 
         Resource = "*"
       },
+
       {
         Effect = "Allow"
 
@@ -170,4 +172,49 @@ resource "aws_iam_policy" "ecr_read" {
       }
     ]
   })
+}
+
+
+# ============================================================
+# ECR READ POLICY -> S3-READ GROUP
+# ============================================================
+
+resource "aws_iam_group_policy_attachment" "ecr_read" {
+  group      = aws_iam_group.permission_groups["s3-read"].name
+  policy_arn = aws_iam_policy.ecr_read.arn
+}
+
+
+# ============================================================
+# ZHAO YOUBO - PROJECT ADMIN ACCESS
+# ============================================================
+
+# Full access to Amazon ECR.
+resource "aws_iam_user_policy_attachment" "zhao_ecr_full_access" {
+  user       = aws_iam_user.users["mm-dev-zhao-youbo"].name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryFullAccess"
+}
+
+# Full access to Amazon EC2.
+resource "aws_iam_user_policy_attachment" "zhao_ec2_full_access" {
+  user       = aws_iam_user.users["mm-dev-zhao-youbo"].name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonEC2FullAccess"
+}
+
+# Full access to IAM.
+resource "aws_iam_user_policy_attachment" "zhao_iam_full_access" {
+  user       = aws_iam_user.users["mm-dev-zhao-youbo"].name
+  policy_arn = "arn:aws:iam::aws:policy/IAMFullAccess"
+}
+
+# Full access to Amazon VPC.
+resource "aws_iam_user_policy_attachment" "zhao_vpc_full_access" {
+  user       = aws_iam_user.users["mm-dev-zhao-youbo"].name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonVPCFullAccess"
+}
+
+# Full access to Amazon S3.
+resource "aws_iam_user_policy_attachment" "zhao_s3_full_access" {
+  user       = aws_iam_user.users["mm-dev-zhao-youbo"].name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonS3FullAccess"
 }
