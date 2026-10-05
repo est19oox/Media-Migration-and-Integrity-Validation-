@@ -1,0 +1,6 @@
+username,name,role,permission
+mm-dev-wang-shengxi,Wang Shengxi,Product Owner / Scrum Lead,s3-read-write
+mm-dev-phang-zi-kai,Phang Zi Kai,Solution Architect,s3-admin
+mm-dev-wang-yutong,Wang Yutong,Backend / Migration Developer,s3-read-write
+mm-dev-huang-haihong,Huang Haihong,Full Stack Developer,s3-read-write
+mm-dev-zhao-youbo,Zhao Youbo,QA / Security Engineer,s3-read

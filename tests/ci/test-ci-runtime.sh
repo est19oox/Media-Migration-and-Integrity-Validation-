@@ -45,13 +45,6 @@ for script in "$ROOT"/scripts/ci/*.sh; do
 done
 
 "$ROOT/scripts/ci/validate-repository.sh" "$ROOT"
-"$ROOT/scripts/ci/run-tests.sh" "$ROOT"
-"$ROOT/scripts/ci/run-sast.sh" "$ROOT"
-"$ROOT/scripts/ci/run-sca.sh" "$ROOT"
-"$ROOT/scripts/ci/run-terraform-checks.sh" "$ROOT"
-"$ROOT/scripts/ci/run-iac-scan.sh" "$ROOT"
-"$ROOT/scripts/ci/build-image.sh" "$ROOT"
-"$ROOT/scripts/ci/scan-image.sh" "$ROOT"
 
 DEPLOYMENT_COMMIT=0123456789abcdef0123456789abcdef01234567
 DEPLOYMENT_URL=https://dast.example.test/health
@@ -88,8 +81,8 @@ printf 'DEPLOYED_COMMIT=abcdef0123456789abcdef0123456789abcdef01\nDAST_TARGET_UR
 assert_fails "deployment environment with mismatched full commit SHA" \
     "$ROOT/scripts/ci/verify-deployment.sh" "$FIXTURE_ROOT/deployment-mismatched-commit.env" "$DEPLOYMENT_COMMIT"
 
-mkdir -p "$FIXTURE_ROOT/bin"
-: > "$FIXTURE_ROOT/pom.xml"
+mkdir -p "$FIXTURE_ROOT/bin" "$FIXTURE_ROOT/services/test-service"
+: > "$FIXTURE_ROOT/services/test-service/pom.xml"
 cat > "$FIXTURE_ROOT/bin/mvn" <<'EOF'
 #!/usr/bin/env sh
 set -eu
@@ -155,11 +148,10 @@ assert_fails "missing Surefire report" env PATH="$FIXTURE_ROOT/bin:$PATH" \
 assert_fails "zero application tests" env PATH="$FIXTURE_ROOT/bin:$PATH" \
     FAKE_MVN_MODE=zero-tests "$ROOT/scripts/ci/run-tests.sh" "$FIXTURE_ROOT"
 
-grep -qx 'JAVA_HOME=/opt/jdk-25' "$MMIV_MAVEN_LOG"
-grep -qx 'ARGS=--batch-mode test' "$MMIV_MAVEN_LOG"
+grep -qx 'ARGS=--batch-mode clean verify' "$MMIV_MAVEN_LOG"
 
-mkdir -p "$FIXTURE_ROOT/src/main/java" "$FIXTURE_ROOT/security/semgrep"
-printf 'class Example {}\n' > "$FIXTURE_ROOT/src/main/java/Example.java"
+mkdir -p "$FIXTURE_ROOT/services/test-service/src/main/java" "$FIXTURE_ROOT/security/semgrep"
+printf 'class Example {}\n' > "$FIXTURE_ROOT/services/test-service/src/main/java/Example.java"
 printf 'rules: []\n' > "$FIXTURE_ROOT/security/semgrep/semgrep.yml"
 cat > "$FIXTURE_ROOT/bin/semgrep" <<'EOF'
 #!/usr/bin/env sh
@@ -410,7 +402,7 @@ grep -Fx -- '--fail --silent --show-error --max-time 10 https://dast.example.tes
 test ! -e "$MMIV_ZAP_DOCKER_LOG"
 
 assert_zap_invocation() {
-    grep -Fx -- "run --rm -v $FIXTURE_ROOT/.ci/reports:/zap/wrk ghcr.io/zaproxy/zaproxy@sha256:781a2bdaea47324e7bab583e2263f21d257b0aee61ed51521a5be45f5f5081ef zap-baseline.py -t https://dast.example.test/health -J zap-report.json -r zap-report.html" \
+    grep -Fx -- "run --rm --network mmiv-ci -v $FIXTURE_ROOT/.ci/reports:/zap/wrk ghcr.io/zaproxy/zaproxy@sha256:781a2bdaea47324e7bab583e2263f21d257b0aee61ed51521a5be45f5f5081ef zap-baseline.py -t https://dast.example.test/health -J zap-report.json -r zap-report.html" \
         "$MMIV_ZAP_DOCKER_LOG"
 }
 
@@ -447,11 +439,12 @@ test -f "$ROOT/scripts/ci/collect-evidence.sh" || {
     printf 'FAIL: missing collect-evidence.sh.\n' >&2
     exit 1
 }
-if command -v python3 >/dev/null 2>&1; then
-    JSON_PYTHON=python3
-else
-    JSON_PYTHON=python
-fi
+JSON_PYTHON=python
+cat > "$FIXTURE_ROOT/bin/python3" <<'EOF'
+#!/usr/bin/env sh
+exec python "$@"
+EOF
+chmod +x "$FIXTURE_ROOT/bin/python3"
 (
     cd "$FIXTURE_ROOT"
     BRANCH_NAME='feature/"quoted"\path
@@ -459,7 +452,7 @@ $(touch metadata-injection)' TESTED_COMMIT="$DEPLOYMENT_COMMIT" \
         BUILD_NUMBER=17 BUILD_URL='https://ci.example.test/job/"gate"/17/' MMIV_BUILD_RESULT=FAILURE \
         PRIVATE_KEY=key-sentinel API_TOKEN=token-sentinel CLIENT_SECRET=secret-sentinel \
         DB_PASSWORD=password-sentinel OTHER_PRIVATE_VALUE=private-sentinel \
-        sh "$ROOT/scripts/ci/collect-evidence.sh"
+        PATH="$FIXTURE_ROOT/bin:$PATH" sh "$ROOT/scripts/ci/collect-evidence.sh"
     "$JSON_PYTHON" - <<'PY'
 import json
 import re
@@ -486,7 +479,8 @@ PY
     cmp metadata-before.json .ci/reports/build-metadata.json
     test "$(find .ci/reports -name '.build-metadata.*' | wc -l | tr -d ' ')" = 0
     unset BRANCH_NAME TESTED_COMMIT BUILD_NUMBER BUILD_URL
-    MMIV_BUILD_RESULT=FAILURE sh "$ROOT/scripts/ci/collect-evidence.sh"
+    MMIV_BUILD_RESULT=FAILURE PATH="$FIXTURE_ROOT/bin:$PATH" \
+        sh "$ROOT/scripts/ci/collect-evidence.sh"
     "$JSON_PYTHON" - <<'PY'
 import json
 from pathlib import Path

@@ -1,0 +1,21 @@
+server:
+  port: ${SERVER_PORT:8081}
+
+aws:
+  region: ${AWS_REGION:ap-southeast-1}
+
+mmiv:
+  media:
+    root: ${MMIV_MEDIA_ROOT:/media}
+  s3:
+    bucket: ${MMIV_BUCKET_NAME:media-migration-dev-landing}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      probes:
+        enabled: true

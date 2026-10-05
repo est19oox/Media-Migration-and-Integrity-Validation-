@@ -7,7 +7,10 @@ SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 ROOT=$(find_repository_root "${1:-.}")
 # Emits SKIPPED: when no supported dependency manifest exists.
 
-if [ ! -f "$ROOT/pyproject.toml" ] && [ ! -f "$ROOT/requirements.txt" ] && [ ! -f "$ROOT/package.json" ] && [ ! -f "$ROOT/pom.xml" ]; then
+if [ ! -f "$ROOT/pyproject.toml" ] \
+    && [ ! -f "$ROOT/requirements.txt" ] \
+    && [ ! -f "$ROOT/package.json" ] \
+    && ! find "$ROOT/services" -mindepth 2 -maxdepth 2 -name pom.xml -print -quit 2>/dev/null | grep -q .; then
     skip 'No supported dependency manifest; SCA is not active yet.'
     exit 0
 fi

@@ -6,7 +6,7 @@ SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 
 ROOT=$(find_repository_root "${1:-.}")
 
-for required_path in README.md src tests scripts infrastructure; do
+for required_path in README.md services tests scripts infrastructure; do
     if [ ! -e "$ROOT/$required_path" ]; then
         fail "Required repository path is missing: $required_path"
         exit 1

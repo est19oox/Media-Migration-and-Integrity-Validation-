@@ -14,6 +14,8 @@ import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 class AccessServiceTest {
 
@@ -27,7 +29,10 @@ class AccessServiceTest {
                                 "mmiv-bucket-a",
                                 Permission.READ_WRITE)));
 
-        UserRepository userRepository = userId -> Optional.of(alice);
+        UserRepository userRepository = mock(UserRepository.class);
+
+        when(userRepository.findById("U001"))
+                .thenReturn(Optional.of(alice));
 
         AccessService accessService = new AccessService(userRepository);
 
@@ -51,7 +56,10 @@ class AccessServiceTest {
                                 "mmiv-bucket-a",
                                 Permission.READ)));
 
-        UserRepository userRepository = userId -> Optional.of(bob);
+        UserRepository userRepository = mock(UserRepository.class);
+
+        when(userRepository.findById("U002"))
+                .thenReturn(Optional.of(bob));
 
         AccessService accessService = new AccessService(userRepository);
 
