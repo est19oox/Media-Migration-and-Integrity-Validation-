@@ -1,14 +1,52 @@
-services:
-  oracle:
-    image: container-registry.oracle.com/database/free:latest
-    container_name: media-migration-oracle
-    ports:
-      - "1521:1521"
-    environment:
-      ORACLE_PWD: ${ORACLE_PWD:?Set ORACLE_PWD before starting the database}
-    volumes:
-      - media-migration-oracle-data:/opt/oracle/oradata
-    restart: unless-stopped
+$ErrorActionPreference = "Stop"
 
-volumes:
-  media-migration-oracle-data:
+Write-Host "========================================"
+Write-Host " Media Migration - Oracle Setup"
+Write-Host "========================================"
+
+if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
+    Write-Error "Docker is not installed."
+    exit 1
+}
+
+docker info *> $null
+
+if ($LASTEXITCODE -ne 0) {
+    Write-Error "Docker Desktop is not running."
+    exit 1
+}
+
+Write-Host "Docker is running."
+
+$OraclePassword = Read-Host "Enter Oracle development password"
+
+$env:ORACLE_PWD = $OraclePassword
+
+Write-Host ""
+Write-Host "Starting Oracle..."
+
+docker compose up -d
+
+if ($LASTEXITCODE -ne 0) {
+    Write-Error "Failed to start Oracle."
+    exit 1
+}
+
+Write-Host ""
+Write-Host "========================================"
+Write-Host " Oracle Setup Complete"
+Write-Host "========================================"
+
+docker compose ps
+
+Write-Host ""
+Write-Host "Connection Details:"
+Write-Host "Host         : localhost"
+Write-Host "Port         : 1521"
+Write-Host "Service Name : FREEPDB1"
+Write-Host ""
+Write-Host "Stop:"
+Write-Host "docker compose down"
+Write-Host ""
+Write-Host "Start again:"
+Write-Host "docker compose up -d"
