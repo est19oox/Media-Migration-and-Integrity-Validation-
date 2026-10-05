@@ -88,18 +88,13 @@ validate_surefire_reports() {
 
 run_service() {
     pom=$1
-    legacy_compatibility=$2
     service_dir=$(dirname "$pom")
 
     printf 'Testing Maven service: %s\n' "$service_dir"
 
     (
         cd "$service_dir"
-        if [ "$legacy_compatibility" = true ]; then
-            mvn --batch-mode test
-        else
-            mvn --batch-mode clean verify
-        fi
+        mvn --batch-mode clean verify
     )
     validate_surefire_reports "$service_dir"
 }
@@ -108,16 +103,12 @@ for pom in "$ROOT"/services/*/pom.xml; do
     [ -f "$pom" ] || continue
 
     found_service=true
-    run_service "$pom" false
+    run_service "$pom"
 done
 
 if [ "$found_service" = false ]; then
-    if [ -f "$ROOT/pom.xml" ]; then
-        run_service "$ROOT/pom.xml" true
-    else
-        skip 'No Maven microservices found.'
-        exit 0
-    fi
+    skip 'No Maven microservices found.'
+    exit 0
 fi
 
 pass 'Application unit tests passed.'

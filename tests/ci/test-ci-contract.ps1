@@ -49,17 +49,39 @@ $conditionalScripts = @(
 )
 
 foreach ($script in $conditionalScripts) {
+    if ($script -eq 'scripts/ci/run-tests.sh') {
+        continue
+    }
     Assert-FileContains $script @('SKIPPED:', 'require_command')
 }
 
-Assert-FileContains 'scripts/ci/run-tests.sh' @('pyproject\.toml', 'package\.json', 'pom\.xml')
 Assert-FileContains 'scripts/ci/run-tests.sh' @(
     '(?m)^\s*JAVA_HOME=/opt/jdk-25\r?$',
+    '"\$ROOT"/services/\*/pom\.xml',
+    'service_dir=\$\(dirname "\$pom"\)',
     'mvn --batch-mode clean verify',
-    'surefire-reports',
+    'validate_surefire_reports',
+    'Missing Surefire report directory',
+    'report_dir="\$service_dir/target/surefire-reports"',
     'TEST-\*\.xml',
-    'No application tests were executed'
+    'report_count',
+    'No Surefire TEST-\*\.xml reports found',
+    'No application tests were executed',
+    'failure\(s\)',
+    'error\(s\)',
+    'found_service=false',
+    'skip ''No Maven microservices found',
+    'skip.*No Maven microservices found'
 )
+$runTestsScript = Get-Content -Raw -LiteralPath (Join-Path $repositoryRoot 'scripts/ci/run-tests.sh')
+foreach ($obsoletePattern in @('\$ROOT/pom\.xml', 'pyproject\.toml', 'package\.json', '\$ROOT/target/surefire-reports', '\$ROOT/src/main')) {
+    if ($runTestsScript -match $obsoletePattern) {
+        $failures.Add("scripts/ci/run-tests.sh contains obsolete root-application assumption: $obsoletePattern")
+    }
+}
+if ($runTestsScript -match 'transfer-service|integrity-service|reporting-service|discovery-service|user-access-service') {
+    $failures.Add('scripts/ci/run-tests.sh must discover services dynamically and must not hard-code service names.')
+}
 Assert-FileContains 'scripts/ci/run-sast.sh' @(
     'semgrep',
     'semgrep scan',
