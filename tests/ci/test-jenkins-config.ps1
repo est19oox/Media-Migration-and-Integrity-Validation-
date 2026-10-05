@@ -27,14 +27,20 @@ $expectations = @(
     @{ File = 'jenkins/Dockerfile'; Content = $dockerfile; Pattern = 'COPY --from=application-jdk /opt/java/openjdk /opt/jdk-25' },
     @{ File = 'jenkins/Dockerfile'; Content = $dockerfile; Pattern = '\bmaven\b' },
     @{ File = 'jenkins/Dockerfile'; Content = $dockerfile; Pattern = 'ARG TRIVY_VERSION=0\.74\.0' },
-    @{ File = 'jenkins/Dockerfile'; Content = $dockerfile; Pattern = 'trivy=\$\{TRIVY_VERSION\}' },
+    @{ File = 'jenkins/Dockerfile'; Content = $dockerfile; Pattern = 'ARG TRIVY_AMD64_SHA256=cf1e32ec8d4d8823e023096a28cadb14f5b5123ce03f201fb633c5b76aa712dd' },
+    @{ File = 'jenkins/Dockerfile'; Content = $dockerfile; Pattern = 'ARG TRIVY_ARM64_SHA256=14fae2604eab589fd544224ef56b8b8a44266872c43b259bd36cfde81428acc8' },
+    @{ File = 'jenkins/Dockerfile'; Content = $dockerfile; Pattern = 'dpkg --print-architecture' },
+    @{ File = 'jenkins/Dockerfile'; Content = $dockerfile; Pattern = 'amd64\).*TRIVY_RELEASE_ARCH=64bit' },
+    @{ File = 'jenkins/Dockerfile'; Content = $dockerfile; Pattern = 'arm64\).*TRIVY_RELEASE_ARCH=ARM64' },
+    @{ File = 'jenkins/Dockerfile'; Content = $dockerfile; Pattern = 'github\.com/aquasecurity/trivy/releases/download/v\$\{TRIVY_VERSION\}/\$\{TRIVY_PACKAGE\}' },
+    @{ File = 'jenkins/Dockerfile'; Content = $dockerfile; Pattern = 'sha256sum --check --strict' },
     @{ File = 'jenkins/Dockerfile'; Content = $dockerfile; Pattern = 'jenkins-plugin-cli --latest=false' },
     @{ File = 'jenkins/Dockerfile'; Content = $dockerfile; Pattern = 'docker-ce-cli' },
     @{ File = 'jenkins/docker-compose.yml'; Content = (Read-RequiredFile 'jenkins/docker-compose.yml'); Pattern = 'path:\s+\$\{MMIV_JENKINS_ENV_FILE:-\.env\}' },
     @{ File = 'jenkins/docker-compose.yml'; Content = $compose; Pattern = '127\.0\.0\.1:\$\{JENKINS_PORT:-18080\}:8080' },
     @{ File = 'jenkins/docker-compose.yml'; Content = $compose; Pattern = 'JENKINS_EXTERNAL_URL:\s+http://localhost:\$\{JENKINS_PORT:-18080\}/' },
     @{ File = 'jenkins/casc.yaml'; Content = $casc; Pattern = 'url:\s+"?\$\{JENKINS_EXTERNAL_URL\}"?' },
-    @{ File = 'jenkins/.env.example'; Content = $exampleEnvironment; Pattern = '(?m)^JENKINS_PORT=18080$' },
+    @{ File = 'jenkins/.env.example'; Content = $exampleEnvironment; Pattern = '(?m)^JENKINS_PORT=18080\r?$' },
     @{ File = 'jenkins/plugins.txt'; Content = $plugins; Pattern = 'configuration-as-code' },
     @{ File = 'jenkins/plugins.txt'; Content = $plugins; Pattern = 'workflow-aggregator' },
     @{ File = 'jenkins/plugins.txt'; Content = $plugins; Pattern = 'workflow-multibranch' },
@@ -107,6 +113,9 @@ foreach ($securityDependencyPin in $securityDependencyPins) {
 }
 if ($dockerfile -match '(?m)^ENV\s+JAVA_HOME=/opt/jdk-25') {
     $failures.Add('The Jenkins controller must not use the application JDK 25 as its global JAVA_HOME.')
+}
+if ($dockerfile -match 'apt-get install[^\r\n]*trivy=\$\{TRIVY_VERSION\}') {
+    $failures.Add('Trivy must not be pinned through the rolling APT index; install the verified immutable release package.')
 }
 if ($compose -match '127\.0\.0\.1:8080:8080') {
     $failures.Add('Docker Compose must not expose Jenkins on the commonly occupied host port 8080.')
