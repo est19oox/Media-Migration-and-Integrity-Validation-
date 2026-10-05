@@ -126,7 +126,7 @@ jobs:
         run: terraform apply -input=false -auto-approve tfplan
 
   deploy:
-    name: ${{ matrix.service.name }} CI/CD
+    name: Microservices CI/CD
     needs: [terraform]
     runs-on: ubuntu-latest
     strategy:
