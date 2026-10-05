@@ -1,0 +1,11 @@
+# Use the EC2 private/public address appropriate to your environment.
+# For the current main-branch EC2 security group, prefer SSM-based Ansible
+# rather than opening SSH to the internet.
+
+[mmiv]
+mmiv-ec2 ansible_host=<EC2_ADDRESS>
+
+[mmiv:vars]
+ansible_user=ec2-user
+ansible_connection=aws_ssm
+ansible_aws_ssm_region=ap-southeast-1

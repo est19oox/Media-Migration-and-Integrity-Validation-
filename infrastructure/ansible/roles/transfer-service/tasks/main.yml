@@ -1,0 +1,56 @@
+---
+- name: Install Docker
+  ansible.builtin.dnf:
+    name: docker
+    state: present
+
+- name: Enable Docker
+  ansible.builtin.service:
+    name: docker
+    enabled: true
+    state: started
+
+- name: Install AWS CLI
+  ansible.builtin.dnf:
+    name: awscli
+    state: present
+
+- name: Log in to ECR
+  ansible.builtin.shell: |
+    aws ecr get-login-password --region {{ aws_region }} |
+      docker login --username AWS --password-stdin {{ ecr_registry }}
+  when: ecr_registry | length > 0
+  changed_when: true
+
+- name: Pull transfer service image
+  ansible.builtin.command:
+    cmd: "docker pull {{ transfer_service_image }}"
+  changed_when: true
+
+- name: Remove previous transfer service container
+  ansible.builtin.command:
+    cmd: "docker rm -f {{ transfer_service_name }}"
+  register: remove_container
+  failed_when: false
+  changed_when: remove_container.rc == 0
+
+- name: Run transfer service
+  ansible.builtin.command:
+    cmd: >-
+      docker run -d
+      --name {{ transfer_service_name }}
+      --restart unless-stopped
+      -p {{ transfer_service_host_port }}:{{ transfer_service_container_port }}
+      -e AWS_REGION={{ aws_region }}
+      -e MMIV_BUCKET_NAME={{ transfer_service_bucket }}
+      {{ transfer_service_image }}
+  changed_when: true
+
+- name: Wait for transfer service health endpoint
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ transfer_service_host_port }}/actuator/health"
+    status_code: 200
+  register: health
+  retries: 12
+  delay: 5
+  until: health.status == 200

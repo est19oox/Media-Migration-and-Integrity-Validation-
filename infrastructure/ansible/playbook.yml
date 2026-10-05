@@ -1,0 +1,7 @@
+---
+- name: Deploy MMIV transfer service
+  hosts: mmiv
+  become: true
+  gather_facts: true
+  roles:
+    - transfer-service
