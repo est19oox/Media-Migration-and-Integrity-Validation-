@@ -6,9 +6,10 @@ import mmiv.user_access_service.model.Action;
 import mmiv.user_access_service.model.DestinationAccess;
 import mmiv.user_access_service.model.User;
 import mmiv.user_access_service.repository.UserRepository;
-
+import org.springframework.stereotype.Service;
 import java.util.Optional;
 
+@Service 
 public class AccessService {
 
     private final UserRepository userRepository;

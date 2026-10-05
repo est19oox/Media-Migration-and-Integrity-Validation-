@@ -1,9 +1,16 @@
 package mmiv.user_access_service.dto;
 
-public class AccessCheckRequest {
+import jakarta.validation.constraints.NotBlank;
 
+public class AccessCheckRequest {
+    
+    @NotBlank 
     private String userId;
+
+    @NotBlank 
     private String destination;
+    
+    @NotBlank 
     private String action;
 
     public String getUserId() {
