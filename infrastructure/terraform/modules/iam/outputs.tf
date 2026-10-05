@@ -36,3 +36,12 @@ output "user_permissions" {
     username => user.permission
   }
 }
+
+output "project_admin_users" {
+  description = "IAM users with additional MMIV infrastructure administration access"
+
+  value = [
+    aws_iam_user.users["mm-dev-zhao-youbo"].name,
+    aws_iam_user.users["mm-dev-wang-yutong"].name
+  ]
+}
