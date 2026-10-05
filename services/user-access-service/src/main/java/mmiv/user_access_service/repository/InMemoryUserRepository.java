@@ -12,6 +12,7 @@ public class InMemoryUserRepository implements UserRepository {
 
     private final Map<String, User> users = new HashMap<>();
     
+    @Override 
     public void save(User user) {
         users.put(user.getUserId(), user);
     }
