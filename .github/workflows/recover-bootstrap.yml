@@ -38,6 +38,9 @@ jobs:
       - name: Initialize bootstrap remote state
         run: terraform init -input=false
 
+      - name: Validate bootstrap configuration before importing
+        run: terraform validate -no-color
+
       - name: Import existing bootstrap resources
         run: python ../../scripts/bootstrap/recover-state.py
 
