@@ -1,7 +1,0 @@
----
-# Transfer Service-specific defaults. The actual deployment logic is shared in roles/microservice.
-microservice_name: transfer-service
-microservice_image: "{{ lookup('env', 'MMIV_TRANSFER_IMAGE') | default('mmiv:transfer-service', true) }}"
-microservice_container_port: 8081
-microservice_host_port: 8081
-microservice_health_path: /actuator/health

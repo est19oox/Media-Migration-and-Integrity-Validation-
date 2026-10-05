@@ -1,6 +1,6 @@
 # Creates a private S3 bucket for media migration files.
 resource "aws_s3_bucket" "migration" {
-  bucket_prefix = "mmiv-dev-"
+  bucket = "media-migration-dev-landing"
 
 
   tags = {

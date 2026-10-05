@@ -37,7 +37,7 @@
     mode: '0644'
   when: current_image.stdout | trim | length > 0
 
-- name: Deploy transfer service with rollback on failure
+- name: Deploy microservice with rollback on failure
   block:
     - name: Log in to ECR
       ansible.builtin.shell: |
@@ -46,19 +46,19 @@
       when: ecr_registry | length > 0
       changed_when: true
 
-    - name: Pull transfer service image
+    - name: Pull microservice image
       ansible.builtin.command:
         cmd: "docker pull {{ microservice_image }}"
       changed_when: true
 
-    - name: Remove previous transfer service container
+    - name: Remove previous microservice container
       ansible.builtin.command:
         cmd: "docker rm -f {{ microservice_name }}"
       register: remove_container
       failed_when: false
       changed_when: remove_container.rc == 0
 
-    - name: Run transfer service
+    - name: Run microservice
       ansible.builtin.command:
         cmd: >-
           docker run -d
@@ -70,7 +70,7 @@
           {{ microservice_image }}
       changed_when: true
 
-    - name: Wait for transfer service health endpoint
+    - name: Wait for microservice health endpoint
       ansible.builtin.uri:
         url: "http://127.0.0.1:{{ microservice_host_port }}{{ microservice_health_path }}"
         status_code: 200

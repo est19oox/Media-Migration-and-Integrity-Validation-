@@ -1,6 +1,0 @@
----
-# Compatibility wrapper: Transfer Service uses the same generic deployment role
-# as every future MMIV microservice.
-- name: Deploy transfer-service using the common microservice role
-  ansible.builtin.include_role:
-    name: microservice

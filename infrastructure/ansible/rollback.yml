@@ -4,58 +4,45 @@
   become: true
   gather_facts: false
   vars:
-    microservice_name: "{{ lookup('env', 'MMIV_SERVICE_NAME') | default('transfer-service', true) }}"
-    microservice_container_port: "{{ lookup('env', 'MMIV_SERVICE_CONTAINER_PORT') | default(8081, true) }}"
-    microservice_host_port: "{{ lookup('env', 'MMIV_SERVICE_HOST_PORT') | default(8081, true) }}"
-    microservice_health_path: "{{ lookup('env', 'MMIV_SERVICE_HEALTH_PATH') | default('/actuator/health', true) }}"
-    microservice_bucket: "{{ lookup('env', 'MMIV_BUCKET_NAME') | default('media-migration-dev-landing', true) }}"
+    microservice_previous_image_file: "/var/lib/mmiv/{{ microservice_name }}.previous-image"
     aws_region: "{{ lookup('env', 'AWS_REGION') | default('ap-southeast-1', true) }}"
     ecr_registry: "{{ lookup('env', 'ECR_REGISTRY') | default('', true) }}"
-    microservice_previous_image_file: "/var/lib/mmiv/{{ microservice_name }}.previous-image"
+    microservice_container_port: "{{ lookup('env', 'MMIV_SERVICE_CONTAINER_PORT') }}"
+    microservice_host_port: "{{ lookup('env', 'MMIV_SERVICE_HOST_PORT') }}"
+    microservice_health_path: "{{ lookup('env', 'MMIV_SERVICE_HEALTH_PATH') }}"
+    microservice_bucket: "{{ lookup('env', 'MMIV_BUCKET_NAME') | default('media-migration-dev-landing', true) }}"
   tasks:
-    - name: Check rollback state
+    - name: Require previous image
       ansible.builtin.stat:
         path: "{{ microservice_previous_image_file }}"
-      register: rollback_file
+      register: previous_file
 
-    - name: Stop when no previous deployment exists
+    - name: Stop if rollback image is unavailable
       ansible.builtin.fail:
-        msg: "No previous {{ microservice_name }} image is available for rollback."
-      when: not rollback_file.stat.exists
+        msg: "No previous image exists for {{ microservice_name }}."
+      when: not previous_file.stat.exists
 
     - name: Read previous image
       ansible.builtin.slurp:
         src: "{{ microservice_previous_image_file }}"
       register: previous_image
 
-    - name: Validate previous image
-      ansible.builtin.assert:
-        that:
-          - (previous_image.content | b64decode | trim | length) > 0
-
-    - name: Log in to ECR for rollback
+    - name: Authenticate Docker to ECR
       ansible.builtin.shell: |
-        aws ecr get-login-password --region {{ aws_region }} |
-          docker login --username AWS --password-stdin {{ ecr_registry }}
+        aws ecr get-login-password --region {{ aws_region }} | docker login --username AWS --password-stdin {{ ecr_registry }}
       when: ecr_registry | length > 0
       changed_when: true
 
     - name: Restore previous image
       ansible.builtin.shell: |
         set -e
-        PREVIOUS_IMAGE="$(cat {{ microservice_previous_image_file }})"
+        PREVIOUS_IMAGE="$(echo '{{ previous_image.content }}' | base64 -d | tr -d '\\n')"
         docker pull "$PREVIOUS_IMAGE"
         docker rm -f {{ microservice_name }} 2>/dev/null || true
-        docker run -d \
-          --name {{ microservice_name }} \
-          --restart unless-stopped \
-          -p {{ microservice_host_port }}:{{ microservice_container_port }} \
-          -e AWS_REGION={{ aws_region }} \
-          -e MMIV_BUCKET_NAME={{ microservice_bucket }} \
-          "$PREVIOUS_IMAGE"
+        docker run -d --name {{ microservice_name }} --restart unless-stopped -p {{ microservice_host_port }}:{{ microservice_container_port }} -e AWS_REGION={{ aws_region }} -e MMIV_BUCKET_NAME={{ microservice_bucket }} "$PREVIOUS_IMAGE"
       changed_when: true
 
-    - name: Wait for restored service
+    - name: Verify restored service
       ansible.builtin.uri:
         url: "http://127.0.0.1:{{ microservice_host_port }}{{ microservice_health_path }}"
         status_code: 200
