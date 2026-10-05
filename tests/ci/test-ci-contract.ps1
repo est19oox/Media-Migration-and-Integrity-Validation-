@@ -54,8 +54,7 @@ foreach ($script in $conditionalScripts) {
 
 Assert-FileContains 'scripts/ci/run-tests.sh' @('pyproject\.toml', 'package\.json', 'pom\.xml')
 Assert-FileContains 'scripts/ci/run-tests.sh' @(
-    '/opt/jdk-25',
-    'JAVA_HOME',
+    '(?m)^\s*JAVA_HOME=/opt/jdk-25\r?$',
     'mvn --batch-mode clean verify',
     'surefire-reports',
     'TEST-\*\.xml',
