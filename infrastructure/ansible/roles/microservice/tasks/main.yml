@@ -1,0 +1,114 @@
+---
+- name: Ensure MMIV state directory exists
+  ansible.builtin.file:
+    path: /var/lib/mmiv
+    state: directory
+    mode: '0755'
+
+- name: Install Docker
+  ansible.builtin.dnf:
+    name: docker
+    state: present
+
+- name: Enable Docker
+  ansible.builtin.service:
+    name: docker
+    enabled: true
+    state: started
+
+- name: Install AWS CLI
+  ansible.builtin.dnf:
+    name: awscli
+    state: present
+
+- name: Capture currently deployed image for rollback
+  ansible.builtin.shell: |
+    set -o pipefail
+    docker inspect -f '{{ '{{' }}.Config.Image{{ '}}' }}' {{ microservice_name }} 2>/dev/null || true
+  args:
+    executable: /bin/bash
+  register: current_image
+  changed_when: false
+
+- name: Store previous image for rollback
+  ansible.builtin.copy:
+    content: "{{ current_image.stdout | trim }}\n"
+    dest: "{{ microservice_previous_image_file }}"
+    mode: '0644'
+  when: current_image.stdout | trim | length > 0
+
+- name: Deploy transfer service with rollback on failure
+  block:
+    - name: Log in to ECR
+      ansible.builtin.shell: |
+        aws ecr get-login-password --region {{ aws_region }} |
+          docker login --username AWS --password-stdin {{ ecr_registry }}
+      when: ecr_registry | length > 0
+      changed_when: true
+
+    - name: Pull transfer service image
+      ansible.builtin.command:
+        cmd: "docker pull {{ microservice_image }}"
+      changed_when: true
+
+    - name: Remove previous transfer service container
+      ansible.builtin.command:
+        cmd: "docker rm -f {{ microservice_name }}"
+      register: remove_container
+      failed_when: false
+      changed_when: remove_container.rc == 0
+
+    - name: Run transfer service
+      ansible.builtin.command:
+        cmd: >-
+          docker run -d
+          --name {{ microservice_name }}
+          --restart unless-stopped
+          -p {{ microservice_host_port }}:{{ microservice_container_port }}
+          -e AWS_REGION={{ aws_region }}
+          -e MMIV_BUCKET_NAME={{ microservice_bucket }}
+          {{ microservice_image }}
+      changed_when: true
+
+    - name: Wait for transfer service health endpoint
+      ansible.builtin.uri:
+        url: "http://127.0.0.1:{{ microservice_host_port }}{{ microservice_health_path }}"
+        status_code: 200
+      register: health
+      retries: 12
+      delay: 5
+      until: health.status == 200
+
+  rescue:
+    - name: Check whether a previous image is available
+      ansible.builtin.stat:
+        path: "{{ microservice_previous_image_file }}"
+      register: previous_image_file
+
+    - name: Read previous image
+      ansible.builtin.slurp:
+        src: "{{ microservice_previous_image_file }}"
+      register: previous_image
+      when: previous_image_file.stat.exists
+
+    - name: Restore previous microservice image
+      ansible.builtin.shell: |
+        set -e
+        PREVIOUS_IMAGE="$(cat {{ microservice_previous_image_file }})"
+        test -n "$PREVIOUS_IMAGE"
+        docker pull "$PREVIOUS_IMAGE"
+        docker rm -f {{ microservice_name }} 2>/dev/null || true
+        docker run -d \
+          --name {{ microservice_name }} \
+          --restart unless-stopped \
+          -p {{ microservice_host_port }}:{{ microservice_container_port }} \
+          -e AWS_REGION={{ aws_region }} \
+          -e MMIV_BUCKET_NAME={{ microservice_bucket }} \
+          "$PREVIOUS_IMAGE"
+      when:
+        - previous_image_file.stat.exists
+        - (previous_image.content | default('') | b64decode | trim | length) > 0
+
+    - name: Fail deployment after rollback
+      ansible.builtin.fail:
+        msg: "Microservice deployment failed. Previous version was restored when a previous image was available."

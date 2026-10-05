@@ -1,0 +1,10 @@
+---
+# TEMPLATE ONLY: enable this service after its implementation is ready.
+# Copy the transfer-service deployment contract and change the values below.
+# reporting-service_name: reporting-service
+# reporting-service_image: "..."
+# reporting-service_container_port: <service-port>
+# reporting-service_host_port: <host-port>
+# reporting-service_previous_image_file: /var/lib/mmiv/reporting-service.previous-image
+# aws_region: ap-southeast-1
+# ecr_registry: "..."

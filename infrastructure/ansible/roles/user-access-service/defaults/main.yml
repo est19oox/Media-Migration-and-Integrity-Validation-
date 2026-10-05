@@ -1,0 +1,10 @@
+---
+# TEMPLATE ONLY: enable this service after its implementation is ready.
+# Copy the transfer-service deployment contract and change the values below.
+# user-access-service_name: user-access-service
+# user-access-service_image: "..."
+# user-access-service_container_port: <service-port>
+# user-access-service_host_port: <host-port>
+# user-access-service_previous_image_file: /var/lib/mmiv/user-access-service.previous-image
+# aws_region: ap-southeast-1
+# ecr_registry: "..."

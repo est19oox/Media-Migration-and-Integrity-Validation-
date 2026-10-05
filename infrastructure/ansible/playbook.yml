@@ -1,7 +1,15 @@
 ---
-- name: Deploy MMIV transfer service
+- name: Deploy MMIV microservice
   hosts: mmiv
   become: true
   gather_facts: true
   roles:
-    - transfer-service
+    - microservice
+
+  # Future microservices use this same role with their own variables.
+  # Uncomment the corresponding service workflow and pass its service_name,
+  # image, host/container port, and health path.
+  # - integrity-service
+  # - user-access-service
+  # - reporting-service
+  # - discovery-service

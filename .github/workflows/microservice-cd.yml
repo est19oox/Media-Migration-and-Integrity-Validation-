@@ -1,0 +1,179 @@
+name: Reusable Microservice CD
+
+on:
+  workflow_call:
+    inputs:
+      service_name:
+        required: true
+        type: string
+      service_path:
+        required: true
+        type: string
+      container_name:
+        required: true
+        type: string
+      container_port:
+        required: true
+        type: number
+      host_port:
+        required: true
+        type: number
+      health_path:
+        required: true
+        type: string
+      ecr_repository:
+        required: true
+        type: string
+      bucket_name:
+        required: true
+        type: string
+      run_dast:
+        required: false
+        default: true
+        type: boolean
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  AWS_REGION: ap-southeast-1
+
+jobs:
+  build-deploy-test:
+    name: Build, Deploy, DAST and Rollback - ${{ inputs.service_name }}
+    runs-on: ubuntu-latest
+    env:
+      SERVICE_NAME: ${{ inputs.service_name }}
+      SERVICE_PATH: ${{ inputs.service_path }}
+      CONTAINER_NAME: ${{ inputs.container_name }}
+      CONTAINER_PORT: ${{ inputs.container_port }}
+      HOST_PORT: ${{ inputs.host_port }}
+      HEALTH_PATH: ${{ inputs.health_path }}
+      ECR_REPOSITORY: ${{ inputs.ecr_repository }}
+      MMIV_BUCKET_NAME: ${{ inputs.bucket_name }}
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v7
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@v5
+        with:
+          java-version: '25'
+          distribution: temurin
+          cache: maven
+
+      - name: Build and Test Microservice
+        working-directory: ${{ env.SERVICE_PATH }}
+        run: mvn -B clean verify
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v5
+        with:
+          role-to-assume: arn:aws:iam::275069781906:role/GitHubActions-MMIV-App
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Verify AWS Connection
+        run: aws sts get-caller-identity
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build Microservice Image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker build \
+            -f "${SERVICE_PATH}/Dockerfile" \
+            -t "${ECR_REGISTRY}/${ECR_REPOSITORY}:${IMAGE_TAG}" \
+            "${SERVICE_PATH}"
+
+      - name: Push Microservice Image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: docker push "${ECR_REGISTRY}/${ECR_REPOSITORY}:${IMAGE_TAG}"
+
+      - name: Discover EC2 Instance
+        id: deployment
+        shell: bash
+        run: |
+          INSTANCE_ID=$(aws ec2 describe-instances \
+            --region "$AWS_REGION" \
+            --filters \
+              'Name=tag:Name,Values=MMIV-EC2' \
+              'Name=instance-state-name,Values=running' \
+            --query 'Reservations[0].Instances[0].InstanceId' \
+            --output text)
+          test -n "$INSTANCE_ID" && test "$INSTANCE_ID" != None
+          echo "instance_id=$INSTANCE_ID" >> "$GITHUB_OUTPUT"
+
+      - name: Install Ansible
+        run: |
+          python -m pip install --upgrade pip
+          pip install ansible boto3 botocore
+          ansible-galaxy collection install -r infrastructure/ansible/requirements.yml
+
+      - name: Generate SSM Ansible Inventory
+        env:
+          INSTANCE_ID: ${{ steps.deployment.outputs.instance_id }}
+          SSM_BUCKET: ${{ env.MMIV_BUCKET_NAME }}
+        run: |
+          envsubst < infrastructure/ansible/inventory/ci.ini > infrastructure/ansible/inventory/ci.generated.ini
+
+      - name: Deploy Microservice with Ansible over SSM
+        working-directory: infrastructure/ansible
+        env:
+          MMIV_SERVICE_NAME: ${{ env.CONTAINER_NAME }}
+          MMIV_SERVICE_IMAGE: ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}
+          MMIV_SERVICE_PATH: ${{ env.SERVICE_PATH }}
+          MMIV_SERVICE_CONTAINER_PORT: ${{ env.CONTAINER_PORT }}
+          MMIV_SERVICE_HOST_PORT: ${{ env.HOST_PORT }}
+          MMIV_SERVICE_HEALTH_PATH: ${{ env.HEALTH_PATH }}
+          MMIV_TRANSFER_IMAGE: ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}
+          MMIV_BUCKET_NAME: ${{ env.MMIV_BUCKET_NAME }}
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          AWS_REGION: ${{ env.AWS_REGION }}
+        run: |
+          ansible-playbook -i inventory/ci.generated.ini playbook.yml \
+            -e "microservice_name=$MMIV_SERVICE_NAME" \
+            -e "microservice_image=$MMIV_SERVICE_IMAGE" \
+            -e "microservice_container_port=$MMIV_SERVICE_CONTAINER_PORT" \
+            -e "microservice_host_port=$MMIV_SERVICE_HOST_PORT" \
+            -e "microservice_health_path=$MMIV_SERVICE_HEALTH_PATH"
+
+      - name: Run DAST against deployed service
+        if: inputs.run_dast
+        env:
+          INSTANCE_ID: ${{ steps.deployment.outputs.instance_id }}
+          AWS_REGION: ${{ env.AWS_REGION }}
+          DAST_PORT: ${{ env.HOST_PORT }}
+          DAST_PATH: ${{ env.HEALTH_PATH }}
+        run: ./scripts/cd/run-dast-ssm.sh
+
+      - name: Roll back after failed deployment or DAST
+        if: ${{ failure() && steps.deployment.outputs.instance_id != '' }}
+        working-directory: infrastructure/ansible
+        env:
+          INSTANCE_ID: ${{ steps.deployment.outputs.instance_id }}
+          SSM_BUCKET: ${{ env.MMIV_BUCKET_NAME }}
+          MMIV_BUCKET_NAME: ${{ env.MMIV_BUCKET_NAME }}
+          MMIV_SERVICE_NAME: ${{ env.CONTAINER_NAME }}
+          MMIV_SERVICE_CONTAINER_PORT: ${{ env.CONTAINER_PORT }}
+          MMIV_SERVICE_HOST_PORT: ${{ env.HOST_PORT }}
+          MMIV_SERVICE_HEALTH_PATH: ${{ env.HEALTH_PATH }}
+          AWS_REGION: ${{ env.AWS_REGION }}
+        run: |
+          ansible-playbook -i inventory/ci.generated.ini rollback.yml
+
+      - name: Final health smoke test
+        if: success()
+        env:
+          INSTANCE_ID: ${{ steps.deployment.outputs.instance_id }}
+          AWS_REGION: ${{ env.AWS_REGION }}
+          SMOKE_PORT: ${{ env.HOST_PORT }}
+          SMOKE_PATH: ${{ env.HEALTH_PATH }}
+        run: ./scripts/cd/smoke-test-service.sh

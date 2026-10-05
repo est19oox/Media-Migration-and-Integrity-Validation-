@@ -1,0 +1,14 @@
+---
+# TEMPLATE ONLY: intentionally disabled until reporting-service is implemented.
+# Use the same process as roles/transfer-service/tasks/main.yml:
+# 1. Ensure Docker is installed and running.
+# 2. Log in to ECR.
+# 3. Capture the current image for rollback.
+# 4. Pull the new image.
+# 5. Replace the container.
+# 6. Run the service health check.
+# 7. Restore the previous image if deployment/health check fails.
+#
+# - name: Deploy reporting-service
+#   ansible.builtin.debug:
+#     msg: "reporting-service deployment template is disabled"
