@@ -17,10 +17,15 @@ jobs:
       - uses: hashicorp/setup-terraform@v4
         with:
           terraform_version: 1.13.3
-      - name: Build and test
+      - name: Build and test microservices
+        shell: bash
         run: |
-          mvn -B clean verify
-          mvn -B -f services/transfer-service/pom.xml clean verify
+          set -e
+
+          for pom in services/*/pom.xml; do
+            echo "Testing $pom"
+            mvn -B -f "$pom" clean verify
+          done
       - name: Terraform validation
         run: |
           terraform -chdir=infrastructure fmt -check -recursive
@@ -36,4 +41,12 @@ jobs:
           ansible-playbook -i inventory/ci.ini playbook.yml --syntax-check
           ansible-playbook -i inventory/ci.ini rollback.yml --syntax-check
       - name: Docker build
-        run: docker build -t mmiv:validation services/transfer-service
+        shell: bash
+        run: |
+          set -e
+          for service in services/*; do
+            if [ -f "$service/Dockerfile" ]; then
+              name="$(basename "$service")"
+              docker build -t "mmiv:${name}-validation" "$service"
+            fi
+          done
