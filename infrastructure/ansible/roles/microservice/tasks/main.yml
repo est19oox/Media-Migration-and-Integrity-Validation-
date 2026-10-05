@@ -5,6 +5,12 @@
     state: directory
     mode: '0755'
 
+- name: Create media input directory
+  ansible.builtin.file:
+    path: /var/lib/mmiv/media
+    state: directory
+    mode: '0755'
+
 - name: Install Docker
   ansible.builtin.dnf:
     name: docker
@@ -35,7 +41,9 @@
     content: "{{ current_image.stdout | trim }}\n"
     dest: "{{ microservice_previous_image_file }}"
     mode: '0644'
-  when: current_image.stdout | trim | length > 0
+  when:
+    - current_image.stdout | trim | length > 0
+    - current_image.stdout | trim != microservice_image
 
 - name: Deploy microservice with rollback on failure
   block:
@@ -65,7 +73,7 @@
           --name {{ microservice_name }}
           --restart unless-stopped
           -p {{ microservice_host_port }}:{{ microservice_container_port }}
-          -e AWS_REGION={{ aws_region }}
+          --mount type=bind,src=/var/lib/mmiv/media,dst=/media,readonly -e MMIV_MEDIA_ROOT=/media -e AWS_REGION={{ aws_region }}
           -e MMIV_BUCKET_NAME={{ microservice_bucket }}
           {{ microservice_image }}
       changed_when: true
@@ -102,12 +110,22 @@
           --name {{ microservice_name }} \
           --restart unless-stopped \
           -p {{ microservice_host_port }}:{{ microservice_container_port }} \
-          -e AWS_REGION={{ aws_region }} \
+          --mount type=bind,src=/var/lib/mmiv/media,dst=/media,readonly -e MMIV_MEDIA_ROOT=/media -e AWS_REGION={{ aws_region }} \
           -e MMIV_BUCKET_NAME={{ microservice_bucket }} \
           "$PREVIOUS_IMAGE"
       when:
         - previous_image_file.stat.exists
         - (previous_image.content | default('') | b64decode | trim | length) > 0
+
+    - name: Verify restored service health
+      ansible.builtin.uri:
+        url: "http://127.0.0.1:{{ microservice_host_port }}{{ microservice_health_path }}"
+        status_code: 200
+      register: restored_health
+      retries: 12
+      delay: 5
+      until: restored_health.status == 200
+      when: previous_image_file.stat.exists
 
     - name: Fail deployment after rollback
       ansible.builtin.fail:

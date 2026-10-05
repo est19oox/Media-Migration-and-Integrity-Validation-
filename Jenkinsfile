@@ -21,7 +21,7 @@ pipeline {
                     ).trim()
                     currentBuild.description = "${env.BRANCH_NAME} ${env.TESTED_COMMIT.take(12)}"
                 }
-                sh 'chmod +x scripts/ci/*.sh'
+                sh 'chmod +x scripts/ci/*.sh scripts/cd/*.sh tests/ci/*.sh'
             }
         }
 
@@ -164,7 +164,7 @@ pipeline {
             }
         }
         cleanup {
-            sh 'rm -f .ci/image-ref'
+            sh 'if [ -f .ci/test-container ]; then docker rm -f "$(cat .ci/test-container)" || true; fi; rm -f .ci/image-ref .ci/test-container .ci/deployment.env' 
         }
     }
 }

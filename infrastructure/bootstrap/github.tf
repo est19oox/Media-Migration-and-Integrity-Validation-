@@ -50,7 +50,7 @@ resource "aws_iam_role" "github_terraform" {
           }
 
           StringLike = {
-            "token.actions.githubusercontent.com:sub" = "repo:est19oox/Media-Migration-and-Integrity-Validation-:ref:refs/heads/main"
+            "token.actions.githubusercontent.com:sub" = "repo:est19oox@70089857/Media-Migration-and-Integrity-Validation-@1359946801:ref:refs/heads/*"
           }
         }
       }
@@ -127,7 +127,7 @@ resource "aws_iam_role" "github_app" {
           }
 
           StringLike = {
-            "token.actions.githubusercontent.com:sub" = "repo:est19oox/Media-Migration-and-Integrity-Validation-:ref:refs/heads/main"
+            "token.actions.githubusercontent.com:sub" = "repo:est19oox@70089857/Media-Migration-and-Integrity-Validation-@1359946801:ref:refs/heads/*"
           }
         }
       }
@@ -218,6 +218,11 @@ resource "aws_iam_role_policy" "github_app_ssm_deploy" {
         Effect = "Allow"
 
         Action = [
+          "ssm:StartSession",
+          "ssm:ResumeSession",
+          "ssm:TerminateSession",
+          "ssm:DescribeSessions",
+          "ssm:GetConnectionStatus",
           "ssm:GetCommandInvocation",
           "ssm:ListCommandInvocations"
         ]

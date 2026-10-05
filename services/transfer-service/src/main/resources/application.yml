@@ -5,6 +5,8 @@ aws:
   region: ${AWS_REGION:ap-southeast-1}
 
 mmiv:
+  media:
+    root: ${MMIV_MEDIA_ROOT:/media}
   s3:
     bucket: ${MMIV_BUCKET_NAME:media-migration-dev-landing}
 

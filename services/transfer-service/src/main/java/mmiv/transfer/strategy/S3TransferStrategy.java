@@ -1,6 +1,7 @@
 package mmiv.transfer.strategy;
 
 import mmiv.transfer.dto.TransferRequest;
+import mmiv.transfer.validation.TransferRequestValidator;
 import mmiv.transfer.dto.TransferResponse;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
@@ -19,11 +20,13 @@ public class S3TransferStrategy implements TransferStrategy {
 
     private final S3Client s3Client;
     private final String bucket;
+    private final TransferRequestValidator validator;
 
     public S3TransferStrategy(S3Client s3Client,
-                              @Value("${mmiv.s3.bucket}") String bucket) {
+                              @Value("${mmiv.s3.bucket}") String bucket, TransferRequestValidator validator) {
         this.s3Client = s3Client;
         this.bucket = bucket;
+        this.validator = validator;
     }
 
     @Override
@@ -36,7 +39,7 @@ public class S3TransferStrategy implements TransferStrategy {
     @Override
     public TransferResponse transfer(TransferRequest request) {
         try {
-            Path source = Path.of(request.sourcePath()).toAbsolutePath().normalize();
+            Path source = validator.resolveSource(request.sourcePath());
             if (!Files.isRegularFile(source)) {
                 throw new IllegalArgumentException("Source file does not exist: " + source);
             }

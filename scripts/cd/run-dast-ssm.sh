@@ -16,7 +16,14 @@ COMMAND_ID=$(aws ssm send-command \
   --query 'Command.CommandId' \
   --output text)
 
-aws ssm wait command-executed --region "$REGION" --command-id "$COMMAND_ID" --instance-id "$INSTANCE_ID"
+STATUS=Pending
+for attempt in $(seq 1 120); do
+  STATUS=$(aws ssm get-command-invocation --region "$REGION" --command-id "$COMMAND_ID" --instance-id "$INSTANCE_ID" --query Status --output text 2>/dev/null || echo Pending)
+  case "$STATUS" in
+    Success|Failed|Cancelled|TimedOut) break ;;
+  esac
+  sleep 5
+done
 STATUS=$(aws ssm get-command-invocation --region "$REGION" --command-id "$COMMAND_ID" --instance-id "$INSTANCE_ID" --query 'Status' --output text)
 aws ssm get-command-invocation --region "$REGION" --command-id "$COMMAND_ID" --instance-id "$INSTANCE_ID" --query 'StandardOutputContent' --output text || true
 aws ssm get-command-invocation --region "$REGION" --command-id "$COMMAND_ID" --instance-id "$INSTANCE_ID" --query 'StandardErrorContent' --output text || true

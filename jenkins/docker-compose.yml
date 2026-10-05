@@ -19,6 +19,8 @@ services:
       GITHUB_USERNAME: ${GITHUB_USERNAME:?Set your GitHub username in jenkins/.env}
       GITHUB_TOKEN: ${GITHUB_TOKEN:?Set a read-only GitHub token in jenkins/.env}
       GITHUB_REPOSITORY_URL: ${GITHUB_REPOSITORY_URL:-https://github.com/est19oox/Media-Migration-and-Integrity-Validation-.git}
+    networks:
+      - ci
     ports:
       - "127.0.0.1:${JENKINS_PORT:-18080}:8080"
     volumes:
@@ -34,3 +36,7 @@ services:
 volumes:
   jenkins_home:
     name: mmiv_jenkins_home
+
+networks:
+  ci:
+    name: mmiv-ci

@@ -5,12 +5,17 @@ on:
     branches:
       - main
     paths:
+      - 'pom.xml'
       - 'services/**'
       - 'infrastructure/terraform/**'
       - 'infrastructure/ansible/**'
       - 'scripts/cd/**'
       - '.github/workflows/cicd.yml'
   workflow_dispatch:
+
+concurrency:
+  group: mmiv-production
+  cancel-in-progress: false
 
 permissions:
   contents: read
@@ -121,7 +126,7 @@ jobs:
         id: image
         env:
           ECR_REGISTRY: ${{ steps.ecr.outputs.registry }}
-          IMAGE_TAG: ${{ matrix.service.name }}-${{ github.sha }}
+          IMAGE_TAG: ${{ matrix.service.name }}-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
         run: |
           IMAGE="$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
           docker build \
@@ -148,6 +153,12 @@ jobs:
           test -n "$INSTANCE_ID" && test "$INSTANCE_ID" != "None"
           echo "instance_id=$INSTANCE_ID" >> "$GITHUB_OUTPUT"
 
+      - name: Install Session Manager plugin
+        run: |
+          curl -fsSL https://s3.amazonaws.com/session-manager-downloads/plugin/latest/ubuntu_64bit/session-manager-plugin.deb -o /tmp/session-manager-plugin.deb
+          sudo dpkg -i /tmp/session-manager-plugin.deb
+          session-manager-plugin --version
+
       - name: Install Ansible
         run: |
           python -m pip install --upgrade pip
@@ -166,6 +177,7 @@ jobs:
             > infrastructure/ansible/inventory/ci.generated.ini
 
       - name: Deploy with Ansible over SSM
+        id: ansible_deploy
         working-directory: infrastructure/ansible
         env:
           SERVICE_NAME: ${{ matrix.service.name }}
@@ -191,17 +203,17 @@ jobs:
           INSTANCE_ID: ${{ steps.deployment.outputs.instance_id }}
           SERVICE_NAME: ${{ matrix.service.name }}
           SMOKE_PORT: ${{ matrix.service.port }}
-        run: ./scripts/cd/smoke-test-service.sh
+        run: bash ./scripts/cd/smoke-test-service.sh
 
       - name: Run DAST
         env:
           INSTANCE_ID: ${{ steps.deployment.outputs.instance_id }}
           DAST_PORT: ${{ matrix.service.port }}
-          DAST_PATH: /actuator/health
-        run: ./scripts/cd/run-dast-ssm.sh
+          DAST_PATH: /
+        run: bash ./scripts/cd/run-dast-ssm.sh
 
       - name: Roll back after failure
-        if: ${{ failure() && steps.deployment.outputs.instance_id != '' }}
+        if: ${{ failure() && steps.ansible_deploy.outcome == 'success' }}
         working-directory: infrastructure/ansible
         env:
           SERVICE_NAME: ${{ matrix.service.name }}
@@ -226,4 +238,4 @@ jobs:
           INSTANCE_ID: ${{ steps.deployment.outputs.instance_id }}
           SERVICE_NAME: ${{ matrix.service.name }}
           SMOKE_PORT: ${{ matrix.service.port }}
-        run: ./scripts/cd/smoke-test-service.sh
+        run: bash ./scripts/cd/smoke-test-service.sh
