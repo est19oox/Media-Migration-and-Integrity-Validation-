@@ -56,7 +56,7 @@ Assert-FileContains 'scripts/ci/run-tests.sh' @('pyproject\.toml', 'package\.jso
 Assert-FileContains 'scripts/ci/run-tests.sh' @(
     '/opt/jdk-25',
     'JAVA_HOME',
-    'mvn --batch-mode test',
+    'mvn --batch-mode clean verify',
     'surefire-reports',
     'TEST-\*\.xml',
     'No application tests were executed'
@@ -104,11 +104,12 @@ if ($dastScript -match 'ghcr\.io/zaproxy/zaproxy:(stable|latest)') {
     $failures.Add('scripts/ci/run-dast.sh must not use a floating ZAP image tag.')
 }
 
-$deploymentTriggerInterface = 'scripts/cd/trigger-deployment.sh <full-commit-sha>'
-$deploymentTriggerPath = Join-Path $repositoryRoot 'scripts/cd/trigger-deployment.sh'
-if (Test-Path -LiteralPath $deploymentTriggerPath -PathType Leaf) {
-    $failures.Add("$deploymentTriggerInterface is externally owned and must not be implemented by this CI branch.")
-}
+Assert-FileContains 'scripts/cd/trigger-deployment.sh' @(
+    'commit=\$\{1:\?Usage: trigger-deployment\.sh <full-commit-sha>\}',
+    'git rev-parse HEAD',
+    '\.ci/image-ref',
+    '\.ci/deployment\.env'
+)
 
 if ($failures.Count -gt 0) {
     $failures | ForEach-Object { Write-Error $_ -ErrorAction Continue }

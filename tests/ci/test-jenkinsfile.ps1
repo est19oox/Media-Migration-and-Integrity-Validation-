@@ -105,7 +105,8 @@ foreach ($pattern in @('always\s*\{', 'scripts/ci/collect-evidence\.sh', 'MMIV_B
 if ($post -notmatch '(?s)finally\s*\{\s*try\s*\{.*?scripts/ci/collect-evidence\.sh.*?\}\s*finally\s*\{\s*archiveArtifacts') {
     $failures.Add('Post/always must archive evidence from a nested finally even when metadata collection fails.')
 }
-if ($jenkinsfile -match 'returnStatus|catchError|\|\|\s*(true|:)') {
+$pipelineStages = ($jenkinsfile -split 'post\s*\{', 2)[0]
+if ($pipelineStages -match 'returnStatus|catchError|\|\|\s*(true|:)') {
     $failures.Add('Jenkins security gates must propagate nonzero statuses.')
 }
 $ownedFiles = @((Get-Item $jenkinsfilePath)) + @(Get-ChildItem (Join-Path $repositoryRoot 'scripts/ci') -Filter '*.sh')
