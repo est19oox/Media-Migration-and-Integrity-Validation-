@@ -30,3 +30,11 @@ jenkins_home/
 *.tfstate
 *.tfstate.*
 crash.log
+
+
+# Terraform local/environment files
+**/.terraform/*
+*.tfstate
+*.tfstate.*
+*.tfvars
+*.tfplan
