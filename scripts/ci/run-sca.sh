@@ -17,5 +17,13 @@ fi
 
 require_command trivy
 prepare_reports_directory "$ROOT"
-trivy fs --scanners vuln --severity HIGH,CRITICAL --exit-code 1 --format json --output "$ROOT/.ci/reports/trivy-sca.json" "$ROOT"
+trivy fs \
+    --scanners vuln \
+    --severity HIGH,CRITICAL \
+    --exit-code 1 \
+    --format json \
+    --skip-dirs "$ROOT/.worktrees" \
+    --skip-dirs "$ROOT/.superpowers" \
+    --output "$ROOT/.ci/reports/trivy-sca.json" \
+    "$ROOT"
 pass 'Trivy software composition analysis passed.'

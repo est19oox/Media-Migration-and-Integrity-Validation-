@@ -98,6 +98,8 @@ Assert-FileContains 'scripts/ci/run-sca.sh' @(
     '--severity HIGH,CRITICAL',
     '--exit-code 1',
     '--format json',
+    '--skip-dirs "\$ROOT/\.worktrees"',
+    '--skip-dirs "\$ROOT/\.superpowers"',
     'prepare_reports_directory',
     'trivy-sca\.json'
 )
