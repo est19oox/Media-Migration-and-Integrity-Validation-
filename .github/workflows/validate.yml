@@ -1,0 +1,39 @@
+name: Validate without deployment
+on:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: maven
+      - uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: 1.13.3
+      - name: Build and test
+        run: |
+          mvn -B clean verify
+          mvn -B -f services/transfer-service/pom.xml clean verify
+      - name: Terraform validation
+        run: |
+          terraform -chdir=infrastructure fmt -check -recursive
+          terraform -chdir=infrastructure/bootstrap init -backend=false -input=false
+          terraform -chdir=infrastructure/bootstrap validate
+          terraform -chdir=infrastructure/terraform init -backend=false -input=false
+          terraform -chdir=infrastructure/terraform validate
+      - name: Ansible validation
+        working-directory: infrastructure/ansible
+        run: |
+          python -m pip install ansible boto3 botocore
+          ansible-galaxy collection install -r requirements.yml
+          ansible-playbook -i inventory/ci.ini playbook.yml --syntax-check
+          ansible-playbook -i inventory/ci.ini rollback.yml --syntax-check
+      - name: Docker build
+        run: docker build -t mmiv:validation services/transfer-service

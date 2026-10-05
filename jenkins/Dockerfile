@@ -9,6 +9,8 @@ COPY --from=application-jdk /opt/java/openjdk /opt/jdk-25
 ARG SEMGREP_VERSION=1.138.0
 ARG CHECKOV_VERSION=3.2.489
 ARG TRIVY_VERSION=0.74.0
+ARG TRIVY_AMD64_SHA256=cf1e32ec8d4d8823e023096a28cadb14f5b5123ce03f201fb633c5b76aa712dd
+ARG TRIVY_ARM64_SHA256=14fae2604eab589fd544224ef56b8b8a44266872c43b259bd36cfde81428acc8
 
 RUN apt-get update \
     && apt-get install --yes --no-install-recommends \
@@ -33,12 +35,19 @@ RUN apt-get update \
     && printf '%s\n' \
         "deb [signed-by=/etc/apt/keyrings/hashicorp.asc] https://apt.releases.hashicorp.com $VERSION_CODENAME main" \
         > /etc/apt/sources.list.d/hashicorp.list \
-    && curl -fsSL https://aquasecurity.github.io/trivy-repo/deb/public.key -o /etc/apt/keyrings/trivy.asc \
-    && printf '%s\n' \
-        "deb [signed-by=/etc/apt/keyrings/trivy.asc] https://aquasecurity.github.io/trivy-repo/deb generic main" \
-        > /etc/apt/sources.list.d/trivy.list \
     && apt-get update \
-    && apt-get install --yes --no-install-recommends docker-ce-cli terraform "trivy=${TRIVY_VERSION}" \
+    && apt-get install --yes --no-install-recommends docker-ce-cli terraform \
+    && case "$(dpkg --print-architecture)" in \
+        amd64) TRIVY_RELEASE_ARCH=64bit; TRIVY_SHA256="${TRIVY_AMD64_SHA256}" ;; \
+        arm64) TRIVY_RELEASE_ARCH=ARM64; TRIVY_SHA256="${TRIVY_ARM64_SHA256}" ;; \
+        *) echo "Unsupported architecture for Trivy: $(dpkg --print-architecture)" >&2; exit 1 ;; \
+       esac \
+    && TRIVY_PACKAGE="trivy_${TRIVY_VERSION}_Linux-${TRIVY_RELEASE_ARCH}.deb" \
+    && curl -fsSLo "/tmp/${TRIVY_PACKAGE}" \
+        "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/${TRIVY_PACKAGE}" \
+    && echo "${TRIVY_SHA256}  /tmp/${TRIVY_PACKAGE}" | sha256sum --check --strict \
+    && apt-get install --yes --no-install-recommends "/tmp/${TRIVY_PACKAGE}" \
+    && rm -f "/tmp/${TRIVY_PACKAGE}" \
     && python3 -m venv /opt/ci-tools \
     && /opt/ci-tools/bin/pip install --no-cache-dir \
         "semgrep==${SEMGREP_VERSION}" \

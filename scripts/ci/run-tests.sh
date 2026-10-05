@@ -15,11 +15,11 @@ elif [ -f "$ROOT/package.json" ]; then
     (cd "$ROOT" && npm test)
 elif [ -f "$ROOT/pom.xml" ]; then
     require_command mvn
-    JAVA_HOME=/opt/jdk-25
+    JAVA_HOME=${JAVA_HOME:-/opt/jdk-25}
     export JAVA_HOME
     PATH="$JAVA_HOME/bin:$PATH"
     export PATH
-    (cd "$ROOT" && mvn --batch-mode test)
+    (cd "$ROOT" && mvn --batch-mode clean verify)
 
     REPORT_DIR="$ROOT/target/surefire-reports"
     total_tests=0
@@ -83,4 +83,7 @@ else
     exit 0
 fi
 
-pass 'Application unit tests passed.'
+if [ -f "$ROOT/services/transfer-service/pom.xml" ]; then
+    (cd "$ROOT/services/transfer-service" && mvn --batch-mode clean verify)
+fi
+pass 'Application unit tests passed.' 
