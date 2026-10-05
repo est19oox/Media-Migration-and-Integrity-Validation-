@@ -5,6 +5,10 @@
 resource "aws_s3_bucket" "landing" {
   bucket = var.bucket_name
 
+  #checkov:skip=CKV_AWS_18:Central S3 access logging is deferred until the shared audit-log bucket is provisioned.
+  #checkov:skip=CKV_AWS_144:This development module is intentionally single-region; production requires replication.
+  #checkov:skip=CKV2_AWS_62:Event notifications will be added with the queue-backed migration workflow.
+
   tags = {
     Name        = var.bucket_name
     Project     = "Media-Migration"
@@ -25,6 +29,25 @@ resource "aws_s3_bucket_versioning" "landing" {
   }
 }
 
+resource "aws_s3_bucket_lifecycle_configuration" "landing" {
+  bucket = aws_s3_bucket.landing.id
+
+  rule {
+    id     = "expire-old-media-versions"
+    status = "Enabled"
+
+    filter {}
+
+    abort_incomplete_multipart_upload {
+      days_after_initiation = 7
+    }
+
+    noncurrent_version_expiration {
+      noncurrent_days = 30
+    }
+  }
+}
+
 
 # ============================================================
 # SERVER-SIDE ENCRYPTION
@@ -35,7 +58,7 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "landing" {
 
   rule {
     apply_server_side_encryption_by_default {
-      sse_algorithm = "AES256"
+      sse_algorithm = "aws:kms"
     }
   }
 }
