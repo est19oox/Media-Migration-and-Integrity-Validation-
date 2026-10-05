@@ -189,32 +189,125 @@ resource "aws_iam_group_policy_attachment" "ecr_read" {
 # ZHAO YOUBO - PROJECT ADMIN ACCESS
 # ============================================================
 
-# Full access to Amazon ECR.
 resource "aws_iam_user_policy_attachment" "zhao_ecr_full_access" {
   user       = aws_iam_user.users["mm-dev-zhao-youbo"].name
   policy_arn = "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryFullAccess"
 }
 
-# Full access to Amazon EC2.
 resource "aws_iam_user_policy_attachment" "zhao_ec2_full_access" {
   user       = aws_iam_user.users["mm-dev-zhao-youbo"].name
   policy_arn = "arn:aws:iam::aws:policy/AmazonEC2FullAccess"
 }
 
-# Full access to IAM.
 resource "aws_iam_user_policy_attachment" "zhao_iam_full_access" {
   user       = aws_iam_user.users["mm-dev-zhao-youbo"].name
   policy_arn = "arn:aws:iam::aws:policy/IAMFullAccess"
 }
 
-# Full access to Amazon VPC.
 resource "aws_iam_user_policy_attachment" "zhao_vpc_full_access" {
   user       = aws_iam_user.users["mm-dev-zhao-youbo"].name
   policy_arn = "arn:aws:iam::aws:policy/AmazonVPCFullAccess"
 }
 
-# Full access to Amazon S3.
 resource "aws_iam_user_policy_attachment" "zhao_s3_full_access" {
   user       = aws_iam_user.users["mm-dev-zhao-youbo"].name
   policy_arn = "arn:aws:iam::aws:policy/AmazonS3FullAccess"
+}
+
+
+# ============================================================
+# WANG YUTONG - PROJECT ADMIN ACCESS
+# ============================================================
+
+resource "aws_iam_user_policy_attachment" "wang_yutong_ecr_full_access" {
+  user       = aws_iam_user.users["mm-dev-wang-yutong"].name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryFullAccess"
+}
+
+resource "aws_iam_user_policy_attachment" "wang_yutong_ec2_full_access" {
+  user       = aws_iam_user.users["mm-dev-wang-yutong"].name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonEC2FullAccess"
+}
+
+resource "aws_iam_user_policy_attachment" "wang_yutong_iam_full_access" {
+  user       = aws_iam_user.users["mm-dev-wang-yutong"].name
+  policy_arn = "arn:aws:iam::aws:policy/IAMFullAccess"
+}
+
+resource "aws_iam_user_policy_attachment" "wang_yutong_vpc_full_access" {
+  user       = aws_iam_user.users["mm-dev-wang-yutong"].name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonVPCFullAccess"
+}
+
+resource "aws_iam_user_policy_attachment" "wang_yutong_s3_full_access" {
+  user       = aws_iam_user.users["mm-dev-wang-yutong"].name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonS3FullAccess"
+}
+
+
+# ============================================================
+# WANG YUTONG - SSM DEPLOYMENT ACCESS
+# ============================================================
+
+resource "aws_iam_user_policy" "wang_yutong_ssm_access" {
+  name = "media-migration-${var.environment}-wang-yutong-ssm"
+  user = aws_iam_user.users["mm-dev-wang-yutong"].name
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+
+    Statement = [
+      {
+        Sid    = "DiscoverDeploymentResources"
+        Effect = "Allow"
+
+        Action = [
+          "ec2:DescribeInstances",
+          "s3:ListAllMyBuckets"
+        ]
+
+        Resource = "*"
+      },
+
+      {
+        Sid    = "SendDeploymentCommand"
+        Effect = "Allow"
+
+        Action = [
+          "ssm:SendCommand"
+        ]
+
+        Resource = [
+          "arn:aws:ssm:${var.aws_region}::document/AWS-RunShellScript",
+          "arn:aws:ec2:${var.aws_region}:${var.aws_account_id}:instance/*"
+        ]
+      },
+
+      {
+        Sid    = "ReadDeploymentCommandResult"
+        Effect = "Allow"
+
+        Action = [
+          "ssm:StartSession",
+          "ssm:ResumeSession",
+          "ssm:TerminateSession",
+          "ssm:DescribeSessions",
+          "ssm:GetConnectionStatus",
+          "ssm:GetCommandInvocation",
+          "ssm:ListCommandInvocations"
+        ]
+
+        Resource = "*"
+      }
+    ]
+  })
+}
+
+# ============================================================
+# WANG YUTONG - PROJECT ADMIN ACCESS
+# ============================================================
+# Full access to AWS CloudShell.
+resource "aws_iam_user_policy_attachment" "wang_yutong_cloudshell_full_access" {
+  user       = aws_iam_user.users["mm-dev-wang-yutong"].name
+  policy_arn = "arn:aws:iam::aws:policy/AWSCloudShellFullAccess"
 }

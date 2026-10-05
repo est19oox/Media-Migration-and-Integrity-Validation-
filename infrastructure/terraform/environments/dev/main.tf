@@ -44,20 +44,28 @@ module "s3" {
 
 
 # ============================================================
-# IAM
+# ECR REPOSITORY
 # ============================================================
 
 data "aws_ecr_repository" "mmiv" {
   name = "mmiv"
 }
 
+
+# ============================================================
+# IAM
+# ============================================================
+
 module "iam" {
   source = "../../modules/iam"
 
   csv_file = "../../../../config/iam_users.csv"
 
-  bucket_arn  = module.s3.bucket_arn
   environment = "dev"
 
+  bucket_arn         = module.s3.bucket_arn
   ecr_repository_arn = data.aws_ecr_repository.mmiv.arn
+
+  aws_region     = "ap-southeast-1"
+  aws_account_id = "275069781906"
 }

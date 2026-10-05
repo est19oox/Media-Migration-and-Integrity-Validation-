@@ -18,3 +18,14 @@ variable "ecr_repository_arn" {
   description = "ARN of the MMIV ECR repository"
   type        = string
 }
+
+variable "aws_region" {
+  description = "AWS region used by MMIV"
+  type        = string
+  default     = "ap-southeast-1"
+}
+
+variable "aws_account_id" {
+  description = "AWS account ID used to scope IAM resources"
+  type        = string
+}
