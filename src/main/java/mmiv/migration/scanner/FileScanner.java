@@ -34,7 +34,7 @@ public class FileScanner {
 
         String extension = fileName
                 .substring(dotIndex + 1)
-                .toLowerCase();
+                .toLowerCase(java.util.Locale.ROOT);
 
         return supportedTypes.contains(extension);
     }

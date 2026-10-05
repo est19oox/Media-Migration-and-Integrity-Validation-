@@ -1,6 +1,6 @@
 # Creates a private S3 bucket for media migration files.
 resource "aws_s3_bucket" "migration" {
-  bucket_prefix = "mmiv-dev-"
+  bucket = "media-migration-dev-landing"
 
 
   tags = {
@@ -58,40 +58,17 @@ resource "aws_ecr_repository" "mmiv" {
 # Removes old ECR images and keeps only the 5 most recent tagged images.
 resource "aws_ecr_lifecycle_policy" "mmiv" {
   repository = aws_ecr_repository.mmiv.name
-
   policy = jsonencode({
-    rules = [
-      {
-        rulePriority = 1
-        description  = "Remove untagged images after 1 day"
-
-        selection = {
-          tagStatus   = "untagged"
-          countType   = "sinceImagePushed"
-          countUnit   = "days"
-          countNumber = 1
-        }
-
-        action = {
-          type = "expire"
-        }
-      },
-      {
-        rulePriority = 2
-        description  = "Keep only the 5 most recent tagged images"
-
-        selection = {
-          tagStatus      = "tagged"
-          tagPatternList = ["*"]
-          countType      = "imageCountMoreThan"
-          countNumber    = 5
-        }
-
-        action = {
-          type = "expire"
-        }
-      }
-    ]
+    rules = concat([
+      { rulePriority = 1, description = "Expire untagged images after one day",
+        selection    = { tagStatus = "untagged", countType = "sinceImagePushed", countUnit = "days", countNumber = 1 },
+      action = { type = "expire" } }
+      ], [for index, service in ["transfer-service", "integrity-service", "user-access-service", "reporting-service", "discovery-service"] : {
+        rulePriority = index + 2
+        description  = "Keep 20 images for ${service}"
+        selection    = { tagStatus = "tagged", tagPrefixList = ["${service}-"], countType = "imageCountMoreThan", countNumber = 20 }
+        action       = { type = "expire" }
+    }])
   })
 }
 
@@ -156,7 +133,9 @@ resource "aws_iam_role_policy" "mmiv_ec2_s3" {
       {
         Effect = "Allow"
         Action = [
-          "s3:GetObject"
+          "s3:GetObject",
+          "s3:PutObject",
+          "s3:DeleteObject"
         ]
         Resource = "${aws_s3_bucket.migration.arn}/*"
       }
@@ -296,6 +275,12 @@ resource "aws_instance" "mmiv" {
   ]
 
   iam_instance_profile = aws_iam_instance_profile.mmiv_ec2.name
+
+  metadata_options {
+    http_endpoint               = "enabled"
+    http_tokens                 = "required"
+    http_put_response_hop_limit = 2
+  }
 
   user_data = <<-EOF
     #!/bin/bash

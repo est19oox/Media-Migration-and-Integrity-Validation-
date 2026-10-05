@@ -15,7 +15,8 @@ fi
 require_command terraform
 terraform -chdir="$ROOT/infrastructure" fmt -check -recursive
 
-find "$ROOT/infrastructure" -type f -name '*.tf' -exec dirname {} \; | sort -u | while IFS= read -r terraform_root; do
+for terraform_root in "$ROOT/infrastructure/bootstrap" "$ROOT/infrastructure/terraform"; do
+    [ -d "$terraform_root" ] || continue
     terraform -chdir="$terraform_root" init -backend=false -input=false -no-color
     terraform -chdir="$terraform_root" validate -no-color
 done

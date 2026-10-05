@@ -1,0 +1,10 @@
+---
+microservice_name: "{{ lookup('env', 'MMIV_SERVICE_NAME') | default('transfer-service', true) }}"
+microservice_image: "{{ lookup('env', 'MMIV_SERVICE_IMAGE') | default('mmiv:transfer-service', true) }}"
+microservice_container_port: "{{ lookup('env', 'MMIV_SERVICE_CONTAINER_PORT') | default(8081, true) }}"
+microservice_host_port: "{{ lookup('env', 'MMIV_SERVICE_HOST_PORT') | default(8081, true) }}"
+microservice_health_path: "{{ lookup('env', 'MMIV_SERVICE_HEALTH_PATH') | default('/actuator/health', true) }}"
+microservice_bucket: "{{ lookup('env', 'MMIV_BUCKET_NAME') | default('media-migration-dev-landing', true) }}"
+aws_region: "{{ lookup('env', 'AWS_REGION') | default('ap-southeast-1', true) }}"
+ecr_registry: "{{ lookup('env', 'ECR_REGISTRY') | default('', true) }}"
+microservice_previous_image_file: "/var/lib/mmiv/{{ microservice_name }}.previous-image"

@@ -104,7 +104,7 @@ resource "aws_iam_role_policy_attachment" "github_terraform_s3" {
 # GitHub Actions - Application Role
 # ------------------------------------------------------------
 
-# Role used by the Java CI/CD workflow.
+# Role used by the application deployment workflow.
 resource "aws_iam_role" "github_app" {
   name = "GitHubActions-MMIV-App"
 
@@ -151,6 +151,36 @@ resource "aws_iam_role_policy_attachment" "github_app_ecr" {
 
 # Allows the application workflow to discover deployment resources
 # and deploy the application to EC2 through Systems Manager.
+resource "aws_iam_role_policy" "github_app_s3_deploy" {
+  name = "MMIVAppS3DeployPolicy"
+  role = aws_iam_role.github_app.name
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "s3:GetBucketLocation",
+          "s3:ListBucket"
+        ]
+        Resource = "arn:aws:s3:::media-migration-dev-landing"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "s3:GetObject",
+          "s3:PutObject",
+          "s3:DeleteObject"
+        ]
+        Resource = "arn:aws:s3:::media-migration-dev-landing/*"
+      }
+    ]
+  })
+}
+
+
 resource "aws_iam_role_policy" "github_app_ssm_deploy" {
   name = "MMIVAppSSMDeployPolicy"
   role = aws_iam_role.github_app.name
@@ -188,6 +218,11 @@ resource "aws_iam_role_policy" "github_app_ssm_deploy" {
         Effect = "Allow"
 
         Action = [
+          "ssm:StartSession",
+          "ssm:ResumeSession",
+          "ssm:TerminateSession",
+          "ssm:DescribeSessions",
+          "ssm:GetConnectionStatus",
           "ssm:GetCommandInvocation",
           "ssm:ListCommandInvocations"
         ]

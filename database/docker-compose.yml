@@ -1,0 +1,14 @@
+services:
+  oracle:
+    image: container-registry.oracle.com/database/free:latest
+    container_name: media-migration-oracle
+    ports:
+      - "1521:1521"
+    environment:
+      ORACLE_PWD: ${ORACLE_PWD:?Set ORACLE_PWD before starting the database}
+    volumes:
+      - media-migration-oracle-data:/opt/oracle/oradata
+    restart: unless-stopped
+
+volumes:
+  media-migration-oracle-data:
