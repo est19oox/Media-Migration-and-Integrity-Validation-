@@ -481,7 +481,7 @@ jobs:
           SMOKE_PORT: ${{ matrix.service.port }}
         run: bash ./scripts/cd/smoke-test-service.sh
 
-      - name: Run DAST on deployed EC2 service
+      - name: Run ZAP on runner against deployed EC2 through SSM
         timeout-minutes: 30
         env:
           INSTANCE_ID: ${{ steps.deployment.outputs.instance_id }}

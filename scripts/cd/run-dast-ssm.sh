@@ -1,209 +1,142 @@
 #!/usr/bin/env bash
+# ZAP runs on the GitHub runner; only HTTP traffic traverses SSM to EC2.
 set -euo pipefail
 export AWS_PAGER=""
-
 INSTANCE_ID="${INSTANCE_ID:?INSTANCE_ID is required}"
 REGION="${AWS_REGION:-ap-southeast-1}"
 PORT="${DAST_PORT:?DAST_PORT is required}"
+LOCAL_PORT="${DAST_LOCAL_PORT:-18081}"
 PATH_SUFFIX="${DAST_PATH:-/}"
-[[ "$PORT" =~ ^[0-9]+$ ]] && ((10#$PORT >= 1 && 10#$PORT <= 65535)) || {
-  echo '::error::DAST_PORT must be a port between 1 and 65535.'; exit 1;
-}
+ZAP_IMAGE="${ZAP_IMAGE:-ghcr.io/zaproxy/zaproxy@sha256:781a2bdaea47324e7bab583e2263f21d257b0aee61ed51521a5be45f5f5081ef}"
+for VALUE in "$PORT" "$LOCAL_PORT"; do
+  [[ "$VALUE" =~ ^[0-9]+$ ]] && ((10#$VALUE >= 1 && 10#$VALUE <= 65535)) || {
+    echo '::error::DAST ports must be between 1 and 65535.'; exit 1;
+  }
+done
 [[ "$PATH_SUFFIX" == /* ]] || { echo '::error::DAST_PATH must start with /.'; exit 1; }
-
+for COMMAND in aws session-manager-plugin docker curl python3 timeout setsid; do
+  command -v "$COMMAND" >/dev/null || { echo "::error::Missing command: $COMMAND"; exit 1; }
+done
+REPORT_DIR="$PWD/.ci/reports/ec2-dast"
+mkdir -p "$REPORT_DIR"
+TEMP_DIR=$(mktemp -d)
+TUNNEL_PID=
+SCAN_PID=
+ZAP_CONTAINER="mmiv-ec2-dast-$$"
+TOTAL_STARTED=$SECONDS
 aws_ssm() {
   aws ssm "$@" --region "$REGION" --cli-connect-timeout 10 --cli-read-timeout 20
 }
-
-CONNECTED=false
-for attempt in $(seq 1 12); do
-  CONNECTION=$(aws_ssm get-connection-status --target "$INSTANCE_ID" --query Status --output text)
-  echo "SSM connectivity for $INSTANCE_ID: $CONNECTION (attempt $attempt/12)"
-  if [[ "${CONNECTION,,}" == connected ]]; then CONNECTED=true; break; fi
-  sleep 5
-done
-if [[ "$CONNECTED" != true ]]; then
-  echo "::error::SSM is not connected to $INSTANCE_ID. DAST was not submitted."
-  exit 1
-fi
-
-TEMP_DIR=$(mktemp -d)
-trap 'rm -rf "$TEMP_DIR"' EXIT
-# Separate commands expose completed stage output without new IAM permissions.
-# SSM invocation stdout/stderr are not a live log stream.
-python3 - "$PORT" "$PATH_SUFFIX" "$TEMP_DIR" <<'PY'
-import json, pathlib, shlex, sys
-url = shlex.quote('http://127.0.0.1:' + sys.argv[1] + sys.argv[2])
-stages = [
-    ('endpoint', 60, '''set -eu
-printf '%s\\n' 'DAST: checking Docker and the deployed endpoint'
-docker version --format '{{.Server.Version}}'
-curl --fail --show-error --max-time 15 TARGET_URL
-printf '\\n%s\\n' 'DAST: endpoint check passed'
-'''),
-    ('pull', 210, '''set -eu
-printf '%s\\n' 'DAST: pulling ZAP (maximum 180 seconds)'
-timeout --kill-after=15s 180s docker pull ghcr.io/zaproxy/zaproxy:stable
-printf '%s\\n' 'DAST: ZAP image ready'
-'''),
-    ('scan', 600, '''set -eu
-ZAP_CONTAINER="mmiv-dast-$$"
-mkdir -p /var/log/mmiv/dast
-chmod 700 /var/log/mmiv/dast
-LOG_DIR=$(mktemp -d /var/log/mmiv/dast/scan-XXXXXXXX)
-START_TIME=$(date -u '+%Y-%m-%d %H:%M:%S UTC')
-collect_diagnostics() {
-  set +e
-  printf '\\nDAST diagnostics saved on EC2: %s\\n' "$LOG_DIR"
-  timeout 10s docker inspect --format '{{json .State}}' "$ZAP_CONTAINER" > "$LOG_DIR/container-state.json" 2>&1
-  timeout 10s docker logs --timestamps --tail 1000 "$ZAP_CONTAINER" > "$LOG_DIR/container.log" 2>&1
-  timeout 10s docker cp "$ZAP_CONTAINER:/home/zap/.ZAP/zap.log" "$LOG_DIR/zap.log" > "$LOG_DIR/copy-log.txt" 2>&1
-  free -h > "$LOG_DIR/memory.txt" 2>&1
-  timeout 10s docker stats --no-stream > "$LOG_DIR/docker-stats.txt" 2>&1
-  timeout 10s journalctl -k --since "$START_TIME" --no-pager > "$LOG_DIR/kernel.log" 2>&1
-  printf '%s\\n' '=== Container state (including OOMKilled) ==='
-  cat "$LOG_DIR/container-state.json"
-  printf '%s\\n' '=== Memory after scan ==='
-  cat "$LOG_DIR/memory.txt" "$LOG_DIR/docker-stats.txt"
-  printf '%s\\n' '=== Recent OOM events ==='
-  grep -Ei 'oom|out of memory|killed process' "$LOG_DIR/kernel.log" || true
-  printf '%s\\n' '=== Scanner output (last 60 lines) ==='
-  tail -n 60 "$LOG_DIR/container.log"
-  printf '%s\\n' '=== ZAP internal startup log (last 60 lines) ==='
-  if [ -s "$LOG_DIR/zap.log" ]; then
-    tail -n 60 "$LOG_DIR/zap.log"
-  else
-    printf '%s\\n' 'ZAP internal log unavailable; it may not have been created.'
-    cat "$LOG_DIR/copy-log.txt"
-  fi
-}
 cleanup() {
-  collect_diagnostics
-  timeout 15s docker rm -f "$ZAP_CONTAINER" >/dev/null 2>&1 || true
+  EXIT_CODE=$?
+  trap - EXIT
+  set +e
+  timeout 15s docker rm -f -v "$ZAP_CONTAINER" >/dev/null 2>&1
+  if [[ -n "$SCAN_PID" ]]; then kill "$SCAN_PID" 2>/dev/null; wait "$SCAN_PID" 2>/dev/null; fi
+  SESSION_ID=$(sed -n 's/.*Starting session with SessionId: \([^[:space:]]*\).*/\1/p' "$REPORT_DIR/tunnel.log" 2>/dev/null | head -n 1)
+  if [[ -n "$SESSION_ID" ]]; then
+    aws_ssm terminate-session --session-id "$SESSION_ID" >/dev/null 2>&1 || echo "Warning: could not explicitly terminate SSM session $SESSION_ID."
+  fi
+  if [[ -n "$TUNNEL_PID" ]]; then
+    kill -TERM -- "-$TUNNEL_PID" 2>/dev/null
+    wait "$TUNNEL_PID" 2>/dev/null
+  fi
+  rm -rf "$TEMP_DIR"
+  exit "$EXIT_CODE"
 }
 trap cleanup EXIT
-trap 'exit 143' HUP INT TERM
-printf '%s\\n' '=== Memory before ZAP startup ==='
-free -h
-printf '%s\\n' 'DAST: ZAP startup, one-minute spider, then passive scanning'
-printf '%s\\n' 'DAST: scanner wait limit 360 seconds; container retained until diagnostics are collected'
-timeout --kill-after=5s 30s docker create --name "$ZAP_CONTAINER" --network host -e PYTHONUNBUFFERED=1 ghcr.io/zaproxy/zaproxy:stable zap-baseline.py -t TARGET_URL -m 1 -T 4 -d -l WARN -I
-timeout --kill-after=5s 30s docker start "$ZAP_CONTAINER"
-set +e
-timeout --kill-after=15s 360s docker wait "$ZAP_CONTAINER" > "$LOG_DIR/wait-result.txt" 2> "$LOG_DIR/wait-error.txt"
-WAIT_CODE=$?
-if [ "$WAIT_CODE" -eq 0 ]; then
-  SCAN_CODE=$(cat "$LOG_DIR/wait-result.txt")
-  case "$SCAN_CODE" in
-    ''|*[!0-9]*) SCAN_CODE=1 ;;
-  esac
-else
-  SCAN_CODE=$WAIT_CODE
-  printf 'DAST: waiting for scanner ended with code %s; stopping scanner.\\n' "$WAIT_CODE"
-  timeout 15s docker stop --time 5 "$ZAP_CONTAINER" || true
-fi
-printf 'DAST scanner exit code: %s\\n' "$SCAN_CODE"
-# Cleanup diagnostics must not hide the scanner failure.
-exit "$SCAN_CODE"
-'''),
-]
-for name, seconds, script in stages:
-    path = pathlib.Path(sys.argv[3]) / (name + '.json')
-    path.write_text(json.dumps({'commands': [script.replace('TARGET_URL', url)],
-                                'executionTimeout': [str(seconds)]}))
-PY
+trap 'exit 130' INT
+trap 'exit 143' TERM HUP
 
-echo "DAST target: $INSTANCE_ID; URL: http://127.0.0.1:$PORT$PATH_SUFFIX"
-echo 'Detailed scanner logs appear when each SSM stage completes.'
-TOTAL_STARTED=$SECONDS
-for STAGE in endpoint pull scan; do
-  case "$STAGE" in
-    endpoint) LABEL='1/3 endpoint check'; EXECUTION_TIMEOUT=60 ;;
-    pull) LABEL='2/3 ZAP image download'; EXECUTION_TIMEOUT=210 ;;
-    scan) LABEL='3/3 ZAP baseline scan'; EXECUTION_TIMEOUT=600 ;;
-  esac
-  echo "::group::DAST $LABEL"
-  COMMAND_ID=$(aws_ssm send-command \
-    --instance-ids "$INSTANCE_ID" \
-    --document-name AWS-RunShellScript \
-    --comment "MMIV DAST $STAGE port $PORT" \
-    --timeout-seconds 120 \
-    --parameters "file://$TEMP_DIR/$STAGE.json" \
-    --query Command.CommandId --output text)
-  echo "DAST SSM command ID: $COMMAND_ID"
-  echo "AWS console: https://$REGION.console.aws.amazon.com/systems-manager/run-command/$COMMAND_ID?region=$REGION"
-  echo "Delivery timeout: 120s; execution timeout: ${EXECUTION_TIMEOUT}s"
-  STARTED=$SECONDS
-  # Allow delivery, execution and API/reporting margin; avoid the old 720s cutoff.
-  DEADLINE=$((STARTED + 120 + EXECUTION_TIMEOUT + 120))
-  MISSING_ATTEMPTS=0
-  TERMINAL=false
-  STATE=unavailable
-  while ((SECONDS < DEADLINE)); do
-    if ! aws_ssm get-command-invocation --command-id "$COMMAND_ID" \
-      --instance-id "$INSTANCE_ID" --output json \
-      > "$TEMP_DIR/result.json" 2> "$TEMP_DIR/error.txt"; then
-      if grep -q 'InvocationDoesNotExist' "$TEMP_DIR/error.txt" && ((MISSING_ATTEMPTS < 12)); then
-        MISSING_ATTEMPTS=$((MISSING_ATTEMPTS + 1))
-        echo "[$LABEL] Waiting for SSM invocation ($MISSING_ATTEMPTS/12); elapsed $((SECONDS - STARTED))s."
-        sleep 5
-        continue
-      fi
-      cat "$TEMP_DIR/error.txt" >&2
-      echo "::error::Cannot retrieve DAST command $COMMAND_ID. Check SSM Run Command."
-      exit 1
-    fi
-    STATE=$(python3 - "$TEMP_DIR/result.json" <<'PY'
+echo "DAST target: EC2 $INSTANCE_ID port $PORT$PATH_SUFFIX"
+echo "Scanner location: GitHub runner; tunnel endpoint: 127.0.0.1:$LOCAL_PORT"
+echo '[1/3] Checking SSM connectivity and pulling ZAP on runner'
+CONNECTION=$(aws_ssm get-connection-status --target "$INSTANCE_ID" --query Status --output text)
+[[ "${CONNECTION,,}" == connected ]] || { echo "::error::SSM target is not connected: $CONNECTION"; exit 1; }
+timeout --kill-after=15s 300s docker pull "$ZAP_IMAGE"
+
+# Fail rather than accidentally scan a pre-existing listener on the local port.
+python3 - "$LOCAL_PORT" <<'PY'
+import socket, sys
+with socket.socket() as s:
+    s.bind(('127.0.0.1', int(sys.argv[1])))
+PY
+PARAMETERS=$(python3 - "$PORT" "$LOCAL_PORT" <<'PY'
 import json, sys
-r = json.load(open(sys.argv[1]))
-print(r.get('Status', 'Unknown') + '|' + r.get('StatusDetails', 'Unknown'))
+print(json.dumps({'portNumber': [sys.argv[1]], 'localPortNumber': [sys.argv[2]]}))
 PY
 )
-    STATUS="${STATE%%|*}"
-    DETAILS="${STATE#*|}"
-    printf '[%s] elapsed %ss; total %ss; status=%s; details=%s\n' \
-      "$LABEL" "$((SECONDS - STARTED))" "$((SECONDS - TOTAL_STARTED))" "$STATUS" "$DETAILS"
-    python3 - "$TEMP_DIR/result.json" <<'PY'
-import json, sys
-r = json.load(open(sys.argv[1]))
-print('SSM execution start: ' + (r.get('ExecutionStartDateTime') or 'not reported yet')
-      + '; execution elapsed: ' + (r.get('ExecutionElapsedTime') or 'not reported yet')
-      + '; response code: ' + str(r.get('ResponseCode', -1)))
-if not r.get('ExecutionStartDateTime'):
-    print('Progress: execution has not been reported yet; waiting for SSM delivery/start.')
-else:
-    print('Progress: execution start reported; waiting for stage completion and its output.')
-print('Output currently available: '
-      + str(len(r.get('StandardOutputContent', ''))) + ' stdout characters; '
-      + str(len(r.get('StandardErrorContent', ''))) + ' stderr characters.')
-PY
-    case "$DETAILS" in
-      Undeliverable|Terminated|DeliveryTimedOut|ExecutionTimedOut|'Delivery Timed Out'|'Execution Timed Out') TERMINAL=true ;;
-      *)
-        case "$STATUS" in
-          Pending|InProgress|Delayed|Cancelling) TERMINAL=false ;;
-          *) TERMINAL=true ;;
-        esac ;;
-    esac
-    if [[ "$TERMINAL" == true ]]; then break; fi
-    sleep 10
-  done
-  if [[ "$TERMINAL" != true ]]; then
-    echo "::error::Stopped waiting for DAST $STAGE command $COMMAND_ID. Last status: $STATE."
-    echo 'The remote command may still be running. Check SSM before rerunning.'
-    if [[ -s "$TEMP_DIR/result.json" ]]; then cat "$TEMP_DIR/result.json"; fi
+echo '[2/3] Opening SSM port-forwarding tunnel to deployed service'
+: > "$REPORT_DIR/tunnel.log"
+setsid aws ssm start-session --region "$REGION" --target "$INSTANCE_ID" \
+  --document-name AWS-StartPortForwardingSession --parameters "$PARAMETERS" \
+  --cli-connect-timeout 10 --cli-read-timeout 20 \
+  > "$REPORT_DIR/tunnel.log" 2>&1 < /dev/null &
+TUNNEL_PID=$!
+TARGET_URL="http://127.0.0.1:$LOCAL_PORT$PATH_SUFFIX"
+READY=false
+for ATTEMPT in $(seq 1 30); do
+  if ! kill -0 "$TUNNEL_PID" 2>/dev/null; then
+    cat "$REPORT_DIR/tunnel.log"
+    echo '::error::SSM tunnel exited. Check StartSession document permissions and the Session Manager plugin.'
     exit 1
   fi
-  python3 - "$TEMP_DIR/result.json" <<'PY'
-import json, sys
-r = json.load(open(sys.argv[1]))
-for field in ['Status', 'StatusDetails', 'ResponseCode', 'ExecutionStartDateTime',
-              'ExecutionElapsedTime', 'ExecutionEndDateTime',
-              'StandardOutputContent', 'StandardErrorContent']:
-    print(f"{field}:\n{r.get(field, '')}")
-sys.exit(0 if r.get('Status') == 'Success' and r.get('ResponseCode') == 0 else 1)
-PY
-  echo "DAST $LABEL completed in $((SECONDS - STARTED))s."
-  echo '::endgroup::'
+  if curl --fail --silent --show-error --max-time 3 "$TARGET_URL" \
+    > "$REPORT_DIR/endpoint-response.txt" 2> "$TEMP_DIR/curl-error.txt"; then
+    READY=true; break
+  fi
+  echo "Tunnel/endpoint readiness: attempt $ATTEMPT/30; total elapsed $((SECONDS - TOTAL_STARTED))s"
+  sleep 2
 done
-echo "DAST passed all three stages in $((SECONDS - TOTAL_STARTED))s."
+cat "$REPORT_DIR/tunnel.log"
+if [[ "$READY" != true ]]; then
+  cat "$TEMP_DIR/curl-error.txt" >&2
+  echo '::error::The deployed endpoint could not be reached through the SSM tunnel.'
+  exit 1
+fi
+echo "Deployed endpoint reachable: $TARGET_URL"
+
+echo '[3/3] Running ZAP on GitHub runner; scanner output streams below'
+docker create --user 0:0 --name "$ZAP_CONTAINER" --network host \
+  --volume /zap/wrk -e PYTHONUNBUFFERED=1 "$ZAP_IMAGE" \
+  zap-baseline.py -t "$TARGET_URL" -m 1 -T 5 -d -l WARN -I \
+  -J zap-report.json -r zap-report.html > "$REPORT_DIR/container-id.txt"
+SCAN_STARTED=$SECONDS
+# Save the scanner status separately so tee cannot hide a failure.
+(
+  set +e
+  timeout --kill-after=15s 600s docker start --attach "$ZAP_CONTAINER" 2>&1 | tee "$REPORT_DIR/zap.log"
+  PIPE_CODES=("${PIPESTATUS[@]}")
+  SCAN_CODE=${PIPE_CODES[0]}
+  if ((PIPE_CODES[1] != 0)); then SCAN_CODE=1; fi
+  printf '%s\n' "$SCAN_CODE" > "$TEMP_DIR/scan-code"
+) &
+SCAN_PID=$!
+while kill -0 "$SCAN_PID" 2>/dev/null; do
+  if ! kill -0 "$TUNNEL_PID" 2>/dev/null; then
+    echo '::error::SSM tunnel closed during the scan.'
+    cat "$REPORT_DIR/tunnel.log"
+    exit 1
+  fi
+  echo "ZAP running on runner: elapsed $((SECONDS - SCAN_STARTED))s; total $((SECONDS - TOTAL_STARTED))s"
+  sleep 10
+done
+wait "$SCAN_PID"
+SCAN_PID=
+SCAN_CODE=$(cat "$TEMP_DIR/scan-code")
+echo "ZAP exit code: $SCAN_CODE"
+# Preserve evidence before container cleanup, including after timeout/failure.
+timeout 15s docker inspect --format '{{json .State}}' "$ZAP_CONTAINER" > "$REPORT_DIR/container-state.json" || true
+timeout 15s docker cp "$ZAP_CONTAINER:/root/.ZAP/zap.log" "$REPORT_DIR/zap-internal.log" 2> "$REPORT_DIR/zap-internal-copy.log" || true
+REPORTS_OK=true
+for NAME in zap-report.json zap-report.html; do
+  timeout 15s docker cp "$ZAP_CONTAINER:/zap/wrk/$NAME" "$REPORT_DIR/$NAME" || REPORTS_OK=false
+done
+if [[ "$SCAN_CODE" != 0 ]]; then
+  echo "::error::ZAP failed with code $SCAN_CODE. Review ec2-dast artifacts."
+  exit "$SCAN_CODE"
+fi
+if [[ "$REPORTS_OK" != true ]]; then
+  echo '::error::ZAP completed without the required HTML/JSON reports.'; exit 1
+fi
+echo "DAST passed against deployed EC2 service in $((SECONDS - TOTAL_STARTED))s."
