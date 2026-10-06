@@ -150,9 +150,10 @@ assert_fails "zero application tests" env PATH="$FIXTURE_ROOT/bin:$PATH" \
 
 grep -qx 'ARGS=--batch-mode clean verify' "$MMIV_MAVEN_LOG"
 
-mkdir -p "$FIXTURE_ROOT/services/test-service/src/main/java" "$FIXTURE_ROOT/security/semgrep"
+mkdir -p "$FIXTURE_ROOT/services/test-service/src/main/java" "$FIXTURE_ROOT/security/semgrep" "$FIXTURE_ROOT/security/trivy"
 printf 'class Example {}\n' > "$FIXTURE_ROOT/services/test-service/src/main/java/Example.java"
 printf 'rules: []\n' > "$FIXTURE_ROOT/security/semgrep/semgrep.yml"
+printf 'vulnerabilities: []\n' > "$FIXTURE_ROOT/security/trivy/.trivyignore.yaml"
 cat > "$FIXTURE_ROOT/bin/semgrep" <<'EOF'
 #!/usr/bin/env sh
 set -eu
@@ -257,7 +258,7 @@ test -f "$FIXTURE_ROOT/.ci/reports/trivy-sca.json"
 grep -F '"Results":[]' "$FIXTURE_ROOT/.ci/reports/trivy-sca.json"
 
 assert_trivy_sca_invocation() {
-    grep -F -- "fs --scanners vuln --severity HIGH,CRITICAL --exit-code 1 --format json --output $FIXTURE_ROOT/.ci/reports/trivy-sca.json $FIXTURE_ROOT" \
+    grep -F -- "fs --scanners vuln --severity HIGH,CRITICAL --exit-code 1 --format json --skip-dirs $FIXTURE_ROOT/.worktrees --skip-dirs $FIXTURE_ROOT/.superpowers --ignorefile $FIXTURE_ROOT/security/trivy/.trivyignore.yaml --output $FIXTURE_ROOT/.ci/reports/trivy-sca.json $FIXTURE_ROOT" \
         "$MMIV_TRIVY_LOG"
 }
 
@@ -276,6 +277,19 @@ assert_status 2 "Trivy scanner error" env PATH="$FIXTURE_ROOT/bin:$PATH" \
 assert_trivy_sca_invocation
 test -f "$FIXTURE_ROOT/.ci/reports/trivy-sca.json"
 grep -F '"error":"scanner-error"' "$FIXTURE_ROOT/.ci/reports/trivy-sca.json"
+
+printf 'mmiv:test-image\n' > "$FIXTURE_ROOT/.ci/image-ref"
+assert_succeeds "clean Trivy image scan" env PATH="$FIXTURE_ROOT/bin:$PATH" \
+    MMIV_TRIVY_MODE=clean "$ROOT/scripts/ci/scan-image.sh" "$FIXTURE_ROOT"
+test -f "$FIXTURE_ROOT/.ci/reports/trivy-image.json"
+grep -F -- "image --severity HIGH,CRITICAL --exit-code 1 --format json --ignorefile $FIXTURE_ROOT/security/trivy/.trivyignore.yaml --output $FIXTURE_ROOT/.ci/reports/trivy-image.json mmiv:test-image" \
+    "$MMIV_TRIVY_LOG"
+
+rm -f "$MMIV_TRIVY_LOG" "$FIXTURE_ROOT/.ci/reports/trivy-image.json"
+assert_status 1 "Trivy blocking image vulnerability" env PATH="$FIXTURE_ROOT/bin:$PATH" \
+    MMIV_TRIVY_MODE=vulnerable "$ROOT/scripts/ci/scan-image.sh" "$FIXTURE_ROOT"
+test -f "$FIXTURE_ROOT/.ci/reports/trivy-image.json"
+grep -F '"Severity":"HIGH"' "$FIXTURE_ROOT/.ci/reports/trivy-image.json"
 
 printf 'FROM scratch\n' > "$FIXTURE_ROOT/dockerfile"
 FIXTURE_ROOT_PATH=$(CDPATH= cd -- "$FIXTURE_ROOT" && pwd)
@@ -353,26 +367,38 @@ chmod +x "$FIXTURE_ROOT/bin/curl"
 cat > "$FIXTURE_ROOT/bin/docker" <<'EOF'
 #!/usr/bin/env sh
 set -eu
-printf '%s\n' "$*" > "$MMIV_ZAP_DOCKER_LOG"
-reports_dir=''
-for argument in "$@"; do
-    case "$argument" in
-        *:/zap/wrk)
-            reports_dir=${argument%:/zap/wrk}
-            ;;
-    esac
-done
-[ -n "$reports_dir" ] || exit 2
-mkdir -p "$reports_dir"
-printf '<html>fake ZAP report</html>\n' > "$reports_dir/zap-report.html"
-printf '{"site":"fake-zap"}\n' > "$reports_dir/zap-report.json"
-printf 'fake ZAP console output\n'
-case "${MMIV_ZAP_MODE:-clean}" in
-    clean) exit 0 ;;
-    policy-failure) exit 1 ;;
-    execution-error) exit 3 ;;
+printf '%s\n' "$*" >> "$MMIV_ZAP_DOCKER_LOG"
+command=$1
+shift
+case "$command" in
+    create)
+        printf 'fake-zap-container\n'
+        ;;
+    start)
+        printf 'fake ZAP console output\n'
+        case "${MMIV_ZAP_MODE:-clean}" in
+            clean) exit 0 ;;
+            policy-failure) exit 1 ;;
+            warnings) exit 2 ;;
+            execution-error) exit 3 ;;
+            *)
+                printf 'FAIL: unknown fake ZAP mode: %s\n' "$MMIV_ZAP_MODE" >&2
+                exit 2
+                ;;
+        esac
+        ;;
+    cp)
+        source_path=$1
+        destination=$2
+        case "$source_path" in
+            *zap-report.html) printf '<html>fake ZAP report</html>\n' > "$destination" ;;
+            *zap-report.json) printf '{"site":"fake-zap"}\n' > "$destination" ;;
+            *) exit 2 ;;
+        esac
+        ;;
+    rm)
+        ;;
     *)
-        printf 'FAIL: unknown fake ZAP mode: %s\n' "$MMIV_ZAP_MODE" >&2
         exit 2
         ;;
 esac
@@ -402,8 +428,11 @@ grep -Fx -- '--fail --silent --show-error --max-time 10 https://dast.example.tes
 test ! -e "$MMIV_ZAP_DOCKER_LOG"
 
 assert_zap_invocation() {
-    grep -Fx -- "run --rm --network mmiv-ci -v $FIXTURE_ROOT/.ci/reports:/zap/wrk ghcr.io/zaproxy/zaproxy@sha256:781a2bdaea47324e7bab583e2263f21d257b0aee61ed51521a5be45f5f5081ef zap-baseline.py -t https://dast.example.test/health -J zap-report.json -r zap-report.html" \
-        "$MMIV_ZAP_DOCKER_LOG"
+    grep -Fx -- "create --user 0:0 --network mmiv-ci --volume /zap/wrk ghcr.io/zaproxy/zaproxy@sha256:781a2bdaea47324e7bab583e2263f21d257b0aee61ed51521a5be45f5f5081ef zap-baseline.py -t https://dast.example.test/health -J zap-report.json -r zap-report.html" "$MMIV_ZAP_DOCKER_LOG"
+    grep -Fx -- 'start --attach fake-zap-container' "$MMIV_ZAP_DOCKER_LOG"
+    grep -Fx -- "cp fake-zap-container:/zap/wrk/zap-report.json $FIXTURE_ROOT/.ci/reports/zap-report.json" "$MMIV_ZAP_DOCKER_LOG"
+    grep -Fx -- "cp fake-zap-container:/zap/wrk/zap-report.html $FIXTURE_ROOT/.ci/reports/zap-report.html" "$MMIV_ZAP_DOCKER_LOG"
+    grep -Fx -- 'rm -f -v fake-zap-container' "$MMIV_ZAP_DOCKER_LOG"
 }
 
 rm -f "$MMIV_ZAP_CURL_LOG" "$MMIV_ZAP_DOCKER_LOG" "$FIXTURE_ROOT/.ci/reports/zap-report.html" \
@@ -415,6 +444,14 @@ assert_zap_invocation
 test -f "$FIXTURE_ROOT/.ci/reports/zap-report.html"
 test -f "$FIXTURE_ROOT/.ci/reports/zap-report.json"
 test -f "$FIXTURE_ROOT/.ci/reports/zap.log"
+grep -F 'fake ZAP console output' "$FIXTURE_ROOT/.ci/reports/zap.log"
+
+rm -f "$MMIV_ZAP_DOCKER_LOG"
+assert_succeeds "ZAP warnings are reported but non-blocking" env PATH="$FIXTURE_ROOT/bin:$PATH" \
+    MMIV_ZAP_MODE=warnings sh -c 'cd "$1" && exec "$2" "$3"' sh "$FIXTURE_ROOT" "$ROOT/scripts/ci/run-dast.sh" 'https://dast.example.test/health'
+assert_zap_invocation
+test -f "$FIXTURE_ROOT/.ci/reports/zap-report.html"
+test -f "$FIXTURE_ROOT/.ci/reports/zap-report.json"
 grep -F 'fake ZAP console output' "$FIXTURE_ROOT/.ci/reports/zap.log"
 
 rm -f "$MMIV_ZAP_DOCKER_LOG"

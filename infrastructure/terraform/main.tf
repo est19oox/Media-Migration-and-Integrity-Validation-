@@ -2,6 +2,9 @@
 resource "aws_s3_bucket" "migration" {
   bucket = "media-migration-dev-landing"
 
+  #checkov:skip=CKV_AWS_18:Central S3 access logging is deferred until the shared audit-log bucket is provisioned.
+  #checkov:skip=CKV_AWS_144:This development environment is intentionally single-region; production requires replication.
+  #checkov:skip=CKV2_AWS_62:Event notifications will be added with the queue-backed migration workflow.
 
   tags = {
     Name        = "MMIV Migration Storage"
@@ -29,7 +32,34 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "migration" {
 
   rule {
     apply_server_side_encryption_by_default {
-      sse_algorithm = "AES256"
+      sse_algorithm = "aws:kms"
+    }
+  }
+}
+
+resource "aws_s3_bucket_versioning" "migration" {
+  bucket = aws_s3_bucket.migration.id
+
+  versioning_configuration {
+    status = "Enabled"
+  }
+}
+
+resource "aws_s3_bucket_lifecycle_configuration" "migration" {
+  bucket = aws_s3_bucket.migration.id
+
+  rule {
+    id     = "expire-old-media-versions"
+    status = "Enabled"
+
+    filter {}
+
+    abort_incomplete_multipart_upload {
+      days_after_initiation = 7
+    }
+
+    noncurrent_version_expiration {
+      noncurrent_days = 30
     }
   }
 }
@@ -44,7 +74,7 @@ resource "aws_ecr_repository" "mmiv" {
   }
 
   encryption_configuration {
-    encryption_type = "AES256"
+    encryption_type = "KMS"
   }
 
   tags = {
@@ -156,8 +186,24 @@ resource "aws_vpc" "mmiv" {
   enable_dns_support   = true
   enable_dns_hostnames = true
 
+  #checkov:skip=CKV2_AWS_11:VPC flow logs are deferred for the cost-limited development environment; production requires them.
+
   tags = {
     Name        = "MMIV-VPC"
+    Project     = "MMIV"
+    Environment = "dev"
+    ManagedBy   = "Terraform"
+  }
+}
+
+resource "aws_default_security_group" "mmiv" {
+  vpc_id = aws_vpc.mmiv.id
+
+  ingress = []
+  egress  = []
+
+  tags = {
+    Name        = "MMIV-Default-Deny"
     Project     = "MMIV"
     Environment = "dev"
     ManagedBy   = "Terraform"
@@ -169,6 +215,8 @@ resource "aws_subnet" "mmiv_public" {
   vpc_id                  = aws_vpc.mmiv.id
   cidr_block              = "10.0.1.0/24"
   map_public_ip_on_launch = true
+
+  #checkov:skip=CKV_AWS_130:The cost-limited dev host needs direct outbound package and ECR access without a NAT gateway.
 
   tags = {
     Name        = "MMIV-Public-Subnet"
@@ -269,6 +317,10 @@ resource "aws_instance" "mmiv" {
   instance_type               = "t3.micro"
   subnet_id                   = aws_subnet.mmiv_public.id
   associate_public_ip_address = true
+  monitoring                  = true
+  ebs_optimized               = true
+
+  #checkov:skip=CKV_AWS_88:The dev host has no inbound security-group rules and needs direct outbound access without a NAT gateway.
 
   vpc_security_group_ids = [
     aws_security_group.mmiv_ec2.id
@@ -280,6 +332,10 @@ resource "aws_instance" "mmiv" {
     http_endpoint               = "enabled"
     http_tokens                 = "required"
     http_put_response_hop_limit = 2
+  }
+
+  root_block_device {
+    encrypted = true
   }
 
   user_data = <<-EOF
