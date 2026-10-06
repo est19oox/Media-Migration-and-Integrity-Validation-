@@ -1,0 +1,92 @@
+name: Async ZAP DAST
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'services/transfer-service/**'
+      - 'scripts/ci/run-dast.sh'
+      - '.github/workflows/dast.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mmiv-dast-main
+  cancel-in-progress: true
+
+jobs:
+  dast:
+    name: ZAP baseline scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Set up Java 25
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: maven
+
+      - name: Build transfer service
+        working-directory: services/transfer-service
+        run: mvn --batch-mode clean package
+
+      - name: Build local DAST target
+        run: |
+          docker build \
+            --tag mmiv-transfer:dast \
+            services/transfer-service
+
+      - name: Start local DAST target
+        run: |
+          docker run --detach \
+            --name mmiv-dast-target \
+            --network host \
+            --env AWS_ACCESS_KEY_ID=test \
+            --env AWS_SECRET_ACCESS_KEY=test \
+            --env AWS_REGION=ap-southeast-1 \
+            --env MMIV_MEDIA_ROOT=/tmp/mmiv-media \
+            mmiv-transfer:dast
+
+      - name: Wait for local target
+        run: |
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent \
+              http://127.0.0.1:8081/actuator/health; then
+              exit 0
+            fi
+            sleep 2
+          done
+
+          docker logs mmiv-dast-target
+          exit 1
+
+      - name: Run ZAP baseline scan
+        env:
+          MMIV_TEST_NETWORK: host
+        run: |
+          sh scripts/ci/run-dast.sh \
+            http://127.0.0.1:8081/actuator/health
+
+      - name: Upload ZAP evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: zap-dast-${{ github.sha }}
+          if-no-files-found: warn
+          retention-days: 14
+          path: |
+            .ci/reports/zap.log
+            .ci/reports/zap-report.json
+            .ci/reports/zap-report.html
+
+      - name: Stop local target
+        if: always()
+        run: docker rm --force mmiv-dast-target || true
