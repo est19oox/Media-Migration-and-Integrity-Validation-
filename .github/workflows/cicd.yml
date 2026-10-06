@@ -202,18 +202,18 @@ jobs:
           - name: transfer-service
             path: services/transfer-service
             port: '8081'
-          - name: integrity-service
-            path: services/integrity-service
-            port: '8085'
-          - name: user-access-service
-            path: services/user-access-service
-            port: '8083'
-          - name: reporting-service
-            path: services/reporting-service
-            port: '8084'
-          - name: discovery-service
-            path: services/discovery-service
-            port: '8082'
+#          - name: integrity-service
+#            path: services/integrity-service
+#            port: '8085'
+#          - name: user-access-service
+#            path: services/user-access-service
+#            port: '8083'
+#          - name: reporting-service
+#            path: services/reporting-service
+#            port: '8084'
+#          - name: discovery-service
+#            path: services/discovery-service
+#            port: '8082'
 
     steps:
       - name: Checkout repository
