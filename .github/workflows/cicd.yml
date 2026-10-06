@@ -5,8 +5,8 @@ on:
     branches:
       - main
     paths:
-      - 'pom.xml'
       - 'services/**'
+      - 'infrastructure/bootstrap/**'
       - 'infrastructure/terraform/**'
       - 'infrastructure/ansible/**'
       - 'scripts/cd/**'
@@ -27,7 +27,61 @@ env:
   MMIV_BUCKET_NAME: media-migration-dev-landing
 
 jobs:
+#  bootstrap:
+#    name: Bootstrap IAM update
+#    runs-on: ubuntu-latest
+#
+#    defaults:
+#      run:
+#        working-directory: infrastructure/bootstrap
+#
+#    steps:
+#      - name: Checkout repository
+#        uses: actions/checkout@v5
+#
+#      - name: Configure AWS credentials
+#        uses: aws-actions/configure-aws-credentials@v5
+#        with:
+#          role-to-assume: arn:aws:iam::275069781906:role/GitHubActions-MMIV-Terraform
+#          aws-region: ${{ env.AWS_REGION }}
+#
+#      - name: Verify AWS connection
+#        run: aws sts get-caller-identity
+#
+#      - name: Setup Terraform
+#        uses: hashicorp/setup-terraform@v4
+#        with:
+#          terraform_version: 1.15.8
+#
+#      - name: Terraform Init
+#        run: terraform init -input=false
+#
+#      - name: Verify existing bootstrap state
+#        shell: bash
+#        run: |
+#          set -euo pipefail
+#          STATE_RESOURCES=$(terraform state list)
+#          for RESOURCE in aws_s3_bucket.terraform_state aws_iam_openid_connect_provider.github aws_iam_role.github_terraform aws_iam_role.github_app; do
+#            if ! printf '%s\n' "$STATE_RESOURCES" | grep -Fxq "$RESOURCE"; then
+#              echo "::error::Bootstrap state is missing $RESOURCE. Migrate the original bootstrap state to bootstrap/terraform.tfstate before running this workflow."
+#              exit 1
+#            fi
+#          done
+#
+#      - name: Terraform Format Check
+#        run: terraform fmt -check
+#
+#      - name: Terraform Validate
+#        run: terraform validate
+#
+#      - name: Terraform Plan
+#        run: terraform plan -input=false -out=tfplan
+#
+#      - name: Terraform Apply
+#        run: terraform apply -input=false tfplan
+
   terraform:
+#    needs: [bootstrap]
     name: Terraform CI/CD
     runs-on: ubuntu-latest
 
@@ -70,29 +124,96 @@ jobs:
       - name: Terraform Apply
         run: terraform apply -input=false -auto-approve tfplan
 
-  deploy:
-    name: ${{ matrix.service.name }} CI/CD
+  redis_setup:
+    name: Prepare Redis on EC2
     needs: [terraform]
+    runs-on: ubuntu-latest
+    outputs:
+      instance_id: ${{ steps.deployment.outputs.instance_id }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v5
+        with:
+          role-to-assume: arn:aws:iam::275069781906:role/GitHubActions-MMIV-App
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Verify AWS connection
+        run: aws sts get-caller-identity
+
+      - name: Discover EC2 instance
+        id: deployment
+        shell: bash
+        run: |
+          INSTANCE_ID=$(aws ec2 describe-instances \
+            --region "$AWS_REGION" \
+            --filters \
+              'Name=tag:Name,Values=MMIV-EC2' \
+              'Name=instance-state-name,Values=running' \
+            --query 'Reservations[0].Instances[0].InstanceId' \
+            --output text)
+
+          test -n "$INSTANCE_ID" && test "$INSTANCE_ID" != "None"
+          echo "instance_id=$INSTANCE_ID" >> "$GITHUB_OUTPUT"
+
+      - name: Wait for SSM and host initialization
+        env:
+          INSTANCE_ID: ${{ steps.deployment.outputs.instance_id }}
+        run: bash ./scripts/cd/wait-for-ssm.sh
+
+      - name: Install Session Manager plugin
+        run: |
+          curl -fsSL https://s3.amazonaws.com/session-manager-downloads/plugin/latest/ubuntu_64bit/session-manager-plugin.deb -o /tmp/session-manager-plugin.deb
+          sudo dpkg -i /tmp/session-manager-plugin.deb
+          session-manager-plugin --version
+
+      - name: Install Ansible
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install --upgrade ansible "boto3>=1.35.0" "botocore>=1.35.0"
+          ansible-galaxy collection install -r infrastructure/ansible/requirements.yml
+
+      - name: Generate SSM inventory
+        env:
+          INSTANCE_ID: ${{ steps.deployment.outputs.instance_id }}
+          SSM_BUCKET: ${{ env.MMIV_BUCKET_NAME }}
+        run: |
+          sed \
+            -e "s|__INSTANCE_ID__|$INSTANCE_ID|g" \
+            -e "s|__SSM_BUCKET__|$SSM_BUCKET|g" \
+            infrastructure/ansible/inventory/ci.ini \
+            > infrastructure/ansible/inventory/ci.generated.ini
+
+      - name: Set up Redis with Ansible
+        working-directory: infrastructure/ansible
+        run: ansible-playbook -i inventory/ci.generated.ini redis.yml
+
+  deploy:
+    name: Microservices CI/CD
+    needs: [redis_setup]
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
+      max-parallel: 1
       matrix:
         service:
           - name: transfer-service
             path: services/transfer-service
             port: '8081'
-#          - name: integrity-service
-#            path: services/integrity-service
-#            port: '8082'
-#          - name: user-access-service
-#            path: services/user-access-service
-#            port: '8083'
-#          - name: reporting-service
-#            path: services/reporting-service
-#            port: '8084'
-#          - name: discovery-service
-#            path: services/discovery-service
-#            port: '8085'
+          - name: integrity-service
+            path: services/integrity-service
+            port: '8085'
+          - name: user-access-service
+            path: services/user-access-service
+            port: '8083'
+          - name: reporting-service
+            path: services/reporting-service
+            port: '8084'
+          - name: discovery-service
+            path: services/discovery-service
+            port: '8082'
 
     steps:
       - name: Checkout repository
@@ -138,20 +259,18 @@ jobs:
           echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
           echo "registry=$ECR_REGISTRY" >> "$GITHUB_OUTPUT"
 
-      - name: Discover EC2 instance
+      - name: Use prepared EC2 instance
         id: deployment
-        shell: bash
+        env:
+          INSTANCE_ID: ${{ needs.redis_setup.outputs.instance_id }}
         run: |
-          INSTANCE_ID=$(aws ec2 describe-instances \
-            --region "$AWS_REGION" \
-            --filters \
-              'Name=tag:Name,Values=MMIV-EC2' \
-              'Name=instance-state-name,Values=running' \
-            --query 'Reservations[0].Instances[0].InstanceId' \
-            --output text)
-
           test -n "$INSTANCE_ID" && test "$INSTANCE_ID" != "None"
           echo "instance_id=$INSTANCE_ID" >> "$GITHUB_OUTPUT"
+
+      - name: Wait for SSM and host initialization
+        env:
+          INSTANCE_ID: ${{ steps.deployment.outputs.instance_id }}
+        run: bash ./scripts/cd/wait-for-ssm.sh
 
       - name: Install Session Manager plugin
         run: |
@@ -162,7 +281,7 @@ jobs:
       - name: Install Ansible
         run: |
           python -m pip install --upgrade pip
-          pip install ansible boto3 botocore
+          python -m pip install --upgrade ansible "boto3>=1.35.0" "botocore>=1.35.0"
           ansible-galaxy collection install -r infrastructure/ansible/requirements.yml
 
       - name: Generate SSM inventory
@@ -209,7 +328,7 @@ jobs:
         env:
           INSTANCE_ID: ${{ steps.deployment.outputs.instance_id }}
           DAST_PORT: ${{ matrix.service.port }}
-          DAST_PATH: /
+          DAST_PATH: /actuator/health
         run: bash ./scripts/cd/run-dast-ssm.sh
 
       - name: Roll back after failure

@@ -30,3 +30,14 @@ jenkins_home/
 *.tfstate
 *.tfstate.*
 crash.log
+
+
+# Terraform local/environment files
+**/.terraform/*
+*.tfstate
+*.tfstate.*
+*.tfvars
+*.tfplan
+# Saved plans must always be regenerated after configuration/state changes.
+tfplan
+tfplan.*
