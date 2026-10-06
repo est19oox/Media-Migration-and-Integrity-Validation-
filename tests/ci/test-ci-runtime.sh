@@ -257,7 +257,7 @@ test -f "$FIXTURE_ROOT/.ci/reports/trivy-sca.json"
 grep -F '"Results":[]' "$FIXTURE_ROOT/.ci/reports/trivy-sca.json"
 
 assert_trivy_sca_invocation() {
-    grep -F -- "fs --scanners vuln --severity HIGH,CRITICAL --exit-code 1 --format json --output $FIXTURE_ROOT/.ci/reports/trivy-sca.json $FIXTURE_ROOT" \
+    grep -F -- "fs --scanners vuln --severity HIGH,CRITICAL --exit-code 1 --format json --skip-dirs $FIXTURE_ROOT/.worktrees --skip-dirs $FIXTURE_ROOT/.superpowers --output $FIXTURE_ROOT/.ci/reports/trivy-sca.json $FIXTURE_ROOT" \
         "$MMIV_TRIVY_LOG"
 }
 
@@ -402,7 +402,7 @@ grep -Fx -- '--fail --silent --show-error --max-time 10 https://dast.example.tes
 test ! -e "$MMIV_ZAP_DOCKER_LOG"
 
 assert_zap_invocation() {
-    grep -Fx -- "run --rm --network mmiv-ci -v $FIXTURE_ROOT/.ci/reports:/zap/wrk ghcr.io/zaproxy/zaproxy@sha256:781a2bdaea47324e7bab583e2263f21d257b0aee61ed51521a5be45f5f5081ef zap-baseline.py -t https://dast.example.test/health -J zap-report.json -r zap-report.html" \
+    grep -Fx -- "run --rm --user 0:0 --network mmiv-ci -v $FIXTURE_ROOT/.ci/reports:/zap/wrk ghcr.io/zaproxy/zaproxy@sha256:781a2bdaea47324e7bab583e2263f21d257b0aee61ed51521a5be45f5f5081ef zap-baseline.py -t https://dast.example.test/health -J zap-report.json -r zap-report.html" \
         "$MMIV_ZAP_DOCKER_LOG"
 }
 
