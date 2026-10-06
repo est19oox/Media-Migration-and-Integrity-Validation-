@@ -1,11 +1,7 @@
 vulnerabilities:
   - id: CVE-2026-47884
-    paths:
-      - "services/discovery-service/pom.xml"
-      - "services/integrity-service/pom.xml"
-      - "services/reporting-service/pom.xml"
-      - "services/transfer-service/pom.xml"
-      - "services/user-access-service/pom.xml"
+    purls:
+      - "pkg:maven/org.springframework/spring-webmvc@6.2.19"
     expired_at: 2026-12-31
     statement: >-
       MMIV services are REST APIs and do not use XsltView or catch-all MVC

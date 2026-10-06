@@ -278,6 +278,19 @@ assert_trivy_sca_invocation
 test -f "$FIXTURE_ROOT/.ci/reports/trivy-sca.json"
 grep -F '"error":"scanner-error"' "$FIXTURE_ROOT/.ci/reports/trivy-sca.json"
 
+printf 'mmiv:test-image\n' > "$FIXTURE_ROOT/.ci/image-ref"
+assert_succeeds "clean Trivy image scan" env PATH="$FIXTURE_ROOT/bin:$PATH" \
+    MMIV_TRIVY_MODE=clean "$ROOT/scripts/ci/scan-image.sh" "$FIXTURE_ROOT"
+test -f "$FIXTURE_ROOT/.ci/reports/trivy-image.json"
+grep -F -- "image --severity HIGH,CRITICAL --exit-code 1 --format json --ignorefile $FIXTURE_ROOT/security/trivy/.trivyignore.yaml --output $FIXTURE_ROOT/.ci/reports/trivy-image.json mmiv:test-image" \
+    "$MMIV_TRIVY_LOG"
+
+rm -f "$MMIV_TRIVY_LOG" "$FIXTURE_ROOT/.ci/reports/trivy-image.json"
+assert_status 1 "Trivy blocking image vulnerability" env PATH="$FIXTURE_ROOT/bin:$PATH" \
+    MMIV_TRIVY_MODE=vulnerable "$ROOT/scripts/ci/scan-image.sh" "$FIXTURE_ROOT"
+test -f "$FIXTURE_ROOT/.ci/reports/trivy-image.json"
+grep -F '"Severity":"HIGH"' "$FIXTURE_ROOT/.ci/reports/trivy-image.json"
+
 printf 'FROM scratch\n' > "$FIXTURE_ROOT/dockerfile"
 FIXTURE_ROOT_PATH=$(CDPATH= cd -- "$FIXTURE_ROOT" && pwd)
 if [ -f "$FIXTURE_ROOT_PATH/Dockerfile" ]; then

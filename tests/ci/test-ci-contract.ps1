@@ -106,14 +106,20 @@ Assert-FileContains 'scripts/ci/run-sca.sh' @(
 )
 Assert-FileContains 'security/trivy/.trivyignore.yaml' @(
     'CVE-2026-47884',
+    'purls:',
+    'pkg:maven/org\.springframework/spring-webmvc@6\.2\.19',
     'expired_at:',
-    'statement:',
-    'services/transfer-service/pom\.xml'
+    'statement:'
 )
 Assert-FileContains 'scripts/ci/run-terraform-checks.sh' @('terraform', 'fmt', 'validate')
 Assert-FileContains 'scripts/ci/run-iac-scan.sh' @('checkov', 'infrastructure', 'checkov\.json')
 Assert-FileContains 'scripts/ci/build-image.sh' @('docker', 'dockerfile', '--file', '\.ci/image-ref', 'TESTED_COMMIT')
-Assert-FileContains 'scripts/ci/scan-image.sh' @('trivy', '\.ci/image-ref')
+Assert-FileContains 'scripts/ci/scan-image.sh' @(
+    'trivy image',
+    '\.ci/image-ref',
+    '--ignorefile "\$ROOT/security/trivy/\.trivyignore\.yaml"',
+    'trivy-image\.json'
+)
 Assert-FileContains 'scripts/ci/verify-deployment.sh' @(
     'DEPLOYED_COMMIT',
     'DAST_TARGET_URL',
