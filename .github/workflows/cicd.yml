@@ -463,16 +463,17 @@ jobs:
         run: bash ./scripts/cd/smoke-test-service.sh
 
       #set -o pipefail 很重要，否则 ZAP 失败后 tee 可能让步骤错误地显示成功。 -hhh
-      - name: Run DAST
-        env:
-          INSTANCE_ID: ${{ steps.deployment.outputs.instance_id }}
-          DAST_PORT: ${{ matrix.service.port }}
-          DAST_PATH: /actuator/health
-        run: |
-          mkdir -p .ci/reports
-          set -o pipefail
-          bash ./scripts/cd/run-dast-ssm.sh 2>&1 \
-            | tee ".ci/reports/dast-${{ matrix.service.name }}.log"
+      # 新增dast.yml，异步非阻塞执行，使用github runner，不占用EC2资源。此处先注释掉。 -hhh20261006
+      # - name: Run DAST
+      #   env:
+      #     INSTANCE_ID: ${{ steps.deployment.outputs.instance_id }}
+      #     DAST_PORT: ${{ matrix.service.port }}
+      #     DAST_PATH: /actuator/health
+      #   run: |
+      #     mkdir -p .ci/reports
+      #     set -o pipefail
+      #     bash ./scripts/cd/run-dast-ssm.sh 2>&1 \
+      #       | tee ".ci/reports/dast-${{ matrix.service.name }}.log"
 
       - name: Roll back after failure
         if: ${{ failure() && steps.ansible_deploy.outcome == 'success' }}
