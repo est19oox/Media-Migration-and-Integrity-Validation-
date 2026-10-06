@@ -66,6 +66,7 @@ resource "aws_s3_bucket_lifecycle_configuration" "migration" {
 
 # Creates a private Amazon ECR repository for MMIV container images.
 resource "aws_ecr_repository" "mmiv" {
+  #checkov:skip=CKV_AWS_136:The cost-limited coursework ECR repository uses AWS-managed AES256 encryption; customer-managed KMS encryption is deferred to production.
   name                 = "mmiv"
   image_tag_mutability = "IMMUTABLE"
 
