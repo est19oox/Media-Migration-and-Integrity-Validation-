@@ -19,7 +19,7 @@ MMIV 是一个基于微服务的系统，用于在访问控制下发现、传输
 - **[草案]** [架构](docs/architecture/architecture.zh-CN.md) — 架构选项和需要团队讨论的决策
 - **[草案]** [API 契约](docs/api/api-contracts.zh-CN.md) — 跨服务 API 契约
 - **[草案]** [CI/CD](docs/ci-cd/ci-cd.zh-CN.md) — GitHub Actions 和 Jenkins 的职责
-- [Jenkins 设置](docs/jenkins/local-setup.zh-CN.md) — 本地 Jenkins 的设置和运行
+- [Jenkins 设置](docs/jenkins/local-setup.zh-CN.md) — 本地脚本自动构建、配置并运行 Jenkins
 
 标记为**草案**的架构和 API 文档仍在团队讨论中。
 

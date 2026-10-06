@@ -19,7 +19,7 @@ MMIV is a microservice-based system for discovering, transferring, validating, a
 - **[Draft]** [Architecture](docs/architecture/architecture.md) — architecture options and decisions requiring team discussion
 - **[Draft]** [API Contracts](docs/api/api-contracts.md) — cross-service API contracts
 - **[Draft]** [CI/CD](docs/ci-cd/ci-cd.md) — GitHub Actions and Jenkins responsibilities
-- [Jenkins Setup](docs/jenkins/local-setup.md) — local Jenkins setup and operation
+- [Jenkins Setup](docs/jenkins/local-setup.md) — local scripts automatically build, configure, and run Jenkins
 
 > Architecture and API documents marked **Draft** are still under team discussion.
 
