@@ -1,5 +1,16 @@
 server:
   port: 8085
+
+spring:
+  datasource:
+    url: ${DB_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+    driver-class-name: oracle.jdbc.OracleDriver
+
+discovery:
+  root: ${DISCOVERY_ROOT}
+
 management:
   endpoints:
     web:
