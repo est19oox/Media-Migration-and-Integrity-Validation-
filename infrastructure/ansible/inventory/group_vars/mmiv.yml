@@ -1,0 +1,3 @@
+---
+mmiv_docker_network: mmiv-backend
+mmiv_redis_env_file: /etc/mmiv/redis.env

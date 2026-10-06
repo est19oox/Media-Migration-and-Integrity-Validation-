@@ -69,12 +69,16 @@ resource "aws_ecr_repository" "mmiv" {
   name                 = "mmiv"
   image_tag_mutability = "IMMUTABLE"
 
+  lifecycle {
+    prevent_destroy = true
+  }
+
   image_scanning_configuration {
     scan_on_push = true
   }
 
   encryption_configuration {
-    encryption_type = "KMS"
+    encryption_type = "AES256"
   }
 
   tags = {

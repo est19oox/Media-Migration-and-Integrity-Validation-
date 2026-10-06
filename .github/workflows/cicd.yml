@@ -124,12 +124,79 @@ jobs:
       - name: Terraform Apply
         run: terraform apply -input=false -auto-approve tfplan
 
+  redis_setup:
+    name: Prepare Redis on EC2
+    needs: [terraform]
+    runs-on: ubuntu-latest
+    outputs:
+      instance_id: ${{ steps.deployment.outputs.instance_id }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v5
+        with:
+          role-to-assume: arn:aws:iam::275069781906:role/GitHubActions-MMIV-App
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Verify AWS connection
+        run: aws sts get-caller-identity
+
+      - name: Discover EC2 instance
+        id: deployment
+        shell: bash
+        run: |
+          INSTANCE_ID=$(aws ec2 describe-instances \
+            --region "$AWS_REGION" \
+            --filters \
+              'Name=tag:Name,Values=MMIV-EC2' \
+              'Name=instance-state-name,Values=running' \
+            --query 'Reservations[0].Instances[0].InstanceId' \
+            --output text)
+
+          test -n "$INSTANCE_ID" && test "$INSTANCE_ID" != "None"
+          echo "instance_id=$INSTANCE_ID" >> "$GITHUB_OUTPUT"
+
+      - name: Wait for SSM and host initialization
+        env:
+          INSTANCE_ID: ${{ steps.deployment.outputs.instance_id }}
+        run: bash ./scripts/cd/wait-for-ssm.sh
+
+      - name: Install Session Manager plugin
+        run: |
+          curl -fsSL https://s3.amazonaws.com/session-manager-downloads/plugin/latest/ubuntu_64bit/session-manager-plugin.deb -o /tmp/session-manager-plugin.deb
+          sudo dpkg -i /tmp/session-manager-plugin.deb
+          session-manager-plugin --version
+
+      - name: Install Ansible
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install --upgrade ansible "boto3>=1.35.0" "botocore>=1.35.0"
+          ansible-galaxy collection install -r infrastructure/ansible/requirements.yml
+
+      - name: Generate SSM inventory
+        env:
+          INSTANCE_ID: ${{ steps.deployment.outputs.instance_id }}
+          SSM_BUCKET: ${{ env.MMIV_BUCKET_NAME }}
+        run: |
+          sed \
+            -e "s|__INSTANCE_ID__|$INSTANCE_ID|g" \
+            -e "s|__SSM_BUCKET__|$SSM_BUCKET|g" \
+            infrastructure/ansible/inventory/ci.ini \
+            > infrastructure/ansible/inventory/ci.generated.ini
+
+      - name: Set up Redis with Ansible
+        working-directory: infrastructure/ansible
+        run: ansible-playbook -i inventory/ci.generated.ini redis.yml
+
   deploy:
     name: Microservices CI/CD
-    needs: [terraform]
+    needs: [redis_setup]
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
+      max-parallel: 1
       matrix:
         service:
           - name: transfer-service
@@ -192,20 +259,18 @@ jobs:
           echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
           echo "registry=$ECR_REGISTRY" >> "$GITHUB_OUTPUT"
 
-      - name: Discover EC2 instance
+      - name: Use prepared EC2 instance
         id: deployment
-        shell: bash
+        env:
+          INSTANCE_ID: ${{ needs.redis_setup.outputs.instance_id }}
         run: |
-          INSTANCE_ID=$(aws ec2 describe-instances \
-            --region "$AWS_REGION" \
-            --filters \
-              'Name=tag:Name,Values=MMIV-EC2' \
-              'Name=instance-state-name,Values=running' \
-            --query 'Reservations[0].Instances[0].InstanceId' \
-            --output text)
-
           test -n "$INSTANCE_ID" && test "$INSTANCE_ID" != "None"
           echo "instance_id=$INSTANCE_ID" >> "$GITHUB_OUTPUT"
+
+      - name: Wait for SSM and host initialization
+        env:
+          INSTANCE_ID: ${{ steps.deployment.outputs.instance_id }}
+        run: bash ./scripts/cd/wait-for-ssm.sh
 
       - name: Install Session Manager plugin
         run: |
@@ -259,12 +324,12 @@ jobs:
           SMOKE_PORT: ${{ matrix.service.port }}
         run: bash ./scripts/cd/smoke-test-service.sh
 
-#      - name: Run DAST
-#        env:
-#          INSTANCE_ID: ${{ steps.deployment.outputs.instance_id }}
-#          DAST_PORT: ${{ matrix.service.port }}
-#          DAST_PATH: /
-#        run: bash ./scripts/cd/run-dast-ssm.sh
+      - name: Run DAST
+        env:
+          INSTANCE_ID: ${{ steps.deployment.outputs.instance_id }}
+          DAST_PORT: ${{ matrix.service.port }}
+          DAST_PATH: /actuator/health
+        run: bash ./scripts/cd/run-dast-ssm.sh
 
       - name: Roll back after failure
         if: ${{ failure() && steps.ansible_deploy.outcome == 'success' }}
