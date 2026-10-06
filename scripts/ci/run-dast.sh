@@ -33,13 +33,13 @@ zap_output=$(mktemp "${TMPDIR:-/tmp}/mmiv-zap.XXXXXX")
 zap_container=
 cleanup() {
     if [ -n "$zap_container" ]; then
-        docker rm -f "$zap_container" >/dev/null 2>&1 || true
+        docker rm -f -v "$zap_container" >/dev/null 2>&1 || true
     fi
     rm -f "$zap_output"
 }
 trap cleanup EXIT HUP INT TERM
 
-if ! zap_container=$(docker create --user 0:0 --network "${MMIV_TEST_NETWORK:-mmiv-ci}" \
+if ! zap_container=$(docker create --user 0:0 --network "${MMIV_TEST_NETWORK:-mmiv-ci}" --volume /zap/wrk \
     "${ZAP_IMAGE:-ghcr.io/zaproxy/zaproxy@sha256:781a2bdaea47324e7bab583e2263f21d257b0aee61ed51521a5be45f5f5081ef}" \
     zap-baseline.py -t "$target_url" -J zap-report.json -r zap-report.html); then
     fail 'Could not create the ZAP scan container.'
@@ -58,7 +58,7 @@ for report_name in zap-report.json zap-report.html; do
         reports_copied=false
     fi
 done
-docker rm -f "$zap_container" >/dev/null 2>&1 || true
+docker rm -f -v "$zap_container" >/dev/null 2>&1 || true
 zap_container=
 
 tee "$zap_log" < "$zap_output"
