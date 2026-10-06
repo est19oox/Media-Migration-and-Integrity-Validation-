@@ -150,9 +150,10 @@ assert_fails "zero application tests" env PATH="$FIXTURE_ROOT/bin:$PATH" \
 
 grep -qx 'ARGS=--batch-mode clean verify' "$MMIV_MAVEN_LOG"
 
-mkdir -p "$FIXTURE_ROOT/services/test-service/src/main/java" "$FIXTURE_ROOT/security/semgrep"
+mkdir -p "$FIXTURE_ROOT/services/test-service/src/main/java" "$FIXTURE_ROOT/security/semgrep" "$FIXTURE_ROOT/security/trivy"
 printf 'class Example {}\n' > "$FIXTURE_ROOT/services/test-service/src/main/java/Example.java"
 printf 'rules: []\n' > "$FIXTURE_ROOT/security/semgrep/semgrep.yml"
+printf 'vulnerabilities: []\n' > "$FIXTURE_ROOT/security/trivy/.trivyignore.yaml"
 cat > "$FIXTURE_ROOT/bin/semgrep" <<'EOF'
 #!/usr/bin/env sh
 set -eu
@@ -257,7 +258,7 @@ test -f "$FIXTURE_ROOT/.ci/reports/trivy-sca.json"
 grep -F '"Results":[]' "$FIXTURE_ROOT/.ci/reports/trivy-sca.json"
 
 assert_trivy_sca_invocation() {
-    grep -F -- "fs --scanners vuln --severity HIGH,CRITICAL --exit-code 1 --format json --skip-dirs $FIXTURE_ROOT/.worktrees --skip-dirs $FIXTURE_ROOT/.superpowers --output $FIXTURE_ROOT/.ci/reports/trivy-sca.json $FIXTURE_ROOT" \
+    grep -F -- "fs --scanners vuln --severity HIGH,CRITICAL --exit-code 1 --format json --skip-dirs $FIXTURE_ROOT/.worktrees --skip-dirs $FIXTURE_ROOT/.superpowers --ignorefile $FIXTURE_ROOT/security/trivy/.trivyignore.yaml --output $FIXTURE_ROOT/.ci/reports/trivy-sca.json $FIXTURE_ROOT" \
         "$MMIV_TRIVY_LOG"
 }
 
@@ -370,6 +371,7 @@ printf 'fake ZAP console output\n'
 case "${MMIV_ZAP_MODE:-clean}" in
     clean) exit 0 ;;
     policy-failure) exit 1 ;;
+    warnings) exit 2 ;;
     execution-error) exit 3 ;;
     *)
         printf 'FAIL: unknown fake ZAP mode: %s\n' "$MMIV_ZAP_MODE" >&2
@@ -415,6 +417,14 @@ assert_zap_invocation
 test -f "$FIXTURE_ROOT/.ci/reports/zap-report.html"
 test -f "$FIXTURE_ROOT/.ci/reports/zap-report.json"
 test -f "$FIXTURE_ROOT/.ci/reports/zap.log"
+grep -F 'fake ZAP console output' "$FIXTURE_ROOT/.ci/reports/zap.log"
+
+rm -f "$MMIV_ZAP_DOCKER_LOG"
+assert_succeeds "ZAP warnings are reported but non-blocking" env PATH="$FIXTURE_ROOT/bin:$PATH" \
+    MMIV_ZAP_MODE=warnings sh -c 'cd "$1" && exec "$2" "$3"' sh "$FIXTURE_ROOT" "$ROOT/scripts/ci/run-dast.sh" 'https://dast.example.test/health'
+assert_zap_invocation
+test -f "$FIXTURE_ROOT/.ci/reports/zap-report.html"
+test -f "$FIXTURE_ROOT/.ci/reports/zap-report.json"
 grep -F 'fake ZAP console output' "$FIXTURE_ROOT/.ci/reports/zap.log"
 
 rm -f "$MMIV_ZAP_DOCKER_LOG"

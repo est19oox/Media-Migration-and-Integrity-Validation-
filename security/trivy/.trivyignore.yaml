@@ -1,0 +1,13 @@
+vulnerabilities:
+  - id: CVE-2026-47884
+    paths:
+      - "services/discovery-service/pom.xml"
+      - "services/integrity-service/pom.xml"
+      - "services/reporting-service/pom.xml"
+      - "services/transfer-service/pom.xml"
+      - "services/user-access-service/pom.xml"
+    expired_at: 2026-12-31
+    statement: >-
+      MMIV services are REST APIs and do not use XsltView or catch-all MVC
+      view rendering, so the Spring advisory preconditions are absent. Review
+      this exception before expiry or when migrating to Spring Framework 7.

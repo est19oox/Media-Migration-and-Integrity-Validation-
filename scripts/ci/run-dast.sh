@@ -47,6 +47,8 @@ trap - EXIT HUP INT TERM
 
 if [ "$zap_status" -eq 0 ]; then
     pass 'ZAP DAST baseline scan completed without blocking findings.'
+elif [ "$zap_status" -eq 2 ]; then
+    pass 'ZAP DAST baseline scan completed with non-blocking warnings; review the archived report.'
 else
     printf 'FAIL: ZAP DAST baseline scan failed with exit status %s.\n' "$zap_status" >&2
     exit "$zap_status"

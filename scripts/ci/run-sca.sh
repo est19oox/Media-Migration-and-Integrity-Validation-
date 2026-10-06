@@ -24,6 +24,7 @@ trivy fs \
     --format json \
     --skip-dirs "$ROOT/.worktrees" \
     --skip-dirs "$ROOT/.superpowers" \
+    --ignorefile "$ROOT/security/trivy/.trivyignore.yaml" \
     --output "$ROOT/.ci/reports/trivy-sca.json" \
     "$ROOT"
 pass 'Trivy software composition analysis passed.'

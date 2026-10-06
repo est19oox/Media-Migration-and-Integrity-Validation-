@@ -100,8 +100,15 @@ Assert-FileContains 'scripts/ci/run-sca.sh' @(
     '--format json',
     '--skip-dirs "\$ROOT/\.worktrees"',
     '--skip-dirs "\$ROOT/\.superpowers"',
+    '--ignorefile "\$ROOT/security/trivy/\.trivyignore\.yaml"',
     'prepare_reports_directory',
     'trivy-sca\.json'
+)
+Assert-FileContains 'security/trivy/.trivyignore.yaml' @(
+    'CVE-2026-47884',
+    'expired_at:',
+    'statement:',
+    'services/transfer-service/pom\.xml'
 )
 Assert-FileContains 'scripts/ci/run-terraform-checks.sh' @('terraform', 'fmt', 'validate')
 Assert-FileContains 'scripts/ci/run-iac-scan.sh' @('checkov', 'infrastructure', 'checkov\.json')
@@ -121,7 +128,9 @@ Assert-FileContains 'scripts/ci/run-dast.sh' @(
     '-J zap-report\.json',
     '-r zap-report\.html',
     'zap\.log',
-    'tee'
+    'tee',
+    '\$zap_status" -eq 2',
+    'completed with non-blocking warnings'
 )
 $dastScript = Get-Content -Raw -LiteralPath (Join-Path $repositoryRoot 'scripts/ci/run-dast.sh')
 if ($dastScript -match 'ghcr\.io/zaproxy/zaproxy:(stable|latest)') {
