@@ -5,6 +5,7 @@ SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 . "$SCRIPT_DIR/common.sh"
 
 ROOT=$(find_repository_root "${1:-.}")
+requested_image_ref=${2:-}
 # Emits SKIPPED: when no image reference was produced by the build stage.
 
 if [ ! -f "$ROOT/.ci/image-ref" ]; then
@@ -14,7 +15,11 @@ fi
 
 require_command trivy
 prepare_reports_directory "$ROOT"
-image_ref=$(sed -n '1p' "$ROOT/.ci/image-ref")
+if [ -n "$requested_image_ref" ]; then
+    image_ref=$requested_image_ref
+else
+    image_ref=$(sed -n '1p' "$ROOT/.ci/image-ref")
+fi
 if [ -z "$image_ref" ]; then
     fail 'The image reference file is empty.'
     exit 1

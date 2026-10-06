@@ -24,10 +24,14 @@ import os
 import sys
 
 metadata = {
-    "branch": os.environ.get("BRANCH_NAME", ""),
-    "tested_commit": os.environ.get("TESTED_COMMIT", ""),
-    "build_number": os.environ.get("BUILD_NUMBER", ""),
-    "build_url": os.environ.get("BUILD_URL", ""),
+    "branch": os.environ.get("GITHUB_REF_NAME") or os.environ.get("BRANCH_NAME", ""),
+    "tested_commit": os.environ.get("GITHUB_SHA") or os.environ.get("TESTED_COMMIT", ""),
+    "build_number": os.environ.get("GITHUB_RUN_NUMBER") or os.environ.get("BUILD_NUMBER", ""),
+    "build_url": (
+        os.environ.get("GITHUB_SERVER_URL", "")
+        + ("/" + os.environ["GITHUB_REPOSITORY"] if os.environ.get("GITHUB_REPOSITORY") else "")
+        + ("/actions/runs/" + os.environ["GITHUB_RUN_ID"] if os.environ.get("GITHUB_RUN_ID") else "")
+    ) or os.environ.get("BUILD_URL", ""),
     "timestamp": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
     "result": os.environ.get("MMIV_BUILD_RESULT", "UNKNOWN"),
 }
