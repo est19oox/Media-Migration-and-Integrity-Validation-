@@ -72,8 +72,8 @@
           docker run -d
           --name {{ microservice_name }}
           --restart unless-stopped
-          --network {{ mmiv_docker_network }}
-          --env-file {{ mmiv_redis_env_file }}
+          {% if mmiv_redis_enabled | default(true) | bool %}--network {{ mmiv_docker_network }}{% endif %}
+          {% if mmiv_redis_enabled | default(true) | bool %}--env-file {{ mmiv_redis_env_file }}{% endif %}
           -p {{ microservice_host_port }}:{{ microservice_container_port }}
           --mount type=bind,src=/var/lib/mmiv/media,dst=/media,readonly -e MMIV_MEDIA_ROOT=/media -e AWS_REGION={{ aws_region }}
           -e MMIV_BUCKET_NAME={{ microservice_bucket }}
@@ -111,8 +111,8 @@
         docker run -d \
           --name {{ microservice_name }} \
           --restart unless-stopped \
-          --network {{ mmiv_docker_network }} \
-          --env-file {{ mmiv_redis_env_file }} \
+          {% if mmiv_redis_enabled | default(true) | bool %}--network {{ mmiv_docker_network }}{% endif %} \
+          {% if mmiv_redis_enabled | default(true) | bool %}--env-file {{ mmiv_redis_env_file }}{% endif %} \
           -p {{ microservice_host_port }}:{{ microservice_container_port }} \
           --mount type=bind,src=/var/lib/mmiv/media,dst=/media,readonly -e MMIV_MEDIA_ROOT=/media -e AWS_REGION={{ aws_region }} \
           -e MMIV_BUCKET_NAME={{ microservice_bucket }} \
