@@ -79,10 +79,96 @@ jobs:
 #
 #      - name: Terraform Apply
 #        run: terraform apply -input=false tfplan
+  quality_gates:
+    name: CI and Security Gates
+    runs-on: ubuntu-latest
 
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: maven
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: 1.15.8
+
+      - name: Install Semgrep and Checkov
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install "semgrep==1.138.0" "checkov==3.2.489"
+
+      - name: Install Trivy
+        env:
+          TRIVY_VERSION: 0.74.0
+          TRIVY_SHA256: cf1e32ec8d4d8823e023096a28cadb14f5b5123ce03f201fb633c5b76aa712dd
+        run: |
+          PACKAGE="trivy_${TRIVY_VERSION}_Linux-64bit.deb"
+          curl -fsSLo "/tmp/${PACKAGE}" \
+            "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/${PACKAGE}"
+          echo "${TRIVY_SHA256}  /tmp/${PACKAGE}" | sha256sum --check --strict
+          sudo apt-get install --yes "/tmp/${PACKAGE}"
+
+      - name: Verify CI tools
+        run: |
+          java -version
+          mvn --version
+          terraform version
+          semgrep --version
+          trivy --version
+          checkov --version
+
+      - name: Validate repository
+        run: bash scripts/ci/validate-repository.sh .
+
+      - name: Build and test services
+        run: bash scripts/ci/run-tests.sh .
+
+      - name: Run Semgrep SAST
+        run: bash scripts/ci/run-sast.sh .
+
+      - name: Run Trivy SCA
+        run: bash scripts/ci/run-sca.sh .
+
+      - name: Validate Terraform
+        run: bash scripts/ci/run-terraform-checks.sh .
+
+      - name: Run Checkov IaC scan
+        run: bash scripts/ci/run-iac-scan.sh .
+
+      - name: Validate Ansible
+        working-directory: infrastructure/ansible
+        run: |
+          python -m pip install ansible boto3 botocore
+          ansible-galaxy collection install -r requirements.yml
+          ansible-playbook -i inventory/ci.ini playbook.yml --syntax-check
+          ansible-playbook -i inventory/ci.ini rollback.yml --syntax-check
+          ansible-playbook -i inventory/ci.ini redis.yml --syntax-check
+
+      - name: Upload CI evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: main-ci-evidence-${{ github.sha }}
+          if-no-files-found: warn
+          path: |
+            .ci/reports/**
+            **/target/surefire-reports/**
   terraform:
 #    needs: [bootstrap]
     name: Terraform CI/CD
+    needs: [quality_gates]
     runs-on: ubuntu-latest
 
     defaults:
@@ -120,9 +206,20 @@ jobs:
       - name: Terraform Plan
         run: terraform plan -input=false -out=tfplan
 
+      - name: Render Terraform plan
+        run: terraform show -no-color tfplan > terraform-plan.txt
+
       # CD
       - name: Terraform Apply
         run: terraform apply -input=false -auto-approve tfplan
+
+      - name: Upload Terraform plan
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: terraform-plan-${{ github.sha }}
+          if-no-files-found: warn
+          path: infrastructure/terraform/terraform-plan.txt
 
   redis_setup:
     name: Prepare Redis on EC2
@@ -219,16 +316,28 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v5
 
-      - name: Set up JDK 25
-        uses: actions/setup-java@v5
-        with:
-          java-version: '25'
-          distribution: temurin
-          cache: maven
+      - name: Install Trivy
+        env:
+          TRIVY_VERSION: 0.74.0
+          TRIVY_SHA256: cf1e32ec8d4d8823e023096a28cadb14f5b5123ce03f201fb633c5b76aa712dd
+        run: |
+          PACKAGE="trivy_${TRIVY_VERSION}_Linux-64bit.deb"
+          curl -fsSLo "/tmp/${PACKAGE}" \
+            "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/${PACKAGE}"
+          echo "${TRIVY_SHA256}  /tmp/${PACKAGE}" | sha256sum --check --strict
+          sudo apt-get install --yes "/tmp/${PACKAGE}"
 
-      - name: Build and test
-        working-directory: ${{ matrix.service.path }}
-        run: mvn -B clean verify
+      # 这些测试已经由 quality_gates 对准确的 commit 执行。 -hhh
+      # - name: Set up JDK 25
+      #   uses: actions/setup-java@v5
+      #   with:
+      #     java-version: '25'
+      #     distribution: temurin
+      #     cache: maven
+
+      # - name: Build and test
+      #   working-directory: ${{ matrix.service.path }}
+      #   run: mvn -B clean verify
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v5
@@ -243,21 +352,50 @@ jobs:
         id: ecr
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Build and push Docker image
+      # 拆分镜像 build scan push -hhh
+      # - name: Build and push Docker image
+      #   id: image
+      #   env:
+      #     ECR_REGISTRY: ${{ steps.ecr.outputs.registry }}
+      #     IMAGE_TAG: ${{ matrix.service.name }}-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+      #   run: |
+      #     IMAGE="$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
+      #     docker build \
+      #       -f "${{ matrix.service.path }}/Dockerfile" \
+      #       -t "$IMAGE" \
+      #       "${{ matrix.service.path }}"
+      #     docker push "$IMAGE"
+      #     echo "IMAGE=$IMAGE" >> "$GITHUB_ENV"
+      #     echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
+      #     echo "registry=$ECR_REGISTRY" >> "$GITHUB_OUTPUT"
+
+      - name: Build Docker image
         id: image
         env:
           ECR_REGISTRY: ${{ steps.ecr.outputs.registry }}
           IMAGE_TAG: ${{ matrix.service.name }}-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
         run: |
+          set -euo pipefail
+
           IMAGE="$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
+
           docker build \
             -f "${{ matrix.service.path }}/Dockerfile" \
             -t "$IMAGE" \
             "${{ matrix.service.path }}"
-          docker push "$IMAGE"
+
+          mkdir -p .ci
+          printf '%s\n' "$IMAGE" > .ci/image-ref
+
           echo "IMAGE=$IMAGE" >> "$GITHUB_ENV"
           echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
           echo "registry=$ECR_REGISTRY" >> "$GITHUB_OUTPUT"
+
+      - name: Scan Docker image
+        run: bash scripts/ci/scan-image.sh .
+
+      - name: Push Docker image
+        run: docker push "$IMAGE"
 
       - name: Use prepared EC2 instance
         id: deployment
@@ -324,12 +462,17 @@ jobs:
           SMOKE_PORT: ${{ matrix.service.port }}
         run: bash ./scripts/cd/smoke-test-service.sh
 
+      #set -o pipefail 很重要，否则 ZAP 失败后 tee 可能让步骤错误地显示成功。 -hhh
       - name: Run DAST
         env:
           INSTANCE_ID: ${{ steps.deployment.outputs.instance_id }}
           DAST_PORT: ${{ matrix.service.port }}
           DAST_PATH: /actuator/health
-        run: bash ./scripts/cd/run-dast-ssm.sh
+        run: |
+          mkdir -p .ci/reports
+          set -o pipefail
+          bash ./scripts/cd/run-dast-ssm.sh 2>&1 \
+            | tee ".ci/reports/dast-${{ matrix.service.name }}.log"
 
       - name: Roll back after failure
         if: ${{ failure() && steps.ansible_deploy.outcome == 'success' }}
@@ -358,3 +501,13 @@ jobs:
           SERVICE_NAME: ${{ matrix.service.name }}
           SMOKE_PORT: ${{ matrix.service.port }}
         run: bash ./scripts/cd/smoke-test-service.sh
+
+      - name: Upload deployment evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: deployment-evidence-${{ matrix.service.name }}-${{ github.sha }}
+          if-no-files-found: warn
+          path: |
+            .ci/reports/**
+            .ci/image-ref
