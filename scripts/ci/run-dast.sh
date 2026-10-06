@@ -30,20 +30,45 @@ reports_directory="$ROOT/.ci/reports"
 chmod 777 "$reports_directory"
 zap_log="$reports_directory/zap.log"
 zap_output=$(mktemp "${TMPDIR:-/tmp}/mmiv-zap.XXXXXX")
-trap 'rm -f "$zap_output"' EXIT HUP INT TERM
+zap_container=
+cleanup() {
+    if [ -n "$zap_container" ]; then
+        docker rm -f "$zap_container" >/dev/null 2>&1 || true
+    fi
+    rm -f "$zap_output"
+}
+trap cleanup EXIT HUP INT TERM
 
-if docker run --rm --user 0:0 --network "${MMIV_TEST_NETWORK:-mmiv-ci}" -v "$reports_directory:/zap/wrk" \
+if ! zap_container=$(docker create --user 0:0 --network "${MMIV_TEST_NETWORK:-mmiv-ci}" \
     "${ZAP_IMAGE:-ghcr.io/zaproxy/zaproxy@sha256:781a2bdaea47324e7bab583e2263f21d257b0aee61ed51521a5be45f5f5081ef}" \
-    zap-baseline.py -t "$target_url" -J zap-report.json -r zap-report.html \
+    zap-baseline.py -t "$target_url" -J zap-report.json -r zap-report.html); then
+    fail 'Could not create the ZAP scan container.'
+fi
+
+if docker start --attach "$zap_container" \
     > "$zap_output" 2>&1; then
     zap_status=0
 else
     zap_status=$?
 fi
 
+reports_copied=true
+for report_name in zap-report.json zap-report.html; do
+    if ! docker cp "$zap_container:/zap/wrk/$report_name" "$reports_directory/$report_name"; then
+        reports_copied=false
+    fi
+done
+docker rm -f "$zap_container" >/dev/null 2>&1 || true
+zap_container=
+
 tee "$zap_log" < "$zap_output"
 rm -f "$zap_output"
 trap - EXIT HUP INT TERM
+
+if { [ "$zap_status" -eq 0 ] || [ "$zap_status" -eq 2 ]; } \
+    && [ "$reports_copied" != true ]; then
+    fail 'ZAP did not produce the required JSON and HTML reports.'
+fi
 
 if [ "$zap_status" -eq 0 ]; then
     pass 'ZAP DAST baseline scan completed without blocking findings.'

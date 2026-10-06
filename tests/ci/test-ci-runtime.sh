@@ -367,27 +367,38 @@ chmod +x "$FIXTURE_ROOT/bin/curl"
 cat > "$FIXTURE_ROOT/bin/docker" <<'EOF'
 #!/usr/bin/env sh
 set -eu
-printf '%s\n' "$*" > "$MMIV_ZAP_DOCKER_LOG"
-reports_dir=''
-for argument in "$@"; do
-    case "$argument" in
-        *:/zap/wrk)
-            reports_dir=${argument%:/zap/wrk}
-            ;;
-    esac
-done
-[ -n "$reports_dir" ] || exit 2
-mkdir -p "$reports_dir"
-printf '<html>fake ZAP report</html>\n' > "$reports_dir/zap-report.html"
-printf '{"site":"fake-zap"}\n' > "$reports_dir/zap-report.json"
-printf 'fake ZAP console output\n'
-case "${MMIV_ZAP_MODE:-clean}" in
-    clean) exit 0 ;;
-    policy-failure) exit 1 ;;
-    warnings) exit 2 ;;
-    execution-error) exit 3 ;;
+printf '%s\n' "$*" >> "$MMIV_ZAP_DOCKER_LOG"
+command=$1
+shift
+case "$command" in
+    create)
+        printf 'fake-zap-container\n'
+        ;;
+    start)
+        printf 'fake ZAP console output\n'
+        case "${MMIV_ZAP_MODE:-clean}" in
+            clean) exit 0 ;;
+            policy-failure) exit 1 ;;
+            warnings) exit 2 ;;
+            execution-error) exit 3 ;;
+            *)
+                printf 'FAIL: unknown fake ZAP mode: %s\n' "$MMIV_ZAP_MODE" >&2
+                exit 2
+                ;;
+        esac
+        ;;
+    cp)
+        source_path=$1
+        destination=$2
+        case "$source_path" in
+            *zap-report.html) printf '<html>fake ZAP report</html>\n' > "$destination" ;;
+            *zap-report.json) printf '{"site":"fake-zap"}\n' > "$destination" ;;
+            *) exit 2 ;;
+        esac
+        ;;
+    rm)
+        ;;
     *)
-        printf 'FAIL: unknown fake ZAP mode: %s\n' "$MMIV_ZAP_MODE" >&2
         exit 2
         ;;
 esac
@@ -417,8 +428,11 @@ grep -Fx -- '--fail --silent --show-error --max-time 10 https://dast.example.tes
 test ! -e "$MMIV_ZAP_DOCKER_LOG"
 
 assert_zap_invocation() {
-    grep -Fx -- "run --rm --user 0:0 --network mmiv-ci -v $FIXTURE_ROOT/.ci/reports:/zap/wrk ghcr.io/zaproxy/zaproxy@sha256:781a2bdaea47324e7bab583e2263f21d257b0aee61ed51521a5be45f5f5081ef zap-baseline.py -t https://dast.example.test/health -J zap-report.json -r zap-report.html" \
-        "$MMIV_ZAP_DOCKER_LOG"
+    grep -Fx -- "create --user 0:0 --network mmiv-ci ghcr.io/zaproxy/zaproxy@sha256:781a2bdaea47324e7bab583e2263f21d257b0aee61ed51521a5be45f5f5081ef zap-baseline.py -t https://dast.example.test/health -J zap-report.json -r zap-report.html" "$MMIV_ZAP_DOCKER_LOG"
+    grep -Fx -- 'start --attach fake-zap-container' "$MMIV_ZAP_DOCKER_LOG"
+    grep -Fx -- "cp fake-zap-container:/zap/wrk/zap-report.json $FIXTURE_ROOT/.ci/reports/zap-report.json" "$MMIV_ZAP_DOCKER_LOG"
+    grep -Fx -- "cp fake-zap-container:/zap/wrk/zap-report.html $FIXTURE_ROOT/.ci/reports/zap-report.html" "$MMIV_ZAP_DOCKER_LOG"
+    grep -Fx -- 'rm -f fake-zap-container' "$MMIV_ZAP_DOCKER_LOG"
 }
 
 rm -f "$MMIV_ZAP_CURL_LOG" "$MMIV_ZAP_DOCKER_LOG" "$FIXTURE_ROOT/.ci/reports/zap-report.html" \
