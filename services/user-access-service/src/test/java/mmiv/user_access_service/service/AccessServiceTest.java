@@ -27,7 +27,7 @@ class AccessServiceTest {
                 List.of(
                         new DestinationAccess(
                                 "mmiv-bucket-a",
-                                Permission.READ_WRITE)));
+                                Permission.WRITE)));
 
         UserRepository userRepository = mock(UserRepository.class);
 

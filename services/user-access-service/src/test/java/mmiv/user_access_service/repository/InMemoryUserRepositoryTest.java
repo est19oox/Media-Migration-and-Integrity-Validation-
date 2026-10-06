@@ -22,7 +22,7 @@ class InMemoryUserRepositoryTest {
                 List.of(
                         new DestinationAccess(
                                 "mmiv-bucket-a",
-                                Permission.READ_WRITE)));
+                                Permission.WRITE)));
 
         InMemoryUserRepository repository = new InMemoryUserRepository();
 

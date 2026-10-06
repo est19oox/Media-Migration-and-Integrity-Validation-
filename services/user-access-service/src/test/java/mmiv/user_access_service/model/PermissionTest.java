@@ -22,12 +22,12 @@ class PermissionTest {
     @Test
     void readWritePermissionShouldAllowRead() {
         assertTrue(
-                Permission.READ_WRITE.allows(Action.READ));
+                Permission.WRITE.allows(Action.READ));
     }
 
     @Test
     void readWritePermissionShouldAllowWrite() {
         assertTrue(
-                Permission.READ_WRITE.allows(Action.WRITE));
+                Permission.WRITE.allows(Action.WRITE));
     }
 }
