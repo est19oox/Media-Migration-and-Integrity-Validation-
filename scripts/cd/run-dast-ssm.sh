@@ -56,7 +56,7 @@ COMMAND_ID=$(aws_ssm send-command \
   --instance-ids "$INSTANCE_ID" \
   --document-name AWS-RunShellScript \
   --comment "MMIV DAST port $PORT" \
-  --timeout-seconds 60 \
+  --timeout-seconds 600 \
   --parameters "file://$TEMP_DIR/parameters.json" \
   --query Command.CommandId --output text)
 echo "DAST SSM command ID: $COMMAND_ID"
