@@ -1,0 +1,128 @@
+{
+  "common": [
+    {
+      "name": "health",
+      "method": "GET",
+      "path": "/actuator/health",
+      "status": 200,
+      "json_equals": {
+        "status": "UP"
+      }
+    }
+  ],
+  "services": {
+    "transfer-service": [
+      {
+        "name": "missing source",
+        "method": "POST",
+        "path": "/api/v1/transfers",
+        "status": 400,
+        "body": {
+          "destinationKey": "endpoint-tests/invalid.txt"
+        },
+        "json_nonempty": [
+          "error"
+        ]
+      },
+      {
+        "name": "missing destination",
+        "method": "POST",
+        "path": "/api/v1/transfers",
+        "status": 400,
+        "body": {
+          "sourcePath": "/media/endpoint-test.txt"
+        },
+        "json_nonempty": [
+          "error"
+        ]
+      },
+      {
+        "name": "blank source",
+        "method": "POST",
+        "path": "/api/v1/transfers",
+        "status": 400,
+        "body": {
+          "sourcePath": "",
+          "destinationKey": "endpoint-tests/invalid.txt"
+        },
+        "json_nonempty": [
+          "error"
+        ]
+      },
+      {
+        "name": "absolute destination key",
+        "method": "POST",
+        "path": "/api/v1/transfers",
+        "status": 400,
+        "body": {
+          "sourcePath": "/media/endpoint-test.txt",
+          "destinationKey": "/invalid.txt"
+        },
+        "json_nonempty": [
+          "error"
+        ]
+      },
+      {
+        "name": "unavailable source",
+        "method": "POST",
+        "path": "/api/v1/transfers",
+        "status": 400,
+        "body": {
+          "sourcePath": "/media/mmiv-nonexistent-${RUN_ID}.txt",
+          "destinationKey": "endpoint-tests/invalid.txt"
+        },
+        "json_nonempty": [
+          "error"
+        ]
+      },
+      {
+        "name": "source outside media directory",
+        "method": "POST",
+        "path": "/api/v1/transfers",
+        "status": 400,
+        "body": {
+          "sourcePath": "/etc/passwd",
+          "destinationKey": "endpoint-tests/invalid.txt"
+        },
+        "json_nonempty": [
+          "error"
+        ]
+      },
+      {
+        "name": "malformed JSON",
+        "method": "POST",
+        "path": "/api/v1/transfers",
+        "status": 400,
+        "raw_body": "{"
+      },
+      {
+        "name": "successful S3 transfer",
+        "method": "POST",
+        "path": "/api/v1/transfers",
+        "status": 200,
+        "requires_env": [
+          "TRANSFER_TEST_SOURCE"
+        ],
+        "body": {
+          "sourcePath": "${TRANSFER_TEST_SOURCE}",
+          "destinationKey": "${TEST_OBJECT_KEY}",
+          "contentType": "text/plain"
+        },
+        "json_equals": {
+          "key": "${TEST_OBJECT_KEY}",
+          "mediaType": "text/plain"
+        },
+        "json_nonempty": [
+          "bucket"
+        ],
+        "json_min": {
+          "sizeBytes": 1
+        }
+      }
+    ],
+    "integrity-service": [],
+    "user-access-service": [],
+    "reporting-service": [],
+    "discovery-service": []
+  }
+}

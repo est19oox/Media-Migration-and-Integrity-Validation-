@@ -486,6 +486,8 @@ jobs:
         env:
           INSTANCE_ID: ${{ steps.deployment.outputs.instance_id }}
           DAST_PORT: ${{ matrix.service.port }}
+          DAST_SERVICE_NAME: ${{ matrix.service.name }}
+          TRANSFER_TEST_SOURCE: ${{ vars.TRANSFER_TEST_SOURCE }}
           DAST_PATH: /actuator/health
         run: |
           mkdir -p .ci/reports

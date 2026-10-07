@@ -96,6 +96,12 @@ if [[ "$READY" != true ]]; then
 fi
 echo "Deployed endpoint reachable: $TARGET_URL"
 
+echo 'Running functional endpoint tests through the SSM tunnel'
+python3 scripts/cd/test-endpoints.py \
+  --service "${DAST_SERVICE_NAME:?DAST_SERVICE_NAME is required}" \
+  --base-url "http://127.0.0.1:$LOCAL_PORT" \
+  --report "$REPORT_DIR/endpoint-tests.json"
+
 echo '[3/3] Running ZAP on GitHub runner; scanner output streams below'
 docker create --user 0:0 --name "$ZAP_CONTAINER" --network host \
   --volume /zap/wrk -e PYTHONUNBUFFERED=1 "$ZAP_IMAGE" \
