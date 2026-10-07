@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MMIV 文件上传</title>
+<style>
+body{font:16px system-ui;max-width:680px;margin:60px auto;padding:24px;background:#f4f6fa;color:#162033}
+main{background:white;padding:32px;border-radius:16px}button{padding:12px 24px;background:#225be0;color:white;border:0;border-radius:8px;cursor:pointer;margin-top:20px}button:disabled{opacity:.5}pre{white-space:pre-wrap;overflow-wrap:anywhere}small{display:block;margin:16px 0;color:#566174}
+</style>
+<main>
+<h1>上传文件到云</h1>
+<p>选择电脑上的文件，由 Transfer Service 上传到 Amazon S3。</p>
+<form id="uploadForm">
+<label for="file">选择文件</label>
+<input id="file" name="file" type="file" accept=".png,.jpg,.jpeg,.mp4,.txt,.pdf" required>
+<small>支持 PNG、JPG、JPEG、MP4、TXT、PDF，最大 100 MiB。</small>
+<button id="submit" type="submit">上传</button>
+</form>
+<pre id="result" role="status" aria-live="polite"></pre>
+<p id="links" hidden><a id="preview" target="_blank" rel="noopener">查看文件</a> · <a id="download">下载文件</a> · <a href="/files.html">打开文件查看页面</a></p>
+</main>
+<script>
+document.querySelector('#uploadForm').addEventListener('submit', async event => {
+  event.preventDefault();
+  const file = document.querySelector('#file').files[0];
+  const result = document.querySelector('#result');
+  const button = document.querySelector('#submit');
+  document.querySelector('#links').hidden = true;
+  if (!file || file.size === 0 || file.size > 104857600) {
+    result.textContent = '请选择非空且不超过 100 MiB 的文件。'; return;
+  }
+  const body = new FormData(); body.append('file', file);
+  button.disabled = true; result.textContent = '正在上传……';
+  try {
+    const response = await fetch('/api/v1/transfers', {method: 'POST', body});
+    const text = await response.text();
+    let data; try { data = JSON.parse(text); } catch { throw new Error('服务器未返回有效 JSON，HTTP ' + response.status); }
+    if (!response.ok) throw new Error(data.error || '上传失败，HTTP ' + response.status);
+    result.textContent = '上传成功（尚未调用 Integrity Service）\n' + JSON.stringify(data, null, 2);
+    const id = encodeURIComponent(data.fileId);
+    document.querySelector('#preview').href = '/api/v1/files/' + id + '/content';
+    document.querySelector('#download').href = '/api/v1/files/' + id + '/download';
+    document.querySelector('#links').hidden = false;
+  } catch (error) { result.textContent = error.message; }
+  finally { button.disabled = false; }
+});
+</script>
+</html>

@@ -26,10 +26,22 @@
         <micrometer.version>1.15.12</micrometer.version>
         <netty.version>4.1.137.Final</netty.version>
         <httpcore5.version>5.4.3</httpcore5.version>
+        <!-- Future Feign + Eureka; Spring Cloud 2025.0.x supports Boot 3.5.x.
+        <spring-cloud.version>2025.0.3</spring-cloud.version>
+        -->
     </properties>
 
     <dependencyManagement>
         <dependencies>
+            <!-- Future: uncomment with the Cloud property and dependencies below.
+            <dependency>
+                <groupId>org.springframework.cloud</groupId>
+                <artifactId>spring-cloud-dependencies</artifactId>
+                <version>${spring-cloud.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+            -->
             <dependency>
                 <groupId>software.amazon.awssdk</groupId>
                 <artifactId>bom</artifactId>
@@ -41,6 +53,20 @@
     </dependencyManagement>
 
     <dependencies>
+        <!-- Future Integrity API, Feign client and Eureka service discovery.
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-openfeign</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-netflix-eureka-client</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-loadbalancer</artifactId>
+        </dependency>
+        -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-web</artifactId>
