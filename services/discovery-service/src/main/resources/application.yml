@@ -10,7 +10,14 @@ spring:
 
 discovery:
   root: ${DISCOVERY_ROOT}
-
+  supported-file-types:
+    - MP4
+    - PDF
+    - MP3
+    - PPT
+    - PPTX
+    - PNG
+    
 management:
   endpoints:
     web:
