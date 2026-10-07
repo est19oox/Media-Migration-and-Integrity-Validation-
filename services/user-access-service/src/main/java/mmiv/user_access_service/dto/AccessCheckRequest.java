@@ -8,9 +8,6 @@ public class AccessCheckRequest {
     private String userId;
 
     @NotBlank 
-    private String destination;
-    
-    @NotBlank 
     private String action;
 
     public String getUserId() {
@@ -19,14 +16,6 @@ public class AccessCheckRequest {
 
     public void setUserId(String userId) {
         this.userId = userId;
-    }
-
-    public String getDestination() {
-        return destination;
-    }
-
-    public void setDestination(String destination) {
-        this.destination = destination;
     }
 
     public String getAction() {

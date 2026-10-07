@@ -2,12 +2,10 @@ package mmiv.user_access_service.service;
 
 import mmiv.user_access_service.dto.AccessCheckRequest;
 import mmiv.user_access_service.dto.AccessCheckResponse;
-import mmiv.user_access_service.model.Action;
-import mmiv.user_access_service.model.DestinationAccess;
+import mmiv.user_access_service.model.Permission;
 import mmiv.user_access_service.model.User;
 import mmiv.user_access_service.repository.UserRepository;
 import org.springframework.stereotype.Service;
-import java.util.Optional;
 
 @Service 
 public class AccessService {
@@ -19,53 +17,29 @@ public class AccessService {
     }
 
     public AccessCheckResponse checkAccess(AccessCheckRequest request) {
-
-        // 1. Find user
-        Optional<User> userOptional = userRepository.findById(request.getUserId());
-
-        if (userOptional.isEmpty()) {
+        User user = userRepository.findById(request.getUserId()).orElse(null);
+        if (user == null) {
             return new AccessCheckResponse(
                     false,
                     "User not found");
         }
 
-        User user = userOptional.get();
-
-        // 2. Find user's access to the requested destination
-        
-        Optional<DestinationAccess> destinationAccess = user.getDestinationAccesses()
-                .stream()
-                .filter(access -> access.getDestination()
-                        .equals(request.getDestination()))
-                .findFirst();
-        
-        if (destinationAccess.isEmpty()) {
+        if (!user.isActive()) {
             return new AccessCheckResponse(
                     false,
-                    "No access to destination");
+                    "User is inactive");
         }
-        
-        
 
-        // 3. Convert requested action
-        Action action;
-
+        Permission permission;
         try {
-            action = Action.valueOf(
-                    request.getAction().toUpperCase());
+            permission = Permission.valueOf(request.getAction().toUpperCase());
         } catch (IllegalArgumentException e) {
             return new AccessCheckResponse(
                     false,
                     "Invalid action");
         }
 
-        // 4. Check permission
-        boolean authorised = destinationAccess
-                .get()
-                .getPermission()
-                .allows(action);
-
-        if (authorised) {
+        if (user.hasPermission(permission)) {
             return new AccessCheckResponse(
                     true,
                     "Access granted");
@@ -73,6 +47,6 @@ public class AccessService {
 
         return new AccessCheckResponse(
                 false,
-                "Insufficient permission");
+                "Permission denied");
     }
 }

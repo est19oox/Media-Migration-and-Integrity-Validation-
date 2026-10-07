@@ -40,7 +40,6 @@ class AccessControllerTest {
                         .content("""
                                 {
                                   "userId": "U001",
-                                  "destination": "mmiv-bucket-a",
                                   "action": "WRITE"
                                 }
                                 """))
@@ -56,7 +55,7 @@ class AccessControllerTest {
                             .thenReturn(
                                             new AccessCheckResponse(
                                                             false,
-                                                            "Insufficient permission"));
+                                                            "Permission denied"));
 
             mockMvc.perform(
                             post("/api/access/check")
@@ -64,14 +63,13 @@ class AccessControllerTest {
                                             .content("""
                                                             {
                                                               "userId": "U002",
-                                                              "destination": "mmiv-bucket-a",
                                                               "action": "WRITE"
                                                             }
                                                             """))
                             .andExpect(status().isOk())
                             .andExpect(jsonPath("$.authorised").value(false))
                             .andExpect(jsonPath("$.reason")
-                                            .value("Insufficient permission"));
+                                            .value("Permission denied"));
     }
     
     @Test
@@ -82,10 +80,23 @@ class AccessControllerTest {
                                             .contentType("application/json")
                                             .content("""
                                                             {
-                                                              "destination": "mmiv-bucket-a",
                                                               "action": "WRITE"
                                                             }
                                                             """))
+                            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void shouldReturnBadRequestWhenActionIsMissing() throws Exception {
+
+        mockMvc.perform(
+                                    post("/api/access/check")
+                                            .contentType("application/json")
+                                            .content("""
+                                                    {
+                                                      "userId": "U001"
+                                                    }
+                                                    """))
                             .andExpect(status().isBadRequest());
     }
 }

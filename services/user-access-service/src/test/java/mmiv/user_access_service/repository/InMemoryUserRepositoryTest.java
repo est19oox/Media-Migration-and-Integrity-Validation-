@@ -1,13 +1,12 @@
 package mmiv.user_access_service.repository;
 
-import mmiv.user_access_service.model.DestinationAccess;
 import mmiv.user_access_service.model.Permission;
 import mmiv.user_access_service.model.User;
 
 import org.junit.jupiter.api.Test;
 
-import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -15,15 +14,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class InMemoryUserRepositoryTest {
 
     @Test
-    void shouldFindExistingUserById() {
-
+    void shouldSaveAndFindUserById() {
         User alice = new User(
-                "U001",
-                List.of(
-                        new DestinationAccess(
-                                "mmiv-bucket-a",
-                                Permission.WRITE)));
-
+                "U001", "alice", "analyst", true, Set.of(Permission.READ));
         InMemoryUserRepository repository = new InMemoryUserRepository();
 
         repository.save(alice);
@@ -31,8 +24,6 @@ class InMemoryUserRepositoryTest {
         Optional<User> result = repository.findById("U001");
 
         assertTrue(result.isPresent());
-        assertEquals(
-                "U001",
-                result.get().getUserId());
+        assertEquals(alice, result.get());
     }
 }
