@@ -5,7 +5,7 @@
 	<parent>
 		<groupId>org.springframework.boot</groupId>
 		<artifactId>spring-boot-starter-parent</artifactId>
-		<version>4.1.1</version>
+		<version>3.5.14</version>
 		<relativePath/> <!-- lookup parent from repository -->
 	</parent>
 	<groupId>mmiv</groupId>
@@ -28,6 +28,10 @@
 	</scm>
 	<properties>
 		<java.version>25</java.version>
+		<spring-framework.version>6.2.19</spring-framework.version>
+		<tomcat.version>10.1.60</tomcat.version>
+		<jackson-bom.version>2.21.7</jackson-bom.version>
+		<micrometer.version>1.15.12</micrometer.version>
 	</properties>
 
 	<dependencies>
@@ -42,12 +46,6 @@
 			<artifactId>spring-boot-starter-test</artifactId>
 			<scope>test</scope>
 		</dependency>
-
-		<dependency>
-			<groupId>org.springframework.boot</groupId>
-			<artifactId>spring-boot-starter-webmvc-test</artifactId>
-			<scope>test</scope>
-    	</dependency>
 
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
