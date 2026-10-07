@@ -1,0 +1,13 @@
+services:
+
+  user-access:
+    build:
+      context: ./services/user-access-service
+      dockerfile: Dockerfile
+
+    container_name: mmiv-user-access
+
+    ports:
+      - "8081:8080"
+
+    restart: unless-stopped
