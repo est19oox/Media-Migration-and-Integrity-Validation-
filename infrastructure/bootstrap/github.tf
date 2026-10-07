@@ -81,6 +81,8 @@ resource "aws_iam_role_policy_attachment" "github_terraform_ec2" {
 
 # Allows Terraform GitHub Actions to manage IAM.
 resource "aws_iam_role_policy_attachment" "github_terraform_iam" {
+  #checkov:skip=CKV2_AWS_56:The bootstrap Terraform role requires temporary IAM provisioning access; production should replace it with a scoped customer-managed policy.
+
   role       = aws_iam_role.github_terraform.name
   policy_arn = "arn:aws:iam::aws:policy/IAMFullAccess"
 }
@@ -184,6 +186,9 @@ resource "aws_iam_role_policy" "github_app_s3_deploy" {
 resource "aws_iam_role_policy" "github_app_ssm_deploy" {
   name = "MMIVAppSSMDeployPolicy"
   role = aws_iam_role.github_app.name
+
+  #checkov:skip=CKV_AWS_290:The write action is limited to the regional AWS document and account EC2 instances; discovery APIs require wildcard resources.
+  #checkov:skip=CKV_AWS_355:AWS Describe and command-result APIs in this policy do not support resource-level permissions.
 
   policy = jsonencode({
     Version = "2012-10-17"

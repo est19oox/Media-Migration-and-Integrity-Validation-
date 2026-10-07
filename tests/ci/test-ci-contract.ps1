@@ -98,13 +98,28 @@ Assert-FileContains 'scripts/ci/run-sca.sh' @(
     '--severity HIGH,CRITICAL',
     '--exit-code 1',
     '--format json',
+    '--skip-dirs "\$ROOT/\.worktrees"',
+    '--skip-dirs "\$ROOT/\.superpowers"',
+    '--ignorefile "\$ROOT/security/trivy/\.trivyignore\.yaml"',
     'prepare_reports_directory',
     'trivy-sca\.json'
+)
+Assert-FileContains 'security/trivy/.trivyignore.yaml' @(
+    'CVE-2026-47884',
+    'purls:',
+    'pkg:maven/org\.springframework/spring-webmvc@6\.2\.19',
+    'expired_at:',
+    'statement:'
 )
 Assert-FileContains 'scripts/ci/run-terraform-checks.sh' @('terraform', 'fmt', 'validate')
 Assert-FileContains 'scripts/ci/run-iac-scan.sh' @('checkov', 'infrastructure', 'checkov\.json')
 Assert-FileContains 'scripts/ci/build-image.sh' @('docker', 'dockerfile', '--file', '\.ci/image-ref', 'TESTED_COMMIT')
-Assert-FileContains 'scripts/ci/scan-image.sh' @('trivy', '\.ci/image-ref')
+Assert-FileContains 'scripts/ci/scan-image.sh' @(
+    'trivy image',
+    '\.ci/image-ref',
+    '--ignorefile "\$ROOT/security/trivy/\.trivyignore\.yaml"',
+    'trivy-image\.json'
+)
 Assert-FileContains 'scripts/ci/verify-deployment.sh' @(
     'DEPLOYED_COMMIT',
     'DAST_TARGET_URL',
@@ -114,11 +129,20 @@ Assert-FileContains 'scripts/ci/verify-deployment.sh' @(
 Assert-FileContains 'scripts/ci/run-dast.sh' @(
     'curl --fail --silent --show-error --max-time 10',
     'ghcr\.io/zaproxy/zaproxy@sha256:781a2bdaea47324e7bab583e2263f21d257b0aee61ed51521a5be45f5f5081ef',
+    '--user 0:0',
+    'docker create',
+    '--volume /zap/wrk',
+    'docker start --attach',
+    'docker cp',
+    'docker rm -f -v',
     'zap-baseline\.py',
     '-J zap-report\.json',
     '-r zap-report\.html',
     'zap\.log',
-    'tee'
+    'ZAP did not produce the required JSON and HTML reports',
+    'tee',
+    '\$zap_status" -eq 2',
+    'completed with non-blocking warnings'
 )
 $dastScript = Get-Content -Raw -LiteralPath (Join-Path $repositoryRoot 'scripts/ci/run-dast.sh')
 if ($dastScript -match 'ghcr\.io/zaproxy/zaproxy:(stable|latest)') {

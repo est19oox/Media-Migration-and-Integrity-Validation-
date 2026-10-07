@@ -38,3 +38,6 @@ crash.log
 *.tfstate.*
 *.tfvars
 *.tfplan
+# Saved plans must always be regenerated after configuration/state changes.
+tfplan
+tfplan.*
