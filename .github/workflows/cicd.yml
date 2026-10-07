@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - transfer-service
     paths:
       - 'services/**'
       - 'infrastructure/bootstrap/**'
@@ -487,7 +488,7 @@ jobs:
           INSTANCE_ID: ${{ steps.deployment.outputs.instance_id }}
           DAST_PORT: ${{ matrix.service.port }}
           DAST_SERVICE_NAME: ${{ matrix.service.name }}
-          TRANSFER_TEST_SOURCE: ${{ vars.TRANSFER_TEST_SOURCE }}
+          DAST_SCAN_MODE: ${{ matrix.service.name == 'transfer-service' && 'api' || 'baseline' }}
           DAST_PATH: /actuator/health
         run: |
           mkdir -p .ci/reports

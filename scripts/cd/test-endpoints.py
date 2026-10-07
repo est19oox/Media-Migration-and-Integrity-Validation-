@@ -8,6 +8,7 @@ import re
 import sys
 import time
 import uuid
+import base64
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
 from urllib.request import Request, urlopen
@@ -37,6 +38,29 @@ def field(body, dotted_name):
     return value
 
 
+def multipart_body(parts):
+    boundary = "mmiv-" + uuid.uuid4().hex
+    chunks = []
+    for part in parts:
+        name = part["name"]
+        filename = part.get("filename")
+        if any(c in name + (filename or "") for c in '\r\n"'):
+            raise ValueError("Invalid multipart field name or filename")
+        disposition = f'Content-Disposition: form-data; name="{name}"'
+        if filename is not None:
+            disposition += f'; filename="{filename}"'
+        headers = disposition + "\r\n"
+        if filename is not None:
+            media_type = part.get('content_type', 'application/octet-stream')
+            if '\r' in media_type or '\n' in media_type:
+                raise ValueError("Invalid multipart content type")
+            headers += 'Content-Type: ' + media_type + '\r\n'
+        content = base64.b64decode(part['base64'], validate=True) if 'base64' in part else part.get('content', '').encode()
+        chunks.append(("--" + boundary + "\r\n" + headers + "\r\n").encode() + content + b"\r\n")
+    chunks.append(("--" + boundary + "--\r\n").encode())
+    return b''.join(chunks), 'multipart/form-data; boundary=' + boundary
+
+
 def run_case(case, base_url, token):
     path = case["path"]
     if not path.startswith("/") or path.startswith("//"):
@@ -47,6 +71,8 @@ def run_case(case, base_url, token):
     elif "raw_body" in case:
         data = case["raw_body"].encode()
     headers = {"Content-Type": "application/json", **case.get("headers", {})}
+    if "multipart" in case:
+        data, headers["Content-Type"] = multipart_body(case["multipart"])
     if token:
         headers["Authorization"] = "Bearer " + token
     request = Request(base_url + path, data=data,
@@ -54,13 +80,20 @@ def run_case(case, base_url, token):
     try:
         with urlopen(request, timeout=case.get("timeout", 60)) as response:
             status, content = response.status, response.read()
+            response_headers = response.headers
     except HTTPError as error:
         status, content = error.code, error.read()
+        response_headers = error.headers
     except (URLError, TimeoutError, OSError) as error:
         raise ValueError(f"HTTP request failed: {type(error).__name__}") from error
     if status != case["status"]:
         raise ValueError(f"Expected HTTP {case['status']}, received {status}")
-    if not any(key.startswith("json_") for key in case):
+    for name, expected in case.get("header_equals", {}).items():
+        if response_headers.get(name) != expected:
+            raise ValueError(f"Unexpected response header: {name}")
+    if "body_equals" in case and content != case["body_equals"].encode():
+        raise ValueError("Response bytes do not match the uploaded fixture")
+    if not any(key.startswith("json_") for key in case) and not case.get("save_fields") and not case.get("report_fields"):
         return status
     try:
         body = json.loads(content)
@@ -80,6 +113,8 @@ def run_case(case, base_url, token):
         value = field(body, name)
         if not isinstance(value, (int, float)) or value < minimum:
             raise ValueError(f"JSON field below minimum: {name}")
+    case["_reported_fields"] = {name: field(body, name) for name in case.get("report_fields", [])}
+    case["_saved_vars"] = {name: str(field(body, dotted)) for name, dotted in case.get("save_fields", {}).items()}
     return status
 
 
@@ -117,8 +152,12 @@ def main():
         else:
             try:
                 case = expand(original, variables)
+                result["path"] = case["path"]
                 status = run_case(case, base_url, os.getenv("API_TEST_TOKEN", ""))
                 result.update(status="PASS", http_status=status)
+                if case.get("_reported_fields"):
+                    result["response"] = case["_reported_fields"]
+                variables.update(case.get("_saved_vars", {}))
                 if original["name"] == "successful S3 transfer":
                     result["test_object_key"] = variables["TEST_OBJECT_KEY"]
             except (ValueError, TypeError, KeyError) as error:

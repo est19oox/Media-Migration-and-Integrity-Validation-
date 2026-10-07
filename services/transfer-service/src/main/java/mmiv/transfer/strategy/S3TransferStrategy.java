@@ -3,6 +3,8 @@ package mmiv.transfer.strategy;
 import mmiv.transfer.dto.TransferRequest;
 import mmiv.transfer.validation.TransferRequestValidator;
 import mmiv.transfer.dto.TransferResponse;
+import mmiv.transfer.dto.UploadSource;
+import mmiv.transfer.dto.UploadResponse;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import software.amazon.awssdk.core.sync.RequestBody;
@@ -61,6 +63,23 @@ public class S3TransferStrategy implements TransferStrategy {
         } catch (Exception e) {
             if (e instanceof IllegalArgumentException iae) throw iae;
             throw new IllegalStateException("S3 transfer failed", e);
+        }
+    }
+
+    @Override
+    public UploadResponse transferUploaded(UploadSource source) {
+        try {
+            // The source path was created by the server, not supplied by the user.
+            byte[] digest = java.util.HexFormat.of().parseHex(source.sha256());
+            PutObjectRequest put = PutObjectRequest.builder()
+                    .bucket(bucket).key(source.key()).contentType(source.contentType())
+                    .checksumSHA256(java.util.Base64.getEncoder().encodeToString(digest))
+                    .build();
+            s3Client.putObject(put, RequestBody.fromFile(source.path()));
+            return new UploadResponse(bucket, source.key(), source.fileName(),
+                    source.contentType(), source.sizeBytes(), source.sha256());
+        } catch (Exception e) {
+            throw new IllegalStateException("S3 upload failed", e);
         }
     }
 }
