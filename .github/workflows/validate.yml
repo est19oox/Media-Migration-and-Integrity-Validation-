@@ -82,7 +82,7 @@ jobs:
 
       - name: Upload CI evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: ci-evidence-${{ github.sha }}
           if-no-files-found: warn
