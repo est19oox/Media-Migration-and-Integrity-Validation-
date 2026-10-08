@@ -6,14 +6,14 @@ import java.util.List;
 
 import mmiv.user_access_service.model.User;
 
-import org.springframework.security.oauth2.jose.jws.MacAlgorithm;
+import org.springframework.security.oauth2.jose.jws.SignatureAlgorithm;
 import org.springframework.security.oauth2.jwt.JwsHeader;
 import org.springframework.security.oauth2.jwt.JwtClaimsSet;
 import org.springframework.security.oauth2.jwt.JwtEncoder;
 import org.springframework.security.oauth2.jwt.JwtEncoderParameters;
 import org.springframework.stereotype.Service;
 
-@Service 
+@Service
 public class JwtService {
 
     private final JwtEncoder encoder;
@@ -46,7 +46,9 @@ public class JwtService {
                 .claim("permissions", permissions)
                 .build();
 
-        JwsHeader header = JwsHeader.with(MacAlgorithm.HS256).build();
+        JwsHeader header = JwsHeader
+                .with(SignatureAlgorithm.RS256)
+                .build();
 
         return encoder.encode(
                 JwtEncoderParameters.from(header, claims)).getTokenValue();
