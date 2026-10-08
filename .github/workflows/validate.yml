@@ -86,6 +86,7 @@ jobs:
         with:
           name: ci-evidence-${{ github.sha }}
           if-no-files-found: warn
+          include-hidden-files: true
           path: |
             .ci/reports/**
             **/target/surefire-reports/**

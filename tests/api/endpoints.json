@@ -263,6 +263,37 @@
     "integrity-service": [],
     "user-access-service": [],
     "reporting-service": [],
-    "discovery-service": []
+    "discovery-service": [],
+    "service-registry": [
+      {
+        "name": "Eureka dashboard",
+        "path": "/",
+        "status": 200
+      },
+      {
+        "name": "Eureka applications API",
+        "path": "/eureka/apps",
+        "headers": {
+          "Accept": "application/json"
+        },
+        "status": 200,
+        "json_required": [
+          "applications"
+        ]
+      }
+    ],
+    "api-gateway": [
+      {
+        "name": "gateway info endpoint",
+        "path": "/actuator/info",
+        "status": 200,
+        "json_object": true
+      },
+      {
+        "name": "registry API is not exposed by gateway",
+        "path": "/eureka/apps",
+        "status": 404
+      }
+    ]
   }
 }

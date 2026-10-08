@@ -1,5 +1,8 @@
 server:
   port: ${SERVER_PORT:8081}
+  tomcat:
+    max-part-count: 1100 # Up to 500 files plus 500 relativePaths fields.
+
 spring:
   application:
     name: transfer-service
@@ -8,15 +11,29 @@ spring:
       max-file-size: 100MB
       max-request-size: 101MB
       file-size-threshold: 0B
+  # Future: uncomment after adding Spring Cloud dependencies and client classes.
+  # cloud:
+  #   openfeign:
+  #     client:
+  #       config:
+  #         integrity-service:
+  #           connectTimeout: 3000
+  #           readTimeout: 30000
+
 aws:
   region: ${AWS_REGION:ap-southeast-1}
+
 mmiv:
   upload:
     max-size-bytes: 104857600
+    folder:
+      max-total-bytes: 104857600
+      max-files: 500
   media:
     root: ${MMIV_MEDIA_ROOT:/media}
   s3:
     bucket: ${MMIV_BUCKET_NAME:media-migration-dev-landing}
+
 management:
   endpoints:
     web:
@@ -26,6 +43,7 @@ management:
     health:
       probes:
         enabled: true
+
 eureka:
   client:
     enabled: ${EUREKA_CLIENT_ENABLED:true}

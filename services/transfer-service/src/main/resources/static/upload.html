@@ -16,6 +16,15 @@ main{background:white;padding:32px;border-radius:16px}button{padding:12px 24px;b
 <small>支持 PNG、JPG、JPEG、MP4、TXT、PDF，最大 100 MiB。</small>
 <button id="submit" type="submit">上传</button>
 </form>
+<hr>
+<h2>上传文件夹（包括子文件夹）</h2>
+<form id="folderForm">
+<label for="folder">选择本地文件夹</label>
+<input id="folder" type="file" webkitdirectory multiple required>
+<small>保留文件夹路径。最多 500 个文件，总计 100 MiB；支持 PNG、JPG、JPEG、MP4、TXT、PDF。空文件和空文件夹不支持。部分失败时，请查看每个文件的结果。</small>
+<button id="folderSubmit" type="submit">上传文件夹</button>
+</form>
+<pre id="folderResult" role="status" aria-live="polite"></pre>
 <pre id="result" role="status" aria-live="polite"></pre>
 <p id="links" hidden><a id="preview" target="_blank" rel="noopener">查看文件</a> · <a id="download">下载文件</a> · <a href="/files.html">打开文件查看页面</a></p>
 </main>
@@ -41,6 +50,31 @@ document.querySelector('#uploadForm').addEventListener('submit', async event => 
     document.querySelector('#preview').href = '/api/v1/files/' + id + '/content';
     document.querySelector('#download').href = '/api/v1/files/' + id + '/download';
     document.querySelector('#links').hidden = false;
+  } catch (error) { result.textContent = error.message; }
+  finally { button.disabled = false; }
+});
+document.querySelector('#folderForm').addEventListener('submit', async event => {
+  event.preventDefault();
+  const files = Array.from(document.querySelector('#folder').files);
+  const result = document.querySelector('#folderResult');
+  const button = document.querySelector('#folderSubmit');
+  if (!files.length || files.length > 500 || files.reduce((n, f) => n + f.size, 0) > 104857600) {
+    result.textContent = '请选择包含 1–500 个文件且总计不超过 100 MiB 的文件夹。'; return;
+  }
+  const body = new FormData();
+  for (const file of files) {
+    if (!file.webkitRelativePath || !file.size || !/\.(png|jpe?g|mp4|txt|pdf)$/i.test(file.name)) {
+      result.textContent = '文件为空或类型不支持：' + (file.webkitRelativePath || file.name); return;
+    }
+    body.append('files', file, file.name);
+    body.append('relativePaths', file.webkitRelativePath);
+  }
+  button.disabled = true; result.textContent = '正在上传文件夹……';
+  try {
+    const response = await fetch('/api/v1/transfers/folder', {method: 'POST', body});
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || '上传失败，HTTP ' + response.status);
+    result.textContent = '成功：' + data.succeeded + '，失败：' + data.failed + '\n' + JSON.stringify(data, null, 2);
   } catch (error) { result.textContent = error.message; }
   finally { button.disabled = false; }
 });

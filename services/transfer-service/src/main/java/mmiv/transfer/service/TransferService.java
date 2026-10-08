@@ -40,7 +40,10 @@ public class TransferService {
 
     public UploadResponse upload(MultipartFile file) {
         String fileName = validator.validateUpload(file, maxUploadBytes);
-        String key = "uploads/" + UUID.randomUUID() + "/" + fileName;
+        return uploadToKey(file, fileName, "uploads/" + UUID.randomUUID() + "/" + fileName);
+    }
+
+    UploadResponse uploadToKey(MultipartFile file, String fileName, String key) {
         String contentType = validator.uploadContentType(fileName);
         TransferStrategy strategy = factory.getStrategy(new TransferRequest(fileName, key, contentType));
         Path temporary = null;
