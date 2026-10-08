@@ -13,6 +13,9 @@
   <name>Integrity Service</name>
   <properties>
     <java.version>25</java.version>
+    <!-- Align both Jackson families to the patched versions reported by Trivy. -->
+    <jackson-2-bom.version>2.21.7</jackson-2-bom.version>
+    <jackson-bom.version>3.1.7</jackson-bom.version>
     <tomcat.version>11.0.26</tomcat.version>
     <spring-cloud.version>2025.1.3</spring-cloud.version>
     <httpcore5.version>5.4.3</httpcore5.version>
