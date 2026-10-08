@@ -17,17 +17,51 @@ jobs:
       - uses: hashicorp/setup-terraform@v4
         with:
           terraform_version: 1.13.3
-      - name: Build and test
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Install Semgrep and Checkov
         run: |
-          mvn -B clean verify
-          mvn -B -f services/transfer-service/pom.xml clean verify
-      - name: Terraform validation
+          python -m pip install --upgrade pip
+          python -m pip install "semgrep==1.138.0" "checkov==3.2.489"
+
+      - name: Install Trivy
+        env:
+          TRIVY_VERSION: 0.74.0
+          TRIVY_SHA256: cf1e32ec8d4d8823e023096a28cadb14f5b5123ce03f201fb633c5b76aa712dd
         run: |
-          terraform -chdir=infrastructure fmt -check -recursive
-          terraform -chdir=infrastructure/bootstrap init -backend=false -input=false
-          terraform -chdir=infrastructure/bootstrap validate
-          terraform -chdir=infrastructure/terraform init -backend=false -input=false
-          terraform -chdir=infrastructure/terraform validate
+          PACKAGE="trivy_${TRIVY_VERSION}_Linux-64bit.deb"
+          curl -fsSLo "/tmp/${PACKAGE}" \
+            "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/${PACKAGE}"
+          echo "${TRIVY_SHA256}  /tmp/${PACKAGE}" | sha256sum --check --strict
+          sudo apt-get install --yes "/tmp/${PACKAGE}"
+
+      - name: Verify security tools
+        run: |
+          semgrep --version
+          trivy --version
+          checkov --version
+      - name: Validate repository
+        run: bash scripts/ci/validate-repository.sh .
+
+      - name: Build and test services
+        run: bash scripts/ci/run-tests.sh .
+
+      - name: Run Semgrep SAST
+        run: bash scripts/ci/run-sast.sh .
+
+      - name: Run Trivy SCA
+        run: bash scripts/ci/run-sca.sh .
+
+      - name: Validate Terraform
+        run: bash scripts/ci/run-terraform-checks.sh .
+
+      - name: Run Checkov IaC scan
+        run: bash scripts/ci/run-iac-scan.sh .
+
       - name: Ansible validation
         working-directory: infrastructure/ansible
         run: |
@@ -36,4 +70,22 @@ jobs:
           ansible-playbook -i inventory/ci.ini playbook.yml --syntax-check
           ansible-playbook -i inventory/ci.ini rollback.yml --syntax-check
       - name: Docker build
-        run: docker build -t mmiv:validation services/transfer-service
+        shell: bash
+        run: |
+          set -e
+          for service in services/*; do
+            if [ -f "$service/Dockerfile" ]; then
+              name="$(basename "$service")"
+              docker build -t "mmiv:${name}-validation" "$service"
+            fi
+          done
+
+      - name: Upload CI evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: ci-evidence-${{ github.sha }}
+          if-no-files-found: warn
+          path: |
+            .ci/reports/**
+            **/target/surefire-reports/**

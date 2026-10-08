@@ -1,0 +1,234 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "MMIV Transfer Service test API",
+    "version": "1.0.0"
+  },
+  "servers": [
+    {
+      "url": "http://127.0.0.1:18081"
+    }
+  ],
+  "paths": {
+    "/actuator/health": {
+      "get": {
+        "operationId": "health",
+        "responses": {
+          "200": {
+            "description": "Service health",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/transfers": {
+      "post": {
+        "operationId": "transferMedia",
+        "summary": "Upload a local file to S3",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "file"
+                ],
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Uploaded to S3; Integrity validation not enabled",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "bucket": {
+                      "type": "string"
+                    },
+                    "key": {
+                      "type": "string"
+                    },
+                    "mediaType": {
+                      "type": "string"
+                    },
+                    "sizeBytes": {
+                      "type": "integer",
+                      "format": "int64"
+                    },
+                    "fileName": {
+                      "type": "string"
+                    },
+                    "sha256": {
+                      "type": "string",
+                      "description": "Hex SHA-256 of uploaded bytes"
+                    },
+                    "fileId": {
+                      "type": "string",
+                      "description": "Opaque-looking reversible S3 key identifier; not an access token"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request or unreadable source"
+          },
+          "413": {
+            "description": "Upload exceeds size limit"
+          },
+          "502": {
+            "description": "Storage or upload processing failure"
+          }
+        }
+      }
+    },
+    "/api/v1/files/{fileId}/content": {
+      "parameters": [
+        {
+          "name": "fileId",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string"
+          },
+          "example": "UPLOAD_FIXTURE_FILE_ID"
+        }
+      ],
+      "get": {
+        "operationId": "contentFile",
+        "parameters": [
+          {
+            "name": "Range",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            },
+            "example": "bytes=0-3"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "File bytes or HEAD metadata"
+          },
+          "206": {
+            "description": "Single byte range"
+          },
+          "400": {
+            "description": "Invalid fileId"
+          },
+          "403": {
+            "description": "S3 access denied"
+          },
+          "404": {
+            "description": "File not found"
+          },
+          "412": {
+            "description": "File changed during read"
+          },
+          "416": {
+            "description": "Unsupported or unsatisfiable range"
+          },
+          "502": {
+            "description": "Storage unavailable"
+          }
+        }
+      },
+      "head": {
+        "operationId": "headContentFile",
+        "responses": {
+          "200": {
+            "description": "File metadata without a body"
+          },
+          "404": {
+            "description": "File not found"
+          }
+        }
+      }
+    },
+    "/api/v1/files/{fileId}/download": {
+      "parameters": [
+        {
+          "name": "fileId",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string"
+          },
+          "example": "UPLOAD_FIXTURE_FILE_ID"
+        }
+      ],
+      "get": {
+        "operationId": "downloadFile",
+        "parameters": [
+          {
+            "name": "Range",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            },
+            "example": "bytes=0-3"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "File bytes or HEAD metadata"
+          },
+          "206": {
+            "description": "Single byte range"
+          },
+          "400": {
+            "description": "Invalid fileId"
+          },
+          "403": {
+            "description": "S3 access denied"
+          },
+          "404": {
+            "description": "File not found"
+          },
+          "412": {
+            "description": "File changed during read"
+          },
+          "416": {
+            "description": "Unsupported or unsatisfiable range"
+          },
+          "502": {
+            "description": "Storage unavailable"
+          }
+        }
+      },
+      "head": {
+        "operationId": "headDownloadFile",
+        "responses": {
+          "200": {
+            "description": "File metadata without a body"
+          },
+          "404": {
+            "description": "File not found"
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,27 +1,34 @@
 # Media Migration and Integrity Validation
 
-MMIV migrates configured media files from local sources to Amazon S3 and verifies transfer integrity.
+[English](README.md) | [简体中文](README.zh-CN.md)
 
-## Jenkins
+MMIV is a microservice-based system for discovering, transferring, validating, and reporting media migrations with access control.
 
-The project includes a reproducible local Jenkins environment and an automatic GitHub multibranch CI security pipeline. Jenkins checks out and records the exact GitHub SHA, runs tests plus Semgrep, Trivy, and ZAP gates where applicable, and archives the evidence for review.
+## Services
 
-Jenkins never pushes, merges, or approves pull requests. A human reviews and merges the pull request into `main` only after reviewing exact-SHA evidence from the corresponding pushed branch build. Contributor-owned application, Docker, Terraform, Ansible, AWS, and deployment failures go back to their owners; Jenkins owns orchestration and evidence rather than those subsystem implementations.
+| Service | Port | Responsibility |
+| --- | ---: | --- |
+| Transfer | 8081 | Transfer media between storage locations |
+| Discovery | 8082 | Discover media and resources |
+| User Access | 8083 | Manage and check access permissions |
+| Reporting | 8084 | Generate migration and validation reports |
+| Integrity | 8085 | Validate migrated media integrity |
 
-See [Local Jenkins Setup](docs/jenkins/local-setup.md) for prerequisites, GitHub credential configuration, branch discovery, gate behavior, the `scripts/cd/trigger-deployment.sh <full-commit-sha>` handoff, reports, local operation, and Docker-socket limitation.
+## Documentation
 
-## AWS Deployment
+- **[Draft]** [Architecture](docs/architecture/architecture.md) — architecture options and decisions requiring team discussion
+- **[Draft]** [API Contracts](docs/api/api-contracts.md) — cross-service API contracts
+- **[Draft]** [CI/CD](docs/ci-cd/ci-cd.md) — GitHub Actions and Jenkins responsibilities
+- [Jenkins Setup](docs/jenkins/local-setup.md) — local scripts automatically build, configure, and run Jenkins
 
-The GitHub Actions deployment workflow is `.github/workflows/cicd.yml` and runs on `main`.
-Terraform runs first on every deployment and the microservice deployment job uses `needs: [terraform]`,
-so Ansible cannot start unless Terraform succeeds.
+> Architecture and API documents marked **Draft** are still under team discussion.
 
-The one-time bootstrap under `infrastructure/bootstrap` creates the GitHub OIDC provider and the
-roles required by GitHub Actions. After bootstrap is applied, normal deployments use:
+## Development
 
-```text
-Terraform → Build/Test → ECR → Ansible/SSM → Health Check → DAST → Smoke Test
+Each microservice is maintained independently under `services/`.
+
+Build and test a service from its own directory:
+
+```bash
+mvn clean verify
 ```
-
-The application bucket is `media-migration-dev-landing` and is shared consistently by Terraform,
-EC2 IAM permissions, Ansible, and the Transfer Service.

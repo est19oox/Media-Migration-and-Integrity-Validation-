@@ -25,6 +25,19 @@ locals {
       "s3:DeleteObjectVersion"
     ]
   }
+
+  project_admin_usernames = toset([
+    "mm-dev-zhao-youbo",
+    "mm-dev-wang-yutong"
+  ])
+
+  project_admin_policies = {
+    ecr = "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryFullAccess"
+    ec2 = "arn:aws:iam::aws:policy/AmazonEC2FullAccess"
+    iam = "arn:aws:iam::aws:policy/IAMFullAccess"
+    vpc = "arn:aws:iam::aws:policy/AmazonVPCFullAccess"
+    s3  = "arn:aws:iam::aws:policy/AmazonS3FullAccess"
+  }
 }
 
 
@@ -34,6 +47,8 @@ locals {
 
 resource "aws_iam_user" "users" {
   for_each = local.csv_users
+
+  #checkov:skip=CKV_AWS_273:CSV-managed coursework identities are required until the team account enables IAM Identity Center.
 
   name = each.value.username
 
@@ -58,6 +73,18 @@ resource "aws_iam_group" "permission_groups" {
   name = "media-migration-${var.environment}-${each.key}"
 }
 
+resource "aws_iam_group" "project_admins" {
+  name = "media-migration-${var.environment}-project-admins"
+}
+
+resource "aws_iam_group" "deployment_operators" {
+  name = "media-migration-${var.environment}-deployment-operators"
+}
+
+resource "aws_iam_group" "cloudshell_users" {
+  name = "media-migration-${var.environment}-cloudshell-users"
+}
+
 
 # ============================================================
 # USER -> GROUP
@@ -68,11 +95,14 @@ resource "aws_iam_user_group_membership" "users" {
 
   user = aws_iam_user.users[each.key].name
 
-  groups = [
-    aws_iam_group.permission_groups[
-      each.value.permission
-    ].name
-  ]
+  groups = concat(
+    [aws_iam_group.permission_groups[each.value.permission].name],
+    contains(local.project_admin_usernames, each.key) ? [aws_iam_group.project_admins.name] : [],
+    each.key == "mm-dev-wang-yutong" ? [
+      aws_iam_group.deployment_operators.name,
+      aws_iam_group.cloudshell_users.name
+    ] : []
+  )
 }
 
 
@@ -186,62 +216,16 @@ resource "aws_iam_group_policy_attachment" "ecr_read" {
 
 
 # ============================================================
-# ZHAO YOUBO - PROJECT ADMIN ACCESS
+# PROJECT ADMIN ACCESS
 # ============================================================
 
-resource "aws_iam_user_policy_attachment" "zhao_ecr_full_access" {
-  user       = aws_iam_user.users["mm-dev-zhao-youbo"].name
-  policy_arn = "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryFullAccess"
-}
+resource "aws_iam_group_policy_attachment" "project_admins" {
+  for_each = local.project_admin_policies
 
-resource "aws_iam_user_policy_attachment" "zhao_ec2_full_access" {
-  user       = aws_iam_user.users["mm-dev-zhao-youbo"].name
-  policy_arn = "arn:aws:iam::aws:policy/AmazonEC2FullAccess"
-}
+  #checkov:skip=CKV2_AWS_56:The temporary coursework admin group needs IAM provisioning access until Identity Center permission sets replace it.
 
-resource "aws_iam_user_policy_attachment" "zhao_iam_full_access" {
-  user       = aws_iam_user.users["mm-dev-zhao-youbo"].name
-  policy_arn = "arn:aws:iam::aws:policy/IAMFullAccess"
-}
-
-resource "aws_iam_user_policy_attachment" "zhao_vpc_full_access" {
-  user       = aws_iam_user.users["mm-dev-zhao-youbo"].name
-  policy_arn = "arn:aws:iam::aws:policy/AmazonVPCFullAccess"
-}
-
-resource "aws_iam_user_policy_attachment" "zhao_s3_full_access" {
-  user       = aws_iam_user.users["mm-dev-zhao-youbo"].name
-  policy_arn = "arn:aws:iam::aws:policy/AmazonS3FullAccess"
-}
-
-
-# ============================================================
-# WANG YUTONG - PROJECT ADMIN ACCESS
-# ============================================================
-
-resource "aws_iam_user_policy_attachment" "wang_yutong_ecr_full_access" {
-  user       = aws_iam_user.users["mm-dev-wang-yutong"].name
-  policy_arn = "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryFullAccess"
-}
-
-resource "aws_iam_user_policy_attachment" "wang_yutong_ec2_full_access" {
-  user       = aws_iam_user.users["mm-dev-wang-yutong"].name
-  policy_arn = "arn:aws:iam::aws:policy/AmazonEC2FullAccess"
-}
-
-resource "aws_iam_user_policy_attachment" "wang_yutong_iam_full_access" {
-  user       = aws_iam_user.users["mm-dev-wang-yutong"].name
-  policy_arn = "arn:aws:iam::aws:policy/IAMFullAccess"
-}
-
-resource "aws_iam_user_policy_attachment" "wang_yutong_vpc_full_access" {
-  user       = aws_iam_user.users["mm-dev-wang-yutong"].name
-  policy_arn = "arn:aws:iam::aws:policy/AmazonVPCFullAccess"
-}
-
-resource "aws_iam_user_policy_attachment" "wang_yutong_s3_full_access" {
-  user       = aws_iam_user.users["mm-dev-wang-yutong"].name
-  policy_arn = "arn:aws:iam::aws:policy/AmazonS3FullAccess"
+  group      = aws_iam_group.project_admins.name
+  policy_arn = each.value
 }
 
 
@@ -249,9 +233,12 @@ resource "aws_iam_user_policy_attachment" "wang_yutong_s3_full_access" {
 # WANG YUTONG - SSM DEPLOYMENT ACCESS
 # ============================================================
 
-resource "aws_iam_user_policy" "wang_yutong_ssm_access" {
-  name = "media-migration-${var.environment}-wang-yutong-ssm"
-  user = aws_iam_user.users["mm-dev-wang-yutong"].name
+resource "aws_iam_policy" "deployment_ssm_access" {
+  name        = "media-migration-${var.environment}-deployment-ssm"
+  description = "Allows deployment operators to deploy MMIV through Systems Manager"
+
+  #checkov:skip=CKV_AWS_290:The write action is limited to the regional AWS document and account EC2 instances; discovery APIs require wildcard resources.
+  #checkov:skip=CKV_AWS_355:AWS Describe and command-result APIs in this policy do not support resource-level permissions.
 
   policy = jsonencode({
     Version = "2012-10-17"
@@ -303,11 +290,16 @@ resource "aws_iam_user_policy" "wang_yutong_ssm_access" {
   })
 }
 
+resource "aws_iam_group_policy_attachment" "deployment_ssm_access" {
+  group      = aws_iam_group.deployment_operators.name
+  policy_arn = aws_iam_policy.deployment_ssm_access.arn
+}
+
 # ============================================================
-# WANG YUTONG - PROJECT ADMIN ACCESS
+# WANG YUTONG - CLOUDSHELL ACCESS
 # ============================================================
 # Full access to AWS CloudShell.
-resource "aws_iam_user_policy_attachment" "wang_yutong_cloudshell_full_access" {
-  user       = aws_iam_user.users["mm-dev-wang-yutong"].name
+resource "aws_iam_group_policy_attachment" "wang_yutong_cloudshell_full_access" {
+  group      = aws_iam_group.cloudshell_users.name
   policy_arn = "arn:aws:iam::aws:policy/AWSCloudShellFullAccess"
 }

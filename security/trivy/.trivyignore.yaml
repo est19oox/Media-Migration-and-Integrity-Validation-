@@ -1,0 +1,9 @@
+vulnerabilities:
+  - id: CVE-2026-47884
+    purls:
+      - "pkg:maven/org.springframework/spring-webmvc@6.2.19"
+    expired_at: 2026-12-31
+    statement: >-
+      MMIV services are REST APIs and do not use XsltView or catch-all MVC
+      view rendering, so the Spring advisory preconditions are absent. Review
+      this exception before expiry or when migrating to Spring Framework 7.
