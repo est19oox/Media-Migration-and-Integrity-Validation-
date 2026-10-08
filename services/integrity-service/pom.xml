@@ -6,11 +6,11 @@
   <name>Integrity Service</name>
   <properties>
     <java.version>25</java.version>
-    <spring-cloud.version>2025.0.3</spring-cloud.version>
     <tomcat.version>10.1.60</tomcat.version>
     <spring-framework.version>6.2.19</spring-framework.version>
     <jackson-bom.version>2.21.7</jackson-bom.version>
     <micrometer.version>1.15.12</micrometer.version>
+    <spring-cloud.version>2025.0.3</spring-cloud.version>
   </properties>
   <dependencyManagement>
     <dependencies>
@@ -18,12 +18,16 @@
         <groupId>org.springframework.cloud</groupId>
         <artifactId>spring-cloud-dependencies</artifactId>
         <version>${spring-cloud.version}</version>
-        <type>pom</type><scope>import</scope>
+        <type>pom</type>
+        <scope>import</scope>
       </dependency>
     </dependencies>
   </dependencyManagement>
   <dependencies>
-    <dependency><groupId>org.springframework.cloud</groupId><artifactId>spring-cloud-starter-netflix-eureka-client</artifactId></dependency>
+    <dependency>
+      <groupId>org.springframework.cloud</groupId>
+      <artifactId>spring-cloud-starter-netflix-eureka-client</artifactId>
+    </dependency>
     <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-web</artifactId></dependency>
     <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-actuator</artifactId></dependency>
     <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-test</artifactId><scope>test</scope></dependency>

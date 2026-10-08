@@ -98,7 +98,7 @@ resource "aws_ecr_lifecycle_policy" "mmiv" {
       { rulePriority = 1, description = "Expire untagged images after one day",
         selection    = { tagStatus = "untagged", countType = "sinceImagePushed", countUnit = "days", countNumber = 1 },
       action = { type = "expire" } }
-      ], [for index, service in ["transfer-service", "integrity-service", "user-access-service", "reporting-service", "discovery-service"] : {
+      ], [for index, service in ["transfer-service", "integrity-service", "user-access-service", "reporting-service", "discovery-service", "service-registry", "api-gateway"] : {
         rulePriority = index + 2
         description  = "Keep 20 images for ${service}"
         selection    = { tagStatus = "tagged", tagPrefixList = ["${service}-"], countType = "imageCountMoreThan", countNumber = 20 }

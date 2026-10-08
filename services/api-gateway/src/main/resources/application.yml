@@ -1,0 +1,93 @@
+server:
+  port: ${SERVER_PORT:8080}
+spring:
+  application:
+    name: api-gateway
+  main:
+    web-application-type: reactive
+  cloud:
+    loadbalancer:
+      cache:
+        enabled: false # Eureka already maintains a discovery cache.
+    gateway:
+      server:
+        webflux:
+          discovery:
+            locator:
+              enabled: false # Expose only the explicit routes below.
+          httpclient:
+            connect-timeout: 3000
+            response-timeout: ${GATEWAY_RESPONSE_TIMEOUT:300s}
+          routes:
+            - id: transfer-api
+              uri: lb://transfer-service
+              predicates:
+                - Path=/api/v1/transfers,/api/v1/transfers/**
+              filters:
+                - name: RequestSize
+                  args:
+                    maxSize: 101MB
+            - id: transfer-files
+              uri: lb://transfer-service
+              predicates:
+                - Path=/api/v1/files,/api/v1/files/**
+            - id: transfer-pages
+              uri: lb://transfer-service
+              predicates:
+                - Path=/upload.html,/files.html
+            - id: home
+              uri: lb://transfer-service
+              predicates:
+                - Path=/
+              filters:
+                - SetPath=/upload.html
+            - id: integrity-api
+              uri: lb://integrity-service
+              predicates:
+                - Path=/integrity/**
+              filters:
+                - StripPrefix=1
+            - id: user-access-native-api
+              uri: lb://user-access-service
+              predicates:
+                - Path=/api/access,/api/access/**
+            - id: user-access-api
+              uri: lb://user-access-service
+              predicates:
+                - Path=/user-access/**
+              filters:
+                - StripPrefix=1
+            - id: reporting-api
+              uri: lb://reporting-service
+              predicates:
+                - Path=/reporting/**
+              filters:
+                - StripPrefix=1
+            - id: discovery-api
+              uri: lb://discovery-service
+              predicates:
+                - Path=/discovery/**
+              filters:
+                - StripPrefix=1
+
+eureka:
+  client:
+    enabled: ${EUREKA_CLIENT_ENABLED:true}
+    service-url:
+      defaultZone: ${EUREKA_DEFAULT_ZONE:http://localhost:8761/eureka/}
+    register-with-eureka: true
+    fetch-registry: true
+    healthcheck:
+      enabled: true
+  instance:
+    prefer-ip-address: true
+    instance-id: ${spring.application.name}:${spring.cloud.client.ip-address}:${server.port}
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      probes:
+        enabled: true

@@ -163,6 +163,7 @@ jobs:
         with:
           name: main-ci-evidence-${{ github.sha }}
           if-no-files-found: warn
+          include-hidden-files: true
           path: |
             .ci/reports/**
             **/target/surefire-reports/**
@@ -300,21 +301,24 @@ jobs:
           - name: service-registry
             path: services/service-registry
             port: '8761'
+          - name: api-gateway
+            path: services/api-gateway
+            port: '8080'
           - name: transfer-service
             path: services/transfer-service
             port: '8081'
           - name: integrity-service
             path: services/integrity-service
+            port: '8085'
+          - name: user-access-service
+            path: services/user-access-service
+            port: '8083'
+          - name: reporting-service
+            path: services/reporting-service
+            port: '8084'
+          - name: discovery-service
+            path: services/discovery-service
             port: '8082'
-#          - name: user-access-service
-#            path: services/user-access-service
-#            port: '8083'
-#          - name: reporting-service
-#            path: services/reporting-service
-#            port: '8084'
-#          - name: discovery-service
-#            path: services/discovery-service
-#            port: '8082'
 
     steps:
       - name: Checkout repository
@@ -533,6 +537,7 @@ jobs:
         with:
           name: deployment-evidence-${{ matrix.service.name }}-${{ github.sha }}
           if-no-files-found: warn
+          include-hidden-files: true
           path: |
             .ci/reports/**
             .ci/image-ref

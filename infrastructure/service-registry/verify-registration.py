@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Wait for both configured clients to appear UP in a running Eureka registry."""
+"""Wait for gateway and backend clients to appear UP in a running Eureka registry."""
 import json
 import sys
 import time
@@ -7,7 +7,7 @@ import urllib.request
 import urllib.error
 
 url = (sys.argv[1] if len(sys.argv) > 1 else "http://localhost:8761").rstrip("/") + "/eureka/apps"
-expected = {"TRANSFER-SERVICE", "INTEGRITY-SERVICE"}
+expected = {"TRANSFER-SERVICE", "INTEGRITY-SERVICE", "USER-ACCESS-SERVICE", "REPORTING-SERVICE", "DISCOVERY-SERVICE", "API-GATEWAY"}
 deadline = time.monotonic() + 180
 while time.monotonic() < deadline:
     try:
@@ -25,10 +25,10 @@ while time.monotonic() < deadline:
             if any(instance.get("status") == "UP" for instance in instances):
                 available.add(app["name"].upper())
         if expected <= available:
-            print("PASS: TRANSFER-SERVICE and INTEGRITY-SERVICE are registered UP")
+            print("PASS: Gateway and all five backend services are registered UP")
             sys.exit(0)
     except (urllib.error.URLError, TimeoutError, ValueError, KeyError):
         pass
     time.sleep(3)
-print("FAIL: both services did not register UP within 180 seconds", file=sys.stderr)
+print("FAIL: enabled clients did not register UP within 180 seconds", file=sys.stderr)
 sys.exit(1)
