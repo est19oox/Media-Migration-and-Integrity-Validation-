@@ -1,14 +1,154 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
-  <modelVersion>4.0.0</modelVersion>
-  <parent><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-parent</artifactId><version>3.5.14</version><relativePath/></parent>
-  <groupId>mmiv</groupId><artifactId>integrity-service</artifactId><version>1.0.0-SNAPSHOT</version>
-  <name>Integrity Service</name>
-  <properties><java.version>25</java.version></properties>
-  <dependencies>
-    <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-web</artifactId></dependency>
-    <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-actuator</artifactId></dependency>
-    <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-test</artifactId><scope>test</scope></dependency>
-  </dependencies>
-  <build><finalName>integrity-service</finalName><plugins><plugin><groupId>org.springframework.boot</groupId><artifactId>spring-boot-maven-plugin</artifactId></plugin></plugins></build>
+
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
+         https://maven.apache.org/xsd/maven-4.0.0.xsd">
+
+    <modelVersion>4.0.0</modelVersion>
+
+    <!-- Spring Boot -->
+    <parent>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>4.1.1</version>
+        <relativePath/>
+    </parent>
+
+    <!-- Project -->
+    <groupId>mmiv</groupId>
+    <artifactId>integrity-service</artifactId>
+    <version>1.0.0-SNAPSHOT</version>
+
+    <name>Integrity Service</name>
+
+    <properties>
+        <java.version>25</java.version>
+
+        <!-- Security remediation:
+             Override Spring Boot managed Tomcat version -->
+        <tomcat.version>11.0.26</tomcat.version>
+    </properties>
+
+    <!-- Dependencies -->
+    <dependencies>
+
+        <!-- Spring REST API -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
+
+        <!-- Health / Actuator -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
+
+        <!-- AWS S3 -->
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>s3</artifactId>
+            <version>2.55.11</version>
+        </dependency>
+
+        <!-- Spring Data JPA / Oracle persistence -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-jpa</artifactId>
+        </dependency>
+
+        <!-- Oracle JDBC Driver -->
+        <dependency>
+            <groupId>com.oracle.database.jdbc</groupId>
+            <artifactId>ojdbc11</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+
+        <!-- JUnit / Mockito -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- SpotBugs annotations for documented SAST suppressions -->
+        <dependency>
+            <groupId>com.github.spotbugs</groupId>
+            <artifactId>spotbugs-annotations</artifactId>
+            <version>4.9.8</version>
+        </dependency>
+
+    </dependencies>
+
+    <build>
+
+        <finalName>integrity-service</finalName>
+
+        <plugins>
+
+            <!-- Spring Boot -->
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+            </plugin>
+
+            <!--
+                SAST:
+                SpotBugs performs static analysis.
+                FindSecBugs adds security-focused detection rules.
+            -->
+            <plugin>
+                <groupId>com.github.spotbugs</groupId>
+                <artifactId>spotbugs-maven-plugin</artifactId>
+                <version>4.9.8.2</version>
+
+                <configuration>
+                    <effort>Max</effort>
+                    <threshold>Medium</threshold>
+                    <failOnError>true</failOnError>
+                </configuration>
+
+                <dependencies>
+
+                    <!-- Security rules for SpotBugs -->
+                    <dependency>
+                        <groupId>com.h3xstream.findsecbugs</groupId>
+                        <artifactId>findsecbugs-plugin</artifactId>
+                        <version>1.14.0</version>
+                    </dependency>
+
+                </dependencies>
+
+            </plugin>
+
+            <!--
+                SCA:
+                OWASP Dependency-Check scans third-party dependencies
+                for known vulnerabilities / CVEs.
+            -->
+            <plugin>
+                <groupId>org.owasp</groupId>
+                <artifactId>dependency-check-maven</artifactId>
+                <version>12.1.8</version>
+
+                <configuration>
+
+                    <!-- Fail build for High/Critical vulnerabilities -->
+                    <failBuildOnCVSS>7</failBuildOnCVSS>
+
+                    <!-- Generate reports for project evidence -->
+                    <formats>
+                        <format>HTML</format>
+                        <format>JSON</format>
+                    </formats>
+
+                </configuration>
+
+            </plugin>
+
+        </plugins>
+
+    </build>
+
 </project>
