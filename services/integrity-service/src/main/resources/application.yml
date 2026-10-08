@@ -1,5 +1,6 @@
 server:
   port: 8082
+
 management:
   endpoints:
     web:
@@ -9,3 +10,19 @@ management:
     health:
       probes:
         enabled: true
+
+spring:
+  datasource:
+    url: jdbc:oracle:thin:@//localhost:1521/FREEPDB1
+    username: INTEGRITY_SERVICE
+    password: ${INTEGRITY_DB_PASSWORD}
+
+  jpa:
+    open-in-view: false
+
+    hibernate:
+      ddl-auto: validate
+
+    properties:
+      hibernate:
+        default_schema: INTEGRITY_SERVICE
