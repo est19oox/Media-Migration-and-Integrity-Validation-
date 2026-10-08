@@ -1,10 +1,29 @@
 server:
   port: ${SERVER_PORT:8081}
 
+spring:
+  application:
+    name: transfer-service
+  servlet:
+    multipart:
+      max-file-size: 100MB
+      max-request-size: 101MB
+      file-size-threshold: 0B
+  # Future: uncomment after adding Spring Cloud dependencies and client classes.
+  # cloud:
+  #   openfeign:
+  #     client:
+  #       config:
+  #         integrity-service:
+  #           connectTimeout: 3000
+  #           readTimeout: 30000
+
 aws:
   region: ${AWS_REGION:ap-southeast-1}
 
 mmiv:
+  upload:
+    max-size-bytes: 104857600
   media:
     root: ${MMIV_MEDIA_ROOT:/media}
   s3:
@@ -19,3 +38,13 @@ management:
     health:
       probes:
         enabled: true
+
+# Future service registry: use a reachable registry address in deployed containers.
+# eureka:
+#   client:
+#     service-url:
+#       defaultZone: ${EUREKA_DEFAULT_ZONE:http://discovery-service:8761/eureka/}
+#     register-with-eureka: true
+#     fetch-registry: true
+#   instance:
+#     prefer-ip-address: true

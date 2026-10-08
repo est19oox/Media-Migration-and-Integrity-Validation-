@@ -1,0 +1,268 @@
+{
+  "common": [
+    {
+      "name": "health",
+      "method": "GET",
+      "path": "/actuator/health",
+      "status": 200,
+      "json_equals": {
+        "status": "UP"
+      }
+    }
+  ],
+  "services": {
+    "transfer-service": [
+      {
+        "name": "missing source",
+        "method": "POST",
+        "path": "/api/v1/transfers",
+        "status": 400,
+        "body": {
+          "destinationKey": "endpoint-tests/invalid.txt"
+        },
+        "json_nonempty": [
+          "error"
+        ]
+      },
+      {
+        "name": "missing destination",
+        "method": "POST",
+        "path": "/api/v1/transfers",
+        "status": 400,
+        "body": {
+          "sourcePath": "/media/endpoint-test.txt"
+        },
+        "json_nonempty": [
+          "error"
+        ]
+      },
+      {
+        "name": "blank source",
+        "method": "POST",
+        "path": "/api/v1/transfers",
+        "status": 400,
+        "body": {
+          "sourcePath": "",
+          "destinationKey": "endpoint-tests/invalid.txt"
+        },
+        "json_nonempty": [
+          "error"
+        ]
+      },
+      {
+        "name": "absolute destination key",
+        "method": "POST",
+        "path": "/api/v1/transfers",
+        "status": 400,
+        "body": {
+          "sourcePath": "/media/endpoint-test.txt",
+          "destinationKey": "/invalid.txt"
+        },
+        "json_nonempty": [
+          "error"
+        ]
+      },
+      {
+        "name": "unavailable source",
+        "method": "POST",
+        "path": "/api/v1/transfers",
+        "status": 400,
+        "body": {
+          "sourcePath": "/media/mmiv-nonexistent-${RUN_ID}.txt",
+          "destinationKey": "endpoint-tests/invalid.txt"
+        },
+        "json_nonempty": [
+          "error"
+        ]
+      },
+      {
+        "name": "source outside media directory",
+        "method": "POST",
+        "path": "/api/v1/transfers",
+        "status": 400,
+        "body": {
+          "sourcePath": "/etc/passwd",
+          "destinationKey": "endpoint-tests/invalid.txt"
+        },
+        "json_nonempty": [
+          "error"
+        ]
+      },
+      {
+        "name": "malformed JSON",
+        "method": "POST",
+        "path": "/api/v1/transfers",
+        "status": 400,
+        "raw_body": "{"
+      },
+      {
+        "name": "upload missing file",
+        "method": "POST",
+        "path": "/api/v1/transfers",
+        "status": 400,
+        "multipart": [
+          {
+            "name": "note",
+            "content": "missing file"
+          }
+        ],
+        "json_nonempty": [
+          "error"
+        ]
+      },
+      {
+        "name": "upload empty file",
+        "method": "POST",
+        "path": "/api/v1/transfers",
+        "status": 400,
+        "multipart": [
+          {
+            "name": "file",
+            "filename": "empty.txt",
+            "content_type": "text/plain",
+            "content": ""
+          }
+        ],
+        "json_nonempty": [
+          "error"
+        ]
+      },
+      {
+        "name": "upload unsupported extension",
+        "method": "POST",
+        "path": "/api/v1/transfers",
+        "status": 400,
+        "multipart": [
+          {
+            "name": "file",
+            "filename": "program.exe",
+            "content_type": "text/plain",
+            "content": "invalid"
+          }
+        ],
+        "json_nonempty": [
+          "error"
+        ]
+      },
+      {
+        "name": "successful local file upload",
+        "method": "POST",
+        "path": "/api/v1/transfers",
+        "status": 200,
+        "multipart": [
+          {
+            "name": "file",
+            "filename": "local-test.txt",
+            "content_type": "text/plain",
+            "content": "MMIV local upload test\n"
+          }
+        ],
+        "json_equals": {
+          "fileName": "local-test.txt",
+          "mediaType": "text/plain",
+          "sizeBytes": 23,
+          "sha256": "baaa4c7edbfd976383433c57372ea4ca07d2411e08aa9ceb33bb7c156ea193f5"
+        },
+        "json_nonempty": [
+          "bucket",
+          "key",
+          "fileId"
+        ],
+        "report_fields": [
+          "bucket",
+          "key",
+          "sha256",
+          "fileId"
+        ],
+        "save_fields": {
+          "UPLOADED_FILE_ID": "fileId"
+        }
+      },
+      {
+        "name": "preview uploaded bytes",
+        "path": "/api/v1/files/${UPLOADED_FILE_ID}/content",
+        "status": 200,
+        "body_equals": "MMIV local upload test\n",
+        "header_equals": {
+          "Content-Type": "text/plain;charset=UTF-8",
+          "Content-Length": "23",
+          "Accept-Ranges": "bytes",
+          "X-Content-Type-Options": "nosniff"
+        }
+      },
+      {
+        "name": "download uploaded bytes",
+        "path": "/api/v1/files/${UPLOADED_FILE_ID}/download",
+        "status": 200,
+        "body_equals": "MMIV local upload test\n"
+      },
+      {
+        "name": "file metadata without body",
+        "method": "HEAD",
+        "path": "/api/v1/files/${UPLOADED_FILE_ID}/content",
+        "status": 200,
+        "body_equals": "",
+        "header_equals": {
+          "Content-Length": "23",
+          "Accept-Ranges": "bytes"
+        }
+      },
+      {
+        "name": "partial file bytes",
+        "path": "/api/v1/files/${UPLOADED_FILE_ID}/content",
+        "headers": {
+          "Range": "bytes=0-3"
+        },
+        "status": 206,
+        "body_equals": "MMIV",
+        "header_equals": {
+          "Content-Range": "bytes 0-3/23",
+          "Content-Length": "4"
+        }
+      },
+      {
+        "name": "suffix file bytes",
+        "path": "/api/v1/files/${UPLOADED_FILE_ID}/content",
+        "headers": {
+          "Range": "bytes=-5"
+        },
+        "status": 206,
+        "body_equals": "test\n",
+        "header_equals": {
+          "Content-Range": "bytes 18-22/23"
+        }
+      },
+      {
+        "name": "unsatisfiable range",
+        "path": "/api/v1/files/${UPLOADED_FILE_ID}/content",
+        "headers": {
+          "Range": "bytes=23-"
+        },
+        "status": 416,
+        "header_equals": {
+          "Content-Range": "bytes */23"
+        }
+      },
+      {
+        "name": "reject multiple ranges",
+        "path": "/api/v1/files/${UPLOADED_FILE_ID}/content",
+        "headers": {
+          "Range": "bytes=0-1,4-5"
+        },
+        "status": 416
+      },
+      {
+        "name": "invalid file identifier",
+        "path": "/api/v1/files/invalid!/content",
+        "status": 400,
+        "json_nonempty": [
+          "error"
+        ]
+      }
+    ],
+    "integrity-service": [],
+    "user-access-service": [],
+    "reporting-service": [],
+    "discovery-service": []
+  }
+}

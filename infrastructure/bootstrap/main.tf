@@ -1,304 +1,60 @@
-locals {
-  csv_users_raw = csvdecode(file(var.csv_file))
+resource "aws_s3_bucket" "terraform_state" {
+  bucket = "mmiv-terraform-state-275069781906"
 
-  csv_users = {
-    for user in local.csv_users_raw :
-    user.username => user
-  }
-
-  permission_actions = {
-    "s3-read" = [
-      "s3:GetObject"
-    ]
-
-    "s3-read-write" = [
-      "s3:GetObject",
-      "s3:PutObject",
-      "s3:DeleteObject"
-    ]
-
-    "s3-admin" = [
-      "s3:GetObject",
-      "s3:PutObject",
-      "s3:DeleteObject",
-      "s3:GetObjectVersion",
-      "s3:DeleteObjectVersion"
-    ]
-  }
-}
-
-
-# ============================================================
-# CSV-MANAGED IAM USERS
-# ============================================================
-
-resource "aws_iam_user" "users" {
-  for_each = local.csv_users
-
-  name = each.value.username
+  #checkov:skip=CKV_AWS_18:Terraform state access is audited through AWS control-plane logging; a separate log bucket is out of bootstrap scope.
+  #checkov:skip=CKV_AWS_144:The coursework environment is single-region and restores state through versioning rather than cross-region replication.
+  #checkov:skip=CKV2_AWS_62:Terraform state changes must not trigger application event processing.
 
   tags = {
-    Name        = each.value.name
-    Role        = each.value.role
-    Permission  = each.value.permission
-    Project     = "Media-Migration"
-    Environment = var.environment
-    ManagedBy   = "Terraform-CSV"
+    Name        = "MMIV Terraform State"
+    Project     = "MMIV"
+    Environment = "shared"
+    ManagedBy   = "Terraform"
   }
 }
 
+resource "aws_s3_bucket_public_access_block" "terraform_state" {
+  bucket = aws_s3_bucket.terraform_state.id
 
-# ============================================================
-# PERMISSION GROUPS
-# ============================================================
-
-resource "aws_iam_group" "permission_groups" {
-  for_each = local.permission_actions
-
-  name = "media-migration-${var.environment}-${each.key}"
+  block_public_acls       = true
+  ignore_public_acls      = true
+  block_public_policy     = true
+  restrict_public_buckets = true
 }
 
+resource "aws_s3_bucket_server_side_encryption_configuration" "terraform_state" {
+  bucket = aws_s3_bucket.terraform_state.id
 
-# ============================================================
-# USER -> GROUP
-# ============================================================
-
-resource "aws_iam_user_group_membership" "users" {
-  for_each = local.csv_users
-
-  user = aws_iam_user.users[each.key].name
-
-  groups = [
-    aws_iam_group.permission_groups[
-      each.value.permission
-    ].name
-  ]
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm = "aws:kms"
+    }
+  }
 }
 
+resource "aws_s3_bucket_versioning" "terraform_state" {
+  bucket = aws_s3_bucket.terraform_state.id
 
-# ============================================================
-# S3 PERMISSION POLICIES
-# ============================================================
-
-resource "aws_iam_policy" "s3_permissions" {
-  for_each = local.permission_actions
-
-  name = "media-migration-${var.environment}-${each.key}"
-
-  description = "Media Migration ${each.key} access to the ${var.environment} S3 bucket"
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-
-    Statement = [
-      {
-        Effect = "Allow"
-
-        Action = [
-          "s3:ListAllMyBuckets"
-        ]
-
-        Resource = "*"
-      },
-
-      {
-        Effect = "Allow"
-
-        Action = [
-          "s3:ListBucket",
-          "s3:GetBucketLocation"
-        ]
-
-        Resource = var.bucket_arn
-      },
-
-      {
-        Effect   = "Allow"
-        Action   = each.value
-        Resource = "${var.bucket_arn}/*"
-      }
-    ]
-  })
+  versioning_configuration {
+    status = "Enabled"
+  }
 }
 
+resource "aws_s3_bucket_lifecycle_configuration" "terraform_state" {
+  bucket = aws_s3_bucket.terraform_state.id
 
-# ============================================================
-# S3 POLICY -> GROUP
-# ============================================================
+  rule {
+    id     = "expire-old-state-versions"
+    status = "Enabled"
 
-resource "aws_iam_group_policy_attachment" "s3_permissions" {
-  for_each = local.permission_actions
+    filter {}
 
-  group = aws_iam_group.permission_groups[each.key].name
+    abort_incomplete_multipart_upload {
+      days_after_initiation = 7
+    }
 
-  policy_arn = aws_iam_policy.s3_permissions[
-    each.key
-  ].arn
-}
-
-
-# ============================================================
-# ECR READ POLICY
-# ============================================================
-
-resource "aws_iam_policy" "ecr_read" {
-  name        = "media-migration-${var.environment}-ecr-read"
-  description = "Allows MMIV developers to pull container images from ECR"
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-
-    Statement = [
-      {
-        Effect = "Allow"
-
-        Action = [
-          "ecr:GetAuthorizationToken"
-        ]
-
-        Resource = "*"
-      },
-
-      {
-        Effect = "Allow"
-
-        Action = [
-          "ecr:BatchCheckLayerAvailability",
-          "ecr:GetDownloadUrlForLayer",
-          "ecr:BatchGetImage"
-        ]
-
-        Resource = var.ecr_repository_arn
-      }
-    ]
-  })
-}
-
-
-# ============================================================
-# ECR READ POLICY -> S3-READ GROUP
-# ============================================================
-
-resource "aws_iam_group_policy_attachment" "ecr_read" {
-  group      = aws_iam_group.permission_groups["s3-read"].name
-  policy_arn = aws_iam_policy.ecr_read.arn
-}
-
-
-# ============================================================
-# ZHAO YOUBO - PROJECT ADMIN ACCESS
-# ============================================================
-
-resource "aws_iam_user_policy_attachment" "zhao_ecr_full_access" {
-  user       = aws_iam_user.users["mm-dev-zhao-youbo"].name
-  policy_arn = "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryFullAccess"
-}
-
-resource "aws_iam_user_policy_attachment" "zhao_ec2_full_access" {
-  user       = aws_iam_user.users["mm-dev-zhao-youbo"].name
-  policy_arn = "arn:aws:iam::aws:policy/AmazonEC2FullAccess"
-}
-
-resource "aws_iam_user_policy_attachment" "zhao_iam_full_access" {
-  user       = aws_iam_user.users["mm-dev-zhao-youbo"].name
-  policy_arn = "arn:aws:iam::aws:policy/IAMFullAccess"
-}
-
-resource "aws_iam_user_policy_attachment" "zhao_vpc_full_access" {
-  user       = aws_iam_user.users["mm-dev-zhao-youbo"].name
-  policy_arn = "arn:aws:iam::aws:policy/AmazonVPCFullAccess"
-}
-
-resource "aws_iam_user_policy_attachment" "zhao_s3_full_access" {
-  user       = aws_iam_user.users["mm-dev-zhao-youbo"].name
-  policy_arn = "arn:aws:iam::aws:policy/AmazonS3FullAccess"
-}
-
-
-# ============================================================
-# WANG YUTONG - PROJECT ADMIN ACCESS
-# ============================================================
-
-resource "aws_iam_user_policy_attachment" "wang_yutong_ecr_full_access" {
-  user       = aws_iam_user.users["mm-dev-wang-yutong"].name
-  policy_arn = "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryFullAccess"
-}
-
-resource "aws_iam_user_policy_attachment" "wang_yutong_ec2_full_access" {
-  user       = aws_iam_user.users["mm-dev-wang-yutong"].name
-  policy_arn = "arn:aws:iam::aws:policy/AmazonEC2FullAccess"
-}
-
-resource "aws_iam_user_policy_attachment" "wang_yutong_iam_full_access" {
-  user       = aws_iam_user.users["mm-dev-wang-yutong"].name
-  policy_arn = "arn:aws:iam::aws:policy/IAMFullAccess"
-}
-
-resource "aws_iam_user_policy_attachment" "wang_yutong_vpc_full_access" {
-  user       = aws_iam_user.users["mm-dev-wang-yutong"].name
-  policy_arn = "arn:aws:iam::aws:policy/AmazonVPCFullAccess"
-}
-
-resource "aws_iam_user_policy_attachment" "wang_yutong_s3_full_access" {
-  user       = aws_iam_user.users["mm-dev-wang-yutong"].name
-  policy_arn = "arn:aws:iam::aws:policy/AmazonS3FullAccess"
-}
-
-
-# ============================================================
-# WANG YUTONG - SSM DEPLOYMENT ACCESS
-# ============================================================
-
-resource "aws_iam_user_policy" "wang_yutong_ssm_access" {
-  name = "media-migration-${var.environment}-wang-yutong-ssm"
-  user = aws_iam_user.users["mm-dev-wang-yutong"].name
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-
-    Statement = [
-      {
-        Sid    = "DiscoverDeploymentResources"
-        Effect = "Allow"
-
-        Action = [
-          "ec2:DescribeInstances",
-          "s3:ListAllMyBuckets"
-        ]
-
-        Resource = "*"
-      },
-
-      {
-        Sid    = "SendDeploymentCommand"
-        Effect = "Allow"
-
-        Action = [
-          "ssm:SendCommand"
-        ]
-
-        Resource = [
-          "arn:aws:ssm:${var.aws_region}::document/AWS-RunShellScript",
-          "arn:aws:ec2:${var.aws_region}:${var.aws_account_id}:instance/*"
-        ]
-      },
-
-      {
-        Sid    = "ReadDeploymentCommandResult"
-        Effect = "Allow"
-
-        Action = [
-          "ssm:StartSession",
-          "ssm:ResumeSession",
-          "ssm:TerminateSession",
-          "ssm:DescribeSessions",
-          "ssm:GetConnectionStatus",
-          "ssm:GetCommandInvocation",
-          "ssm:ListCommandInvocations"
-        ]
-
-        Resource = "*"
-      }
-    ]
-  })
+    noncurrent_version_expiration {
+      noncurrent_days = 90
+    }
+  }
 }

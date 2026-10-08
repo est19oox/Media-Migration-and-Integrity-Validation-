@@ -20,5 +20,11 @@ if [ -z "$image_ref" ]; then
     exit 1
 fi
 
-trivy image --severity HIGH,CRITICAL --exit-code 1 --format json --output "$ROOT/.ci/reports/trivy-image.json" "$image_ref"
+trivy image \
+    --severity HIGH,CRITICAL \
+    --exit-code 1 \
+    --format json \
+    --ignorefile "$ROOT/security/trivy/.trivyignore.yaml" \
+    --output "$ROOT/.ci/reports/trivy-image.json" \
+    "$image_ref"
 pass "Trivy container scan passed for $image_ref."

@@ -1,5 +1,10 @@
 server:
   port: 8083
+
+spring:
+  application:
+    name: user-access-service
+
 management:
   endpoints:
     web:

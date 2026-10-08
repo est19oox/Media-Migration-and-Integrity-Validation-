@@ -1,0 +1,70 @@
+package mmiv.transfer.controller;
+
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import mmiv.transfer.files.*;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
+import org.springframework.stereotype.Controller;
+import org.springframework.web.bind.annotation.*;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.util.Locale;
+
+@Controller
+@RequestMapping("/api/v1/files")
+public class FileController {
+    private final FileReadService files;
+    public FileController(FileReadService files) { this.files = files; }
+
+    @RequestMapping(value = {"/{fileId}/content", "/{fileId}/download"},
+            method = {RequestMethod.GET, RequestMethod.HEAD})
+    public void read(@PathVariable String fileId,
+            @RequestHeader(value = "Range", required = false) String rangeHeader,
+            @RequestHeader(value = "If-Range", required = false) String ifRange,
+            HttpServletRequest request, HttpServletResponse response) throws IOException {
+        StoredFile file = files.describe(fileId);
+        boolean head = request.getMethod().equals("HEAD");
+        // An unmatched If-Range (including an unsupported date form) returns the full file.
+        String selectedRange = ifRange != null && !ifRange.equals(file.eTag()) ? null : rangeHeader;
+        ByteRange range = head ? null : ByteRange.parse(selectedRange, file.sizeBytes());
+        boolean download = request.getRequestURI().endsWith("/download");
+        if (head) { headers(response, file, null, download); return; }
+        // Open S3 before committing headers so storage failures return proper error responses.
+        try (var input = files.open(file, range)) {
+            headers(response, file, range, download);
+            try { input.transferTo(response.getOutputStream()); }
+            catch (IOException e) { input.abort(); throw e; }
+        }
+    }
+
+    private void headers(HttpServletResponse response, StoredFile file, ByteRange range, boolean download) {
+        String type = previewType(file.fileName());
+        boolean inline = !download && !type.equals("application/octet-stream");
+        response.setStatus(range == null ? 200 : 206);
+        response.setContentType(type);
+        response.setContentLengthLong(range == null ? file.sizeBytes() : range.length());
+        response.setHeader(HttpHeaders.ACCEPT_RANGES, "bytes");
+        if (range != null) response.setHeader(HttpHeaders.CONTENT_RANGE, range.contentRange(file.sizeBytes()));
+        if (file.eTag() != null) response.setHeader(HttpHeaders.ETAG, file.eTag());
+        response.setHeader(HttpHeaders.CONTENT_DISPOSITION,
+                (inline ? ContentDisposition.inline() : ContentDisposition.attachment())
+                        .filename(file.fileName(), StandardCharsets.UTF_8).build().toString());
+        response.setHeader("X-Content-Type-Options", "nosniff");
+        response.setHeader("Cache-Control", "no-store");
+        response.setHeader("Content-Security-Policy", "sandbox; default-src 'none'; img-src 'self' data:; media-src 'self'; style-src 'unsafe-inline'; frame-ancestors 'self'");
+    }
+
+    private String previewType(String name) {
+        int dot = name.lastIndexOf('.');
+        String extension = dot < 0 ? "" : name.substring(dot + 1).toLowerCase(Locale.ROOT);
+        return switch (extension) {
+            case "png" -> "image/png";
+            case "jpg", "jpeg" -> "image/jpeg";
+            case "mp4" -> "video/mp4";
+            case "pdf" -> "application/pdf";
+            case "txt" -> "text/plain; charset=UTF-8";
+            default -> "application/octet-stream";
+        };
+    }
+}
