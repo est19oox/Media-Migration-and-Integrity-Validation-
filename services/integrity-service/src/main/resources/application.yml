@@ -1,13 +1,5 @@
 server:
-<<<<<<< Updated upstream
-  port: 8082
-
-=======
   port: ${SERVER_PORT:8082}
-spring:
-  application:
-    name: integrity-service
->>>>>>> Stashed changes
 management:
   endpoints:
     web:
@@ -17,19 +9,30 @@ management:
     health:
       probes:
         enabled: true
-
 spring:
+  application:
+    name: integrity-service
   datasource:
-    url: jdbc:oracle:thin:@//localhost:1521/FREEPDB1
-    username: INTEGRITY_SERVICE
-    password: ${INTEGRITY_DB_PASSWORD}
-
+    url: jdbc:h2:mem:integrity;MODE=Oracle;DB_CLOSE_DELAY=-1;INIT=CREATE SCHEMA IF NOT EXISTS INTEGRITY_SERVICE
+    username: sa
+    password: ""
+    driver-class-name: org.h2.Driver
   jpa:
     open-in-view: false
-
     hibernate:
-      ddl-auto: validate
-
+      ddl-auto: create-drop
     properties:
       hibernate:
         default_schema: INTEGRITY_SERVICE
+eureka:
+  client:
+    enabled: ${EUREKA_CLIENT_ENABLED:true}
+    service-url:
+      defaultZone: ${EUREKA_DEFAULT_ZONE:http://localhost:8761/eureka/}
+    register-with-eureka: true
+    fetch-registry: true
+    healthcheck:
+      enabled: true
+  instance:
+    prefer-ip-address: true
+    instance-id: ${spring.application.name}:${spring.cloud.client.ip-address}:${server.port}

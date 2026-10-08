@@ -286,6 +286,7 @@ jobs:
     needs:
       - setup-host
     uses: ./.github/workflows/deploy-service.yml
+    secrets: inherit
     with:
       service-name: service-registry
       service-path: services/service-registry
@@ -317,6 +318,7 @@ jobs:
             path: services/discovery-service
             port: '8085'
     uses: ./.github/workflows/deploy-service.yml
+    secrets: inherit
     with:
       service-name: ${{ matrix.service.name }}
       service-path: ${{ matrix.service.path }}
@@ -328,6 +330,7 @@ jobs:
       - setup-host
       - deploy-backends
     uses: ./.github/workflows/deploy-service.yml
+    secrets: inherit
     with:
       service-name: api-gateway
       service-path: services/api-gateway
