@@ -16,24 +16,37 @@ public class FileMetadataRepository {
     }
 
     // Check whether the same file already exists
+    
+    // Check whether the same file already exists.
+    // Oracle treats empty strings as NULL.
     public boolean exists(String fileName, String srcDir) {
 
         String sql = """
                 SELECT COUNT(*)
                 FROM FILE_METADATA
                 WHERE FILE_NAME = ?
-                AND SRC_DIR = ?
+                AND (
+                    SRC_DIR = ?
+                    OR (SRC_DIR IS NULL AND ? IS NULL)
+                )
                 """;
+
+        String normalizedSrcDir =
+                (srcDir == null || srcDir.isEmpty())
+                        ? null
+                        : srcDir;
 
         Integer count = jdbcTemplate.queryForObject(
                 sql,
                 Integer.class,
                 fileName,
-                srcDir
+                normalizedSrcDir,
+                normalizedSrcDir
         );
 
         return count != null && count > 0;
     }
+
 
     // Save one file's metadata into Oracle
     public int save(MediaMetadata metadata) {

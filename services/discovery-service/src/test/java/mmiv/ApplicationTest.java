@@ -1,6 +1,7 @@
 package mmiv;
 
 import mmiv.repository.FileMetadataRepository;
+import mmiv.repository.ValidationLogRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
@@ -17,6 +18,9 @@ class ApplicationTest {
 
     @MockitoBean
     private FileMetadataRepository fileMetadataRepository;
+
+    @MockitoBean
+    private ValidationLogRepository validationLogRepository;
 
     @Test
     void contextLoads() {
