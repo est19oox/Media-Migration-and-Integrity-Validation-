@@ -11,6 +11,9 @@
     microservice_host_port: "{{ lookup('env', 'MMIV_SERVICE_HOST_PORT') }}"
     microservice_health_path: "{{ lookup('env', 'MMIV_SERVICE_HEALTH_PATH') }}"
     microservice_bucket: "{{ lookup('env', 'MMIV_BUCKET_NAME') | default('media-migration-dev-landing', true) }}"
+    mmiv_docker_network: mmiv-backend
+    microservice_eureka_url: "{{ lookup('env', 'EUREKA_DEFAULT_ZONE') | default('http://service-registry:8761/eureka/', true) }}"
+    microservice_bind_address: "{{ '127.0.0.1' if microservice_name == 'service-registry' else '0.0.0.0' }}"
   tasks:
     - name: Require previous image
       ansible.builtin.stat:
@@ -39,7 +42,7 @@
         PREVIOUS_IMAGE="$(printf '%s' '{{ previous_image.content }}' | base64 -d)"
         docker pull "$PREVIOUS_IMAGE"
         docker rm -f {{ microservice_name }} 2>/dev/null || true
-        docker run -d --name {{ microservice_name }} --restart unless-stopped {% if mmiv_redis_enabled | default(true) | bool %}--network {{ mmiv_docker_network }}{% endif %} {% if mmiv_redis_enabled | default(true) | bool %}--env-file {{ mmiv_redis_env_file }}{% endif %} -p {{ microservice_host_port }}:{{ microservice_container_port }} --mount type=bind,src=/var/lib/mmiv/media,dst=/media,readonly -e MMIV_MEDIA_ROOT=/media -e AWS_REGION={{ aws_region }} -e MMIV_BUCKET_NAME={{ microservice_bucket }} "$PREVIOUS_IMAGE"
+        docker run -d --name {{ microservice_name }} --restart unless-stopped --network {{ mmiv_docker_network }} {% if mmiv_redis_enabled | default(true) | bool %}--env-file {{ mmiv_redis_env_file }}{% endif %} -p {{ microservice_bind_address }}:{{ microservice_host_port }}:{{ microservice_container_port }} --mount type=bind,src=/var/lib/mmiv/media,dst=/media,readonly -e MMIV_MEDIA_ROOT=/media -e AWS_REGION={{ aws_region }} -e MMIV_BUCKET_NAME={{ microservice_bucket }} -e EUREKA_DEFAULT_ZONE={{ microservice_eureka_url }} "$PREVIOUS_IMAGE"
       changed_when: true
 
     - name: Verify restored service

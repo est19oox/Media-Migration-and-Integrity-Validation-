@@ -297,12 +297,15 @@ jobs:
       max-parallel: 1
       matrix:
         service:
+          - name: service-registry
+            path: services/service-registry
+            port: '8761'
           - name: transfer-service
             path: services/transfer-service
             port: '8081'
-#          - name: integrity-service
-#            path: services/integrity-service
-#            port: '8085'
+          - name: integrity-service
+            path: services/integrity-service
+            port: '8082'
 #          - name: user-access-service
 #            path: services/user-access-service
 #            port: '8083'

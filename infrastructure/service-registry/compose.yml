@@ -1,0 +1,48 @@
+services:
+  service-registry:
+    build:
+      context: ../../services/service-registry
+    ports:
+      - "127.0.0.1:8761:8761"
+    restart: unless-stopped
+    networks: [registry]
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:8761/actuator/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 30s
+
+  transfer-service:
+    build:
+      context: ../../services/transfer-service
+    ports:
+      - "8081:8081"
+    restart: unless-stopped
+    networks: [registry]
+    depends_on:
+      service-registry:
+        condition: service_healthy
+    environment:
+      EUREKA_DEFAULT_ZONE: http://service-registry:8761/eureka/
+      AWS_REGION: ${AWS_REGION:-ap-southeast-1}
+      MMIV_BUCKET_NAME: ${MMIV_BUCKET_NAME:-media-migration-dev-landing}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      AWS_SESSION_TOKEN: ${AWS_SESSION_TOKEN:-}
+
+  integrity-service:
+    build:
+      context: ../../services/integrity-service
+    ports:
+      - "8082:8082"
+    restart: unless-stopped
+    networks: [registry]
+    depends_on:
+      service-registry:
+        condition: service_healthy
+    environment:
+      EUREKA_DEFAULT_ZONE: http://service-registry:8761/eureka/
+
+networks:
+  registry:

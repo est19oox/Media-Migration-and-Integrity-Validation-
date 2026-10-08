@@ -8,3 +8,8 @@ microservice_bucket: "{{ lookup('env', 'MMIV_BUCKET_NAME') | default('media-migr
 aws_region: "{{ lookup('env', 'AWS_REGION') | default('ap-southeast-1', true) }}"
 ecr_registry: "{{ lookup('env', 'ECR_REGISTRY') | default('', true) }}"
 microservice_previous_image_file: "/var/lib/mmiv/{{ microservice_name }}.previous-image"
+
+# Eureka clients share a Docker network with the registry, independently of Redis.
+mmiv_docker_network: mmiv-backend
+microservice_eureka_url: "{{ lookup('env', 'EUREKA_DEFAULT_ZONE') | default('http://service-registry:8761/eureka/', true) }}"
+microservice_bind_address: "{{ '127.0.0.1' if microservice_name == 'service-registry' else '0.0.0.0' }}"
