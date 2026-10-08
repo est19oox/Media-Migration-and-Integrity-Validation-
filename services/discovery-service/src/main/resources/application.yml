@@ -1,5 +1,12 @@
 server:
+<<<<<<< Updated upstream
   port: 8085
+=======
+  port: ${SERVER_PORT:8085}
+spring:
+  application:
+    name: discovery-service
+>>>>>>> Stashed changes
 management:
   endpoints:
     web:

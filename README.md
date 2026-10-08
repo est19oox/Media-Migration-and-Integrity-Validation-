@@ -9,10 +9,10 @@ MMIV is a microservice-based system for discovering, transferring, validating, a
 | Service | Port | Responsibility |
 | --- | ---: | --- |
 | Transfer | 8081 | Transfer media between storage locations |
-| Discovery | 8082 | Discover media and resources |
+| Discovery | 8085 | Discover media and resources |
 | User Access | 8083 | Manage and check access permissions |
 | Reporting | 8084 | Generate migration and validation reports |
-| Integrity | 8085 | Validate migrated media integrity |
+| Integrity | 8082 | Validate migrated media integrity |
 
 ## Documentation
 

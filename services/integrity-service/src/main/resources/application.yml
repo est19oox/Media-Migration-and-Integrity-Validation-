@@ -1,6 +1,13 @@
 server:
+<<<<<<< Updated upstream
   port: 8082
 
+=======
+  port: ${SERVER_PORT:8082}
+spring:
+  application:
+    name: integrity-service
+>>>>>>> Stashed changes
 management:
   endpoints:
     web:

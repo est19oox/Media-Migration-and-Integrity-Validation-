@@ -12,6 +12,7 @@ on:
       - 'infrastructure/ansible/**'
       - 'scripts/cd/**'
       - '.github/workflows/cicd.yml'
+      - '.github/workflows/deploy-service.yml'
   workflow_dispatch:
 
 concurrency:
@@ -222,76 +223,12 @@ jobs:
           if-no-files-found: warn
           path: infrastructure/terraform/terraform-plan.txt
 
-#   redis_setup:
-#     name: Prepare Redis on EC2
-#     needs: [terraform]
-#     runs-on: ubuntu-latest
-#     outputs:
-#       instance_id: ${{ steps.deployment.outputs.instance_id }}
-#     steps:
-#       - name: Checkout repository
-#         uses: actions/checkout@v5
-
-#       - name: Configure AWS credentials
-#         uses: aws-actions/configure-aws-credentials@v6.3.0
-#         with:
-#           role-to-assume: arn:aws:iam::275069781906:role/GitHubActions-MMIV-App
-#           aws-region: ${{ env.AWS_REGION }}
-
-#       - name: Verify AWS connection
-#         run: aws sts get-caller-identity
-
-#       - name: Discover EC2 instance
-#         id: deployment
-#         shell: bash
-#         run: |
-#           INSTANCE_ID=$(aws ec2 describe-instances \
-#             --region "$AWS_REGION" \
-#             --filters \
-#               'Name=tag:Name,Values=MMIV-EC2' \
-#               'Name=instance-state-name,Values=running' \
-#             --query 'Reservations[0].Instances[0].InstanceId' \
-#             --output text)
-
-#           test -n "$INSTANCE_ID" && test "$INSTANCE_ID" != "None"
-#           echo "instance_id=$INSTANCE_ID" >> "$GITHUB_OUTPUT"
-
-#       - name: Wait for SSM and host initialization
-#         env:
-#           INSTANCE_ID: ${{ steps.deployment.outputs.instance_id }}
-#         run: bash ./scripts/cd/wait-for-ssm.sh
-
-#       - name: Install Session Manager plugin
-#         run: |
-#           curl -fsSL https://s3.amazonaws.com/session-manager-downloads/plugin/latest/ubuntu_64bit/session-manager-plugin.deb -o /tmp/session-manager-plugin.deb
-#           sudo dpkg -i /tmp/session-manager-plugin.deb
-#           session-manager-plugin --version
-
-#       - name: Install Ansible
-#         run: |
-#           python -m pip install --upgrade pip
-#           python -m pip install --upgrade ansible "boto3>=1.35.0" "botocore>=1.35.0"
-#           ansible-galaxy collection install -r infrastructure/ansible/requirements.yml
-
-#       - name: Generate SSM inventory
-#         env:
-#           INSTANCE_ID: ${{ steps.deployment.outputs.instance_id }}
-#           SSM_BUCKET: ${{ env.MMIV_BUCKET_NAME }}
-#         run: |
-#           sed \
-#             -e "s|__INSTANCE_ID__|$INSTANCE_ID|g" \
-#             -e "s|__SSM_BUCKET__|$SSM_BUCKET|g" \
-#             infrastructure/ansible/inventory/ci.ini \
-#             > infrastructure/ansible/inventory/ci.generated.ini
-
-#       - name: Set up Redis with Ansible
-#         working-directory: infrastructure/ansible
-#         run: ansible-playbook -i inventory/ci.generated.ini redis.yml
-
-  deploy:
-    name: Microservices CI/CD
-    needs: [terraform]
+  setup-host:
+    name: Prepare shared EC2 host
+    needs:
+      - terraform
     runs-on: ubuntu-latest
+<<<<<<< Updated upstream
     strategy:
       fail-fast: false
       max-parallel: 1
@@ -313,103 +250,18 @@ jobs:
 #            path: services/discovery-service
 #            port: '8082'
 
+=======
+    outputs:
+      instance_id: ${{ steps.deployment.outputs.instance_id }}
+>>>>>>> Stashed changes
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
-
-      - name: Install Trivy
-        env:
-          TRIVY_VERSION: 0.74.0
-          TRIVY_SHA256: cf1e32ec8d4d8823e023096a28cadb14f5b5123ce03f201fb633c5b76aa712dd
-        run: |
-          PACKAGE="trivy_${TRIVY_VERSION}_Linux-64bit.deb"
-          curl -fsSLo "/tmp/${PACKAGE}" \
-            "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/${PACKAGE}"
-          echo "${TRIVY_SHA256}  /tmp/${PACKAGE}" | sha256sum --check --strict
-          sudo apt-get install --yes "/tmp/${PACKAGE}"
-
-      # This job has its own workspace, so build the JAR used by Docker here.
-      - name: Set up JDK 25
-        uses: actions/setup-java@v5
-        with:
-          java-version: '25'
-          distribution: temurin
-          cache: maven
-
-      - name: Build and test
-        working-directory: ${{ matrix.service.path }}
-        run: mvn -B clean verify
-
-      - name: Verify Docker build JAR
-        working-directory: ${{ matrix.service.path }}
-        env:
-          SERVICE_NAME: ${{ matrix.service.name }}
-        run: |
-          set -euo pipefail
-          JAR="target/${SERVICE_NAME}.jar"
-          if [ ! -s "$JAR" ]; then
-            echo "::error::Expected Maven output is missing or empty: $JAR"
-            exit 1
-          fi
-
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v6.3.0
         with:
           role-to-assume: arn:aws:iam::275069781906:role/GitHubActions-MMIV-App
           aws-region: ${{ env.AWS_REGION }}
-
-      - name: Verify AWS connection
-        run: aws sts get-caller-identity
-
-      - name: Login to Amazon ECR
-        id: ecr
-        uses: aws-actions/amazon-ecr-login@v2
-
-      # 拆分镜像 build scan push -hhh
-      # - name: Build and push Docker image
-      #   id: image
-      #   env:
-      #     ECR_REGISTRY: ${{ steps.ecr.outputs.registry }}
-      #     IMAGE_TAG: ${{ matrix.service.name }}-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
-      #   run: |
-      #     IMAGE="$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
-      #     docker build \
-      #       -f "${{ matrix.service.path }}/Dockerfile" \
-      #       -t "$IMAGE" \
-      #       "${{ matrix.service.path }}"
-      #     docker push "$IMAGE"
-      #     echo "IMAGE=$IMAGE" >> "$GITHUB_ENV"
-      #     echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
-      #     echo "registry=$ECR_REGISTRY" >> "$GITHUB_OUTPUT"
-
-      - name: Build Docker image
-        id: image
-        env:
-          ECR_REGISTRY: ${{ steps.ecr.outputs.registry }}
-          IMAGE_TAG: ${{ matrix.service.name }}-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
-        run: |
-          set -euo pipefail
-
-          IMAGE="$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
-
-          docker build \
-            -f "${{ matrix.service.path }}/Dockerfile" \
-            -t "$IMAGE" \
-            "${{ matrix.service.path }}"
-
-          mkdir -p .ci
-          printf '%s\n' "$IMAGE" > .ci/image-ref
-
-          echo "IMAGE=$IMAGE" >> "$GITHUB_ENV"
-          echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
-          echo "registry=$ECR_REGISTRY" >> "$GITHUB_OUTPUT"
-
-      - name: Scan Docker image
-        run: bash scripts/ci/scan-image.sh .
-
-      - name: Push Docker image
-        run: docker push "$IMAGE"
-
       - name: Discover EC2 instance
         id: deployment
         shell: bash
@@ -421,27 +273,23 @@ jobs:
               'Name=instance-state-name,Values=running' \
             --query 'Reservations[0].Instances[0].InstanceId' \
             --output text)
-
+  
           test -n "$INSTANCE_ID" && test "$INSTANCE_ID" != "None"
           echo "instance_id=$INSTANCE_ID" >> "$GITHUB_OUTPUT"
-
       - name: Wait for SSM and host initialization
         env:
           INSTANCE_ID: ${{ steps.deployment.outputs.instance_id }}
         run: bash ./scripts/cd/wait-for-ssm.sh
-
       - name: Install Session Manager plugin
         run: |
           curl -fsSL https://s3.amazonaws.com/session-manager-downloads/plugin/latest/ubuntu_64bit/session-manager-plugin.deb -o /tmp/session-manager-plugin.deb
           sudo dpkg -i /tmp/session-manager-plugin.deb
           session-manager-plugin --version
-
       - name: Install Ansible
         run: |
           python -m pip install --upgrade pip
           python -m pip install --upgrade ansible "boto3>=1.35.0" "botocore>=1.35.0"
           ansible-galaxy collection install -r infrastructure/ansible/requirements.yml
-
       - name: Generate SSM inventory
         env:
           INSTANCE_ID: ${{ steps.deployment.outputs.instance_id }}
@@ -452,10 +300,9 @@ jobs:
             -e "s|__SSM_BUCKET__|$SSM_BUCKET|g" \
             infrastructure/ansible/inventory/ci.ini \
             > infrastructure/ansible/inventory/ci.generated.ini
-
-      - name: Deploy with Ansible over SSM
-        id: ansible_deploy
+      - name: Prepare shared EC2 host
         working-directory: infrastructure/ansible
+<<<<<<< Updated upstream
         env:
           SERVICE_NAME: ${{ matrix.service.name }}
           SERVICE_IMAGE: ${{ steps.image.outputs.image }}
@@ -533,3 +380,58 @@ jobs:
           path: |
             .ci/reports/**
             .ci/image-ref
+=======
+        run: ansible-playbook -i inventory/ci.generated.ini setup-host.yml
+  deploy-registry:
+    name: Deploy registry
+    needs:
+      - setup-host
+    uses: ./.github/workflows/deploy-service.yml
+    with:
+      service-name: service-registry
+      service-path: services/service-registry
+      service-port: '8761'
+      instance-id: ${{ needs.setup-host.outputs.instance_id }}
+  deploy-backends:
+    name: Deploy backend services
+    needs:
+      - setup-host
+      - deploy-registry
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        service:
+          - name: transfer-service
+            path: services/transfer-service
+            port: '8081'
+          - name: integrity-service
+            path: services/integrity-service
+            port: '8082'
+          - name: user-access-service
+            path: services/user-access-service
+            port: '8083'
+          - name: reporting-service
+            path: services/reporting-service
+            port: '8084'
+          - name: discovery-service
+            path: services/discovery-service
+            port: '8085'
+    uses: ./.github/workflows/deploy-service.yml
+    with:
+      service-name: ${{ matrix.service.name }}
+      service-path: ${{ matrix.service.path }}
+      service-port: ${{ matrix.service.port }}
+      instance-id: ${{ needs.setup-host.outputs.instance_id }}
+  deploy-gateway:
+    name: Deploy API Gateway
+    needs:
+      - setup-host
+      - deploy-backends
+    uses: ./.github/workflows/deploy-service.yml
+    with:
+      service-name: api-gateway
+      service-path: services/api-gateway
+      service-port: '8080'
+      instance-id: ${{ needs.setup-host.outputs.instance_id }}
+>>>>>>> Stashed changes

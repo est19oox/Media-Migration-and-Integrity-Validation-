@@ -2,6 +2,5 @@
 mmiv_docker_network: mmiv-backend
 mmiv_redis_env_file: /etc/mmiv/redis.env
 
-# Redis setup is currently commented out in the workflow.
-# Set to true when re-enabling Redis setup.
+# Enable Redis preparation in the shared setup-host job by setting this to true.
 mmiv_redis_enabled: false

@@ -319,7 +319,7 @@ data "aws_ami" "amazon_linux" {
 # Creates the MMIV application server.
 resource "aws_instance" "mmiv" {
   ami                         = data.aws_ami.amazon_linux.id
-  instance_type               = "t3.micro"
+  instance_type               = "t3.medium"
   subnet_id                   = aws_subnet.mmiv_public.id
   associate_public_ip_address = true
   monitoring                  = true

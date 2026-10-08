@@ -1,4 +1,5 @@
 ---
+<<<<<<< Updated upstream
 - name: Ensure MMIV state directory exists
   ansible.builtin.file:
     path: /var/lib/mmiv
@@ -27,6 +28,8 @@
     name: awscli
     state: present
 
+=======
+>>>>>>> Stashed changes
 - name: Capture currently deployed image for rollback
   ansible.builtin.shell: |
     set -o pipefail
