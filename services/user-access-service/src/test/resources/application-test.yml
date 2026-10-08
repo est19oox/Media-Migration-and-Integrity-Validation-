@@ -1,0 +1,7 @@
+spring:
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration
+
+jwt:
+  secret: "MMIV_TEST_ONLY_JWT_SECRET_32_BYTES_MINIMUM_2026"

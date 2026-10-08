@@ -21,4 +21,17 @@ public class InMemoryUserRepository implements UserRepository {
     public Optional<User> findById(String userId) {
         return Optional.ofNullable(users.get(userId));
     }
+
+    @Override
+    public Optional<User> findByUsername(String username) {
+
+        if (username == null) {
+            return Optional.empty();
+        }
+
+        return users.values()
+                .stream()
+                .filter(user -> username.equals(user.getUsername()))
+                .findFirst();
+    }
 }
