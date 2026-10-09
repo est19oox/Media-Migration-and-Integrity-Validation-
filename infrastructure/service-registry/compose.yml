@@ -1,0 +1,122 @@
+services:
+  api-gateway:
+    build:
+      context: ../../services/api-gateway
+    ports:
+    - 8080:8080
+    restart: unless-stopped
+    networks:
+    - registry
+    depends_on:
+      service-registry:
+        condition: service_healthy
+      transfer-service:
+        condition: service_started
+      user-access-service:
+        condition: service_started
+      reporting-service:
+        condition: service_started
+      integrity-service:
+        condition: service_started
+    environment:
+      EUREKA_DEFAULT_ZONE: http://service-registry:8761/eureka/
+  service-registry:
+    build:
+      context: ../../services/service-registry
+    ports:
+    - 127.0.0.1:8761:8761
+    restart: unless-stopped
+    networks:
+    - registry
+    healthcheck:
+      test:
+      - CMD
+      - wget
+      - -q
+      - -O
+      - /dev/null
+      - http://localhost:8761/actuator/health
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 30s
+  transfer-service:
+    build:
+      context: ../../services/transfer-service
+    ports:
+    - 127.0.0.1:8081:8081
+    restart: unless-stopped
+    networks:
+    - registry
+    depends_on:
+      service-registry:
+        condition: service_healthy
+    environment:
+      EUREKA_DEFAULT_ZONE: http://service-registry:8761/eureka/
+      AWS_REGION: ${AWS_REGION:-ap-southeast-1}
+      MMIV_BUCKET_NAME: ${MMIV_BUCKET_NAME:-media-migration-dev-landing}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      AWS_SESSION_TOKEN: ${AWS_SESSION_TOKEN:-}
+  discovery-service:
+    build:
+      context: ../../services/discovery-service
+    restart: unless-stopped
+    networks:
+    - registry
+    depends_on:
+      service-registry:
+        condition: service_healthy
+    environment:
+      EUREKA_DEFAULT_ZONE: http://service-registry:8761/eureka/
+      DB_URL: ${DB_URL:-}
+      DB_USERNAME: ${DB_USERNAME:-}
+      DB_PASSWORD: ${DB_PASSWORD:-}
+      DISCOVERY_ROOT: ${DISCOVERY_ROOT:-/media}
+    ports:
+    - 127.0.0.1:8085:8085
+    profiles:
+    - discovery
+    volumes:
+    - ${DISCOVERY_MEDIA_PATH:-../../media}:/media:ro
+  user-access-service:
+    build:
+      context: ../../services/user-access-service
+    restart: unless-stopped
+    networks:
+    - registry
+    depends_on:
+      service-registry:
+        condition: service_healthy
+    environment:
+      EUREKA_DEFAULT_ZONE: http://service-registry:8761/eureka/
+    ports:
+    - 127.0.0.1:8083:8083
+  reporting-service:
+    build:
+      context: ../../services/reporting-service
+    restart: unless-stopped
+    networks:
+    - registry
+    depends_on:
+      service-registry:
+        condition: service_healthy
+    environment:
+      EUREKA_DEFAULT_ZONE: http://service-registry:8761/eureka/
+    ports:
+    - 127.0.0.1:8084:8084
+  integrity-service:
+    build:
+      context: ../../services/integrity-service
+    restart: unless-stopped
+    networks:
+    - registry
+    depends_on:
+      service-registry:
+        condition: service_healthy
+    environment:
+      EUREKA_DEFAULT_ZONE: http://service-registry:8761/eureka/
+    ports:
+    - 127.0.0.1:8082:8082
+networks:
+  registry: null

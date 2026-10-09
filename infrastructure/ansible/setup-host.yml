@@ -1,0 +1,45 @@
+- name: Prepare shared MMIV host
+  hosts: mmiv
+  become: true
+  gather_facts: false
+  pre_tasks:
+    - name: Wait for SSM connectivity
+      ansible.builtin.wait_for_connection:
+        timeout: 600
+        sleep: 10
+    - name: Gather facts
+      ansible.builtin.setup: {}
+  tasks:
+    - name: Ensure MMIV state directory exists
+      ansible.builtin.file:
+        path: /var/lib/mmiv
+        state: directory
+        mode: '0755'
+    - name: Create media input directory
+      ansible.builtin.file:
+        path: /var/lib/mmiv/media
+        state: directory
+        mode: '0755'
+    - name: Install Docker
+      ansible.builtin.dnf:
+        name: docker
+        state: present
+    - name: Enable Docker
+      ansible.builtin.service:
+        name: docker
+        enabled: true
+        state: started
+    - name: Ensure shared microservice network exists
+      ansible.builtin.shell: |
+        docker network inspect {{ mmiv_docker_network }} >/dev/null 2>&1 || docker network create {{ mmiv_docker_network }}
+      register: microservice_network
+      changed_when: microservice_network.stdout | trim | length > 0
+    - name: Install AWS CLI
+      ansible.builtin.dnf:
+        name: awscli
+        state: present
+    # Redis preparation is temporarily commented out.
+    # - name: Prepare Redis when enabled
+    #   ansible.builtin.include_role:
+    #     name: redis
+    #   when: mmiv_redis_enabled | default(false) | bool

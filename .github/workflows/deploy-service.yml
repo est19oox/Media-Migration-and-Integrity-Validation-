@@ -1,0 +1,222 @@
+name: Deploy one MMIV service
+'on':
+  workflow_call:
+    inputs:
+      service-name:
+        required: true
+        type: string
+      service-path:
+        required: true
+        type: string
+      service-port:
+        required: true
+        type: string
+      instance-id:
+        required: true
+        type: string
+    secrets:
+      INTEGRITY_DB_URL:
+        required: false
+      INTEGRITY_DB_USERNAME:
+        required: false
+      INTEGRITY_DB_PASSWORD:
+        required: false
+permissions:
+  contents: read
+  id-token: write
+env:
+  AWS_REGION: ap-southeast-1
+  ECR_REPOSITORY: mmiv
+  MMIV_BUCKET_NAME: media-migration-dev-landing
+jobs:
+  deploy:
+    name: ${{ inputs.service-name }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+      - name: Install Trivy
+        env:
+          TRIVY_VERSION: 0.74.0
+          TRIVY_SHA256: cf1e32ec8d4d8823e023096a28cadb14f5b5123ce03f201fb633c5b76aa712dd
+        run: |
+          PACKAGE="trivy_${TRIVY_VERSION}_Linux-64bit.deb"
+          curl -fsSLo "/tmp/${PACKAGE}" \
+            "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/${PACKAGE}"
+          echo "${TRIVY_SHA256}  /tmp/${PACKAGE}" | sha256sum --check --strict
+          sudo apt-get install --yes "/tmp/${PACKAGE}"
+      - name: Set up JDK 25
+        uses: actions/setup-java@v5
+        with:
+          java-version: '25'
+          distribution: temurin
+          cache: maven
+      - name: Build and test
+        working-directory: ${{ inputs.service-path }}
+        run: mvn -B clean verify
+      - name: Verify Docker build JAR
+        working-directory: ${{ inputs.service-path }}
+        env:
+          SERVICE_NAME: ${{ inputs.service-name }}
+        run: |
+          set -euo pipefail
+          JAR="target/${SERVICE_NAME}.jar"
+          if [ ! -s "$JAR" ]; then
+            echo "::error::Expected Maven output is missing or empty: $JAR"
+            exit 1
+          fi
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v6.3.0
+        with:
+          role-to-assume: arn:aws:iam::275069781906:role/GitHubActions-MMIV-App
+          aws-region: ${{ env.AWS_REGION }}
+      - name: Verify AWS connection
+        run: aws sts get-caller-identity
+      - name: Login to Amazon ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+      - name: Build Docker image
+        id: image
+        env:
+          ECR_REGISTRY: ${{ steps.ecr.outputs.registry }}
+          IMAGE_TAG: ${{ inputs.service-name }}-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+        run: |
+          set -euo pipefail
+
+          IMAGE="$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
+
+          docker build \
+            -f "${{ inputs.service-path }}/Dockerfile" \
+            -t "$IMAGE" \
+            "${{ inputs.service-path }}"
+
+          mkdir -p .ci
+          printf '%s\n' "$IMAGE" > .ci/image-ref
+
+          echo "IMAGE=$IMAGE" >> "$GITHUB_ENV"
+          echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
+          echo "registry=$ECR_REGISTRY" >> "$GITHUB_OUTPUT"
+      - name: Scan Docker image
+        run: bash scripts/ci/scan-image.sh .
+      - name: Push Docker image
+        run: docker push "$IMAGE"
+      - name: Use prepared EC2 instance
+        id: deployment
+        env:
+          INSTANCE_ID: ${{ inputs.instance-id }}
+        run: |
+          test -n "$INSTANCE_ID" && test "$INSTANCE_ID" != "None"
+          echo "instance_id=$INSTANCE_ID" >> "$GITHUB_OUTPUT"
+      - name: Wait for SSM and host initialization
+        env:
+          INSTANCE_ID: ${{ steps.deployment.outputs.instance_id }}
+        run: bash ./scripts/cd/wait-for-ssm.sh
+      - name: Install Session Manager plugin
+        run: |
+          curl -fsSL https://s3.amazonaws.com/session-manager-downloads/plugin/latest/ubuntu_64bit/session-manager-plugin.deb -o /tmp/session-manager-plugin.deb
+          sudo dpkg -i /tmp/session-manager-plugin.deb
+          session-manager-plugin --version
+      - name: Install Ansible
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install --upgrade ansible "boto3>=1.35.0" "botocore>=1.35.0"
+          ansible-galaxy collection install -r infrastructure/ansible/requirements.yml
+      - name: Generate SSM inventory
+        env:
+          INSTANCE_ID: ${{ steps.deployment.outputs.instance_id }}
+          SSM_BUCKET: ${{ env.MMIV_BUCKET_NAME }}
+        run: |
+          sed \
+            -e "s|__INSTANCE_ID__|$INSTANCE_ID|g" \
+            -e "s|__SSM_BUCKET__|$SSM_BUCKET|g" \
+            infrastructure/ansible/inventory/ci.ini \
+            > infrastructure/ansible/inventory/ci.generated.ini
+      - name: Deploy with Ansible over SSM
+        id: ansible_deploy
+        working-directory: infrastructure/ansible
+        env:
+          SERVICE_NAME: ${{ inputs.service-name }}
+          SERVICE_IMAGE: ${{ steps.image.outputs.image }}
+          ECR_REGISTRY: ${{ steps.image.outputs.registry }}
+          MMIV_BUCKET_NAME: ${{ env.MMIV_BUCKET_NAME }}
+          CONTAINER_PORT: ${{ inputs.service-port }}
+          HOST_PORT: ${{ inputs.service-port }}
+          INTEGRITY_DB_URL: ${{ secrets.INTEGRITY_DB_URL }}
+          INTEGRITY_DB_USERNAME: ${{ secrets.INTEGRITY_DB_USERNAME }}
+          INTEGRITY_DB_PASSWORD: ${{ secrets.INTEGRITY_DB_PASSWORD }}
+        run: |
+          ansible-playbook \
+            -i inventory/ci.generated.ini \
+            playbook.yml \
+            -e "microservice_name=$SERVICE_NAME" \
+            -e "microservice_image=$SERVICE_IMAGE" \
+            -e "microservice_container_port=$CONTAINER_PORT" \
+            -e "microservice_host_port=$HOST_PORT" \
+            -e "microservice_health_path=/actuator/health" \
+            -e "microservice_bucket=$MMIV_BUCKET_NAME" \
+            -e "ecr_registry=$ECR_REGISTRY"
+      - name: Health check
+        env:
+          INSTANCE_ID: ${{ steps.deployment.outputs.instance_id }}
+          SERVICE_NAME: ${{ inputs.service-name }}
+          SMOKE_PORT: ${{ inputs.service-port }}
+        run: bash ./scripts/cd/smoke-test-service.sh
+      - name: Wait for Eureka registration
+        if: ${{ inputs.service-name != 'service-registry' }}
+        env:
+          INSTANCE_ID: ${{ inputs.instance-id }}
+          SERVICE_NAME: ${{ inputs.service-name }}
+        run: bash scripts/cd/wait-for-registration.sh
+      - name: Run ZAP on runner against deployed EC2 through SSM
+        timeout-minutes: 30
+        env:
+          INSTANCE_ID: ${{ steps.deployment.outputs.instance_id }}
+          DAST_PORT: ${{ inputs.service-port }}
+          DAST_SERVICE_NAME: ${{ inputs.service-name }}
+          DAST_SCAN_MODE: ${{ inputs.service-name == 'transfer-service' && 'api' || 'baseline' }}
+          DAST_PATH: ${{ inputs.service-name == 'service-registry' && '/' || inputs.service-name == 'api-gateway' && '/upload.html' || '/actuator/health' }}
+          DAST_READY_PATH: /actuator/health
+        run: |
+          mkdir -p .ci/reports
+          set -o pipefail
+          bash ./scripts/cd/run-dast-ssm.sh 2>&1 \
+            | tee ".ci/reports/dast-${{ inputs.service-name }}.log"
+      - name: Roll back after failure
+        if: ${{ failure() && steps.ansible_deploy.outcome == 'success' }}
+        working-directory: infrastructure/ansible
+        env:
+          SERVICE_NAME: ${{ inputs.service-name }}
+          CONTAINER_PORT: ${{ inputs.service-port }}
+          HOST_PORT: ${{ inputs.service-port }}
+          ECR_REGISTRY: ${{ steps.image.outputs.registry }}
+          MMIV_BUCKET_NAME: ${{ env.MMIV_BUCKET_NAME }}
+          INTEGRITY_DB_URL: ${{ secrets.INTEGRITY_DB_URL }}
+          INTEGRITY_DB_USERNAME: ${{ secrets.INTEGRITY_DB_USERNAME }}
+          INTEGRITY_DB_PASSWORD: ${{ secrets.INTEGRITY_DB_PASSWORD }}
+        run: |
+          ansible-playbook \
+            -i inventory/ci.generated.ini \
+            rollback.yml \
+            -e "microservice_name=$SERVICE_NAME" \
+            -e "microservice_container_port=$CONTAINER_PORT" \
+            -e "microservice_host_port=$HOST_PORT" \
+            -e "microservice_health_path=/actuator/health" \
+            -e "microservice_bucket=$MMIV_BUCKET_NAME" \
+            -e "ecr_registry=$ECR_REGISTRY"
+      - name: Final smoke test
+        if: success()
+        env:
+          INSTANCE_ID: ${{ steps.deployment.outputs.instance_id }}
+          SERVICE_NAME: ${{ inputs.service-name }}
+          SMOKE_PORT: ${{ inputs.service-port }}
+        run: bash ./scripts/cd/smoke-test-service.sh
+      - name: Upload deployment evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: deployment-evidence-${{ inputs.service-name }}-${{ github.sha }}
+          if-no-files-found: warn
+          include-hidden-files: true
+          path: |
+            .ci/reports/**
+            .ci/image-ref

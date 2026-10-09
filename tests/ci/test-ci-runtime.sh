@@ -258,7 +258,7 @@ test -f "$FIXTURE_ROOT/.ci/reports/trivy-sca.json"
 grep -F '"Results":[]' "$FIXTURE_ROOT/.ci/reports/trivy-sca.json"
 
 assert_trivy_sca_invocation() {
-    grep -F -- "fs --scanners vuln --severity HIGH,CRITICAL --exit-code 1 --format json --skip-dirs $FIXTURE_ROOT/.worktrees --skip-dirs $FIXTURE_ROOT/.superpowers --ignorefile $FIXTURE_ROOT/security/trivy/.trivyignore.yaml --output $FIXTURE_ROOT/.ci/reports/trivy-sca.json $FIXTURE_ROOT" \
+    grep -F -- "fs --scanners vuln --skip-version-check --severity HIGH,CRITICAL --exit-code 1 --format json --skip-dirs $FIXTURE_ROOT/.worktrees --skip-dirs $FIXTURE_ROOT/.superpowers --ignorefile $FIXTURE_ROOT/security/trivy/.trivyignore.yaml --output $FIXTURE_ROOT/.ci/reports/trivy-sca.json $FIXTURE_ROOT" \
         "$MMIV_TRIVY_LOG"
 }
 
