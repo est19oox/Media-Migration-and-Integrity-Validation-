@@ -6,7 +6,7 @@
 - Corrected Integrity's Spring configuration and retained its JPA audit repository.
 - Restored missing runnable API Gateway and Service Registry code.
 - Restored active Eureka registration, correct service names and Spring Cloud BOMs for all backend services.
-- Kept Integrity on Spring Boot 4.1.1 and added compatible Spring Cloud 2025.1.3; the Boot 3.5 services use Cloud 2025.0.3.
+- Kept Integrity on Spring Boot 4.1.1 and added compatible Spring Cloud 2025.1.3; all services now use Boot 4.1.1 and Cloud 2025.1.3 (see the Spring SCA correction below).
 - Restored explicit HttpCore 5.4.3 and Bouncy Castle 1.85 dependency overrides.
 - Removed the duplicate test-source IntegrityValidationService implementation. The current validation and audit code remains intact.
 - Moved Integrity's S3 configuration to its package directory and set an explicit AWS region default.
@@ -51,3 +51,24 @@ Configuration checks, conflict-marker scan, XML parsing and deployment template 
 - Added a Docker command regression test, invoked in GitHub CI after Ansible installation. CI triggers include tests/api and helper changes. ZIP shell scripts retain executable permissions; files/directories avoid world-writable modes so Ansible loads its configuration.
 
 Validation: Ansible syntax checks, Docker command execution against a mocked CLI, configuration/syntax checks, CI helper runtime tests and local Java Office-validator execution. Full Maven/JUnit, live AWS/S3/Eureka and live ZAP scans must be verified in CI. This ZIP does not claim an error-free live deployment.
+
+
+## Semgrep startup ImportError repair
+
+Reproduced the supplied eval_type_backport ImportError in an isolated installation of semgrep==1.138.0. Its package metadata pins mcp==1.12.2; MCP imports eval_type_backport, which Pydantic 2.14 removed. Pinned the Semgrep environment to pydantic==2.13.5 and isolated Checkov in its own environment. Applied the same setup to both GitHub Actions workflows (cicd.yml and validate.yml) and the Jenkins Dockerfile.
+
+Scanner-only command wrappers are placed on PATH so later Python/Ansible installations do not modify the scanner environments. Both installers run pip check, the FastMCP import and scanner version commands before scanning. The Terraform update notice in the supplied log is informational.
+
+Local validation: reproduced the failure before the pin; tested patched scanner startup and pip dependency checks. Live GitHub Actions and rebuilding the Jenkins image remain to be verified.
+
+
+## Spring SCA correction (2026-10-09)
+
+- The six Boot 3 services explicitly pinned Spring Framework 6.2.19. Spring's advisories for CVE-2026-47890 and CVE-2026-47892 list 7.0.9 as the open-source fix; 6.2.20 requires enterprise support and is absent from Maven Central.
+- Upgraded those services to Spring Boot 4.1.1 and Spring Cloud 2025.1.3, with Framework 7.0.9. Integrity already used this Boot/Cloud pair. Boot 4.1.1's public dependency BOM manages Framework 7.0.9.
+- Replaced the Tomcat 10 pins with 11.0.26 for Servlet 6.1, retained patched Jackson 2 at 2.21.7 under Boot 4's `jackson-2-bom.version`, and configured Jackson 3 at 3.1.7. Removed Boot 3 Micrometer/Netty pins so Boot manages matching versions (Micrometer 1.17.1 and Netty 4.2.17.Final).
+- Used Boot 4 Web MVC/WebFlux main/test starters and moved Gateway/Access/Registry test imports to their new packages. Registry explicitly opts into TestRestTemplate support with the restclient test starter and annotation.
+- Added `--skip-version-check` to SCA to suppress the informational Trivy update notice. Vulnerabilities still fail the gate; no CVE suppressions were added. Removed the obsolete Spring 6.2.19 CVE-2026-47884 exception now that Framework 7.0.9 fixes it.
+- Advisory references: https://spring.io/security/cve-2026-47890/ and https://spring.io/security/cve-2026-47892/ .
+- Validation: all seven services compiled and ran 109 tests successfully with Maven 3.9.11 and a local `-Djava.version=17` override. User Access and Integrity used a command-line Mockito startup agent because this execution environment blocks Mockito self-attachment. Production POMs and CI still use Java 25; Java 25/live deployment were not exercised here. CI runtime fixtures, deployment configuration tests, POM XML and shell syntax checks also passed.
+- Full Trivy verification is unresolved locally: the initial scan was stopped by a Maven Central HTTP 429 dependency lookup; after Maven populated the dependency cache, the retry reached all seven POMs but Trivy 0.74.0 crashed with SIGBUS while reading its vulnerability database. Neither attempt yielded a completed findings report. Rerun the normal CI SCA gate on the updated project.

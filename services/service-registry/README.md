@@ -14,7 +14,7 @@ Registration, Maven dependencies, gateway routes and deployment entries are acti
 | reporting-service | 8084 | Eureka client |
 | integrity-service | 8082 | Eureka client |
 
-Each client has an active Spring Cloud 2025.0.3 BOM and Eureka client dependency,
+Each client has an active Spring Cloud 2025.1.3 BOM and Eureka client dependency,
 its own spring.application.name and server.port, and active Eureka configuration.
 No registration controller is required. Instance IDs include IP and port to
 support distinct replicas. All clients fetch the registry and send heartbeats.

@@ -22,6 +22,7 @@ rm -f "$ROOT/.ci/reports/trivy-sca.json"
 scan_status=0
 trivy fs \
     --scanners vuln \
+    --skip-version-check \
     --severity HIGH,CRITICAL \
     --exit-code 1 \
     --format json \

@@ -20,7 +20,7 @@ Enable later:
 3. Uncomment spring.cloud.openfeign and eureka configuration in application.yml; set EUREKA_DEFAULT_ZONE to a registry reachable from the deployed container. The registry must actually run and Integrity must register as integrity-service. Registry client code does not create a registry server.
 4. Inject IntegrityValidationGateway into TransferService and call validate(response) after S3 upload. The gateway includes the full Feign call. Agree on API authentication, durable validation status and retries first; a timeout must not trigger a duplicate upload or be reported as successful validation. requestId must be persisted/reused across retries.
 
-Build using the project's existing Java 25 and Maven: mvn -B clean verify in services/transfer-service. Dependencies, Java version and Docker base are preserved from the uploaded project. Java 25 and Maven were located during verification, but the Spring Boot 3.5.14 parent was unavailable in the local cache and dependency downloads were blocked; full Maven/JUnit execution could not complete.
+Build using the project's existing Java 25 and Maven: mvn -B clean verify in services/transfer-service. The service uses Spring Boot 4.1.1, Spring Framework 7.0.9 and Spring Cloud 2025.1.3. The production Java version remains 25.
 
 ## View or download uploaded files
 
