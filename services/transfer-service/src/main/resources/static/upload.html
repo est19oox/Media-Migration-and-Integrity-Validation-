@@ -78,5 +78,30 @@ document.querySelector('#folderForm').addEventListener('submit', async event => 
   } catch (error) { result.textContent = error.message; }
   finally { button.disabled = false; }
 });
+document.querySelector('#folderForm').addEventListener('submit', async event => {
+  event.preventDefault();
+  const files = Array.from(document.querySelector('#folder').files);
+  const result = document.querySelector('#folderResult');
+  const button = document.querySelector('#folderSubmit');
+  if (!files.length || files.length > 500 || files.reduce((n, f) => n + f.size, 0) > 104857600) {
+    result.textContent = '请选择包含 1–500 个文件且总计不超过 100 MiB 的文件夹。'; return;
+  }
+  const body = new FormData();
+  for (const file of files) {
+    if (!file.webkitRelativePath || !file.size || !/\.(png|jpe?g|mp4|txt|pdf|pptx?|docx?)$/i.test(file.name)) {
+      result.textContent = '文件为空或类型不支持：' + (file.webkitRelativePath || file.name); return;
+    }
+    body.append('files', file, file.name);
+    body.append('relativePaths', file.webkitRelativePath);
+  }
+  button.disabled = true; result.textContent = '正在上传文件夹……';
+  try {
+    const response = await fetch('/api/v1/transfers/folder', {method: 'POST', body});
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || '上传失败，HTTP ' + response.status);
+    result.textContent = '成功：' + data.succeeded + '，失败：' + data.failed + '\n' + JSON.stringify(data, null, 2);
+  } catch (error) { result.textContent = error.message; }
+  finally { button.disabled = false; }
+});
 </script>
 </html>
