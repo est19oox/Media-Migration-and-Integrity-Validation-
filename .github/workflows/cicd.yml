@@ -182,6 +182,7 @@ jobs:
           # Redis playbook is temporarily disabled.
           ansible-playbook -i inventory/ci.ini setup-host.yml --syntax-check
           python ../../tests/ci/test-deployment-config.py
+          python ../../tests/ci/test-compose-runtime.py
 
       - name: Upload CI evidence
         if: always()
@@ -198,6 +199,8 @@ jobs:
     name: Terraform CI/CD
     needs: [quality_gates]
     runs-on: ubuntu-latest
+    outputs:
+      instance_id: ${{ steps.instance.outputs.instance_id }}
 
     defaults:
       run:
@@ -231,8 +234,17 @@ jobs:
       - name: Terraform Validate
         run: terraform validate
 
+      - name: Adopt an existing EC2 instance if absent from state
+        run: bash ../../scripts/cd/adopt-existing-ec2.sh
+
       - name: Terraform Plan
         run: terraform plan -input=false -out=tfplan
+
+      - name: Refuse EC2 deletion or replacement
+        shell: bash
+        run: |
+          set -euo pipefail
+          terraform show -json tfplan | python3 ../../scripts/cd/check-ec2-plan.py
 
       - name: Render Terraform plan
         run: terraform show -no-color tfplan > terraform-plan.txt
@@ -240,6 +252,24 @@ jobs:
       # CD
       - name: Terraform Apply
         run: terraform apply -input=false -auto-approve tfplan
+
+      - name: Reuse the Terraform-managed EC2 instance
+        id: instance
+        shell: bash
+        run: |
+          set -euo pipefail
+          INSTANCE_ID=$(terraform output -raw mmiv_instance_id)
+          STATUS=$(aws ec2 describe-instances --instance-ids "$INSTANCE_ID" \
+            --query 'Reservations[0].Instances[0].State.Name' --output text)
+          if [ "$STATUS" = stopping ]; then
+            aws ec2 wait instance-stopped --instance-ids "$INSTANCE_ID"
+            STATUS=stopped
+          fi
+          if [ "$STATUS" = stopped ]; then
+            aws ec2 start-instances --instance-ids "$INSTANCE_ID"
+          fi
+          aws ec2 wait instance-running --instance-ids "$INSTANCE_ID"
+          echo "instance_id=$INSTANCE_ID" >> "$GITHUB_OUTPUT"
 
       - name: Upload Terraform plan
         if: always()
@@ -264,18 +294,13 @@ jobs:
         with:
           role-to-assume: arn:aws:iam::275069781906:role/GitHubActions-MMIV-App
           aws-region: ${{ env.AWS_REGION }}
-      - name: Discover EC2 instance
+      - name: Use the Terraform-managed EC2 instance
         id: deployment
+        env:
+          INSTANCE_ID: ${{ needs.terraform.outputs.instance_id }}
         shell: bash
         run: |
-          INSTANCE_ID=$(aws ec2 describe-instances \
-            --region "$AWS_REGION" \
-            --filters \
-              'Name=tag:Name,Values=MMIV-EC2' \
-              'Name=instance-state-name,Values=running' \
-            --query 'Reservations[0].Instances[0].InstanceId' \
-            --output text)
-  
+          set -euo pipefail
           test -n "$INSTANCE_ID" && test "$INSTANCE_ID" != "None"
           echo "instance_id=$INSTANCE_ID" >> "$GITHUB_OUTPUT"
       - name: Wait for SSM and host initialization
@@ -284,13 +309,14 @@ jobs:
         run: bash ./scripts/cd/wait-for-ssm.sh
       - name: Install Session Manager plugin
         run: |
-          curl -fsSL https://s3.amazonaws.com/session-manager-downloads/plugin/latest/ubuntu_64bit/session-manager-plugin.deb -o /tmp/session-manager-plugin.deb
-          sudo dpkg -i /tmp/session-manager-plugin.deb
+          if ! command -v session-manager-plugin >/dev/null 2>&1; then
+            curl -fsSL https://s3.amazonaws.com/session-manager-downloads/plugin/latest/ubuntu_64bit/session-manager-plugin.deb -o /tmp/session-manager-plugin.deb
+            sudo dpkg -i /tmp/session-manager-plugin.deb
+          fi
           session-manager-plugin --version
       - name: Install Ansible
         run: |
-          python -m pip install --upgrade pip
-          python -m pip install --upgrade ansible "boto3>=1.35.0" "botocore>=1.35.0"
+          python -m pip install ansible "boto3>=1.35.0" "botocore>=1.35.0"
           ansible-galaxy collection install -r infrastructure/ansible/requirements.yml
       - name: Generate SSM inventory
         env:

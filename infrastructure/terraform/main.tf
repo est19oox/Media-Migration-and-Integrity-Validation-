@@ -326,6 +326,12 @@ data "aws_ami" "amazon_linux" {
 
 # Creates the MMIV application server.
 resource "aws_instance" "mmiv" {
+  # Reuse the managed host. A newer AMI must not replace a working EC2 instance.
+  lifecycle {
+    prevent_destroy = true
+    ignore_changes  = [ami, user_data]
+  }
+
   ami                         = data.aws_ami.amazon_linux.id
   instance_type               = "t3.medium"
   subnet_id                   = aws_subnet.mmiv_public.id
@@ -351,11 +357,7 @@ resource "aws_instance" "mmiv" {
     encrypted = true
   }
 
-  user_data = <<-EOF
-    #!/bin/bash
-    dnf install -y docker
-    systemctl enable --now docker
-  EOF
+  # setup-host.yml is the single installer for persistent host components.
 
   tags = {
     Name        = "MMIV-EC2"

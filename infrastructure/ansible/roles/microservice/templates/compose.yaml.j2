@@ -1,0 +1,28 @@
+services:
+  {{ microservice_name }}:
+    image: {{ microservice_image | to_json }}
+    container_name: {{ microservice_name }}
+    restart: unless-stopped
+    ports:
+      - {{ (microservice_bind_address ~ ':' ~ microservice_host_port ~ ':' ~ microservice_container_port) | to_json }}
+{% if microservice_name == 'integrity-service' %}
+    env_file:
+      - path: {{ microservice_integrity_env_file | to_json }}
+        format: raw
+{% endif %}
+    environment:
+      MMIV_MEDIA_ROOT: /media
+      AWS_REGION: {{ aws_region | to_json }}
+      MMIV_BUCKET_NAME: {{ microservice_bucket | to_json }}
+      EUREKA_DEFAULT_ZONE: {{ microservice_eureka_url | to_json }}
+    volumes:
+      - type: bind
+        source: {{ microservice_media_directory | to_json }}
+        target: /media
+        read_only: true
+    networks:
+      - backend
+networks:
+  backend:
+    external: true
+    name: {{ mmiv_docker_network | to_json }}

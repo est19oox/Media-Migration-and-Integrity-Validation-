@@ -21,7 +21,7 @@ if [ "$CONNECTED" != true ]; then
   exit 1
 fi
 
-# Wait for user-data package installation before Ansible also invokes dnf.
+# Wait for cloud-init, including user-data retained on existing hosts.
 COMMAND_ID=$(aws ssm send-command \
   --region "$REGION" --instance-ids "$INSTANCE_ID" \
   --document-name AWS-RunShellScript \

@@ -1,0 +1,57 @@
+---
+- name: Authenticate Docker to ECR
+  ansible.builtin.shell: |
+    set -o pipefail
+    aws ecr get-login-password --region {{ aws_region | quote }} |
+      docker login --username AWS --password-stdin {{ ecr_registry | quote }}
+  args:
+    executable: /bin/bash
+  when: ecr_registry | length > 0
+  changed_when: false
+  no_log: true
+
+# Existing docker-run containers have no Compose ownership labels. Remove only
+# those containers once, after the replacement image has been pulled successfully.
+- name: Check local image before migrating a legacy container
+  community.docker.docker_image_info:
+    name: "{{ compose_image }}"
+  register: migration_image
+  when:
+    - service_container.exists
+    - "'com.docker.compose.project' not in (service_container.container.Config.Labels or {})"
+
+- name: Pull missing image before migrating a legacy container
+  ansible.builtin.command:
+    argv: [docker, pull, "{{ compose_image }}"]
+  when:
+    - service_container.exists
+    - "'com.docker.compose.project' not in (service_container.container.Config.Labels or {})"
+    - migration_image.images | length == 0
+  changed_when: true
+
+- name: Migrate legacy container to Compose once
+  community.docker.docker_container:
+    name: "{{ microservice_name }}"
+    state: absent
+  when:
+    - service_container.exists
+    - "'com.docker.compose.project' not in (service_container.container.Config.Labels or {})"
+
+- name: Reconcile service with Compose
+  community.docker.docker_compose_v2:
+    project_src: "{{ microservice_compose_directory }}"
+    project_name: "{{ microservice_compose_project }}"
+    state: present
+    pull: missing
+    recreate: "{{ 'always' if integrity_environment_changed | default(false) else 'auto' }}"
+    remove_orphans: false
+  register: compose_result
+
+- name: Verify service health
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ microservice_host_port }}{{ microservice_health_path }}"
+    status_code: 200
+  register: health
+  retries: "{{ microservice_health_retries }}"
+  delay: "{{ microservice_health_delay }}"
+  until: health.status == 200 and health.json.status | default('') == 'UP'

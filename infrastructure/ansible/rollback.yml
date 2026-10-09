@@ -4,52 +4,6 @@
   become: true
   gather_facts: false
   vars:
-    microservice_previous_image_file: "/var/lib/mmiv/{{ microservice_name }}.previous-image"
-    aws_region: "{{ lookup('env', 'AWS_REGION') | default('ap-southeast-1', true) }}"
-    ecr_registry: "{{ lookup('env', 'ECR_REGISTRY') | default('', true) }}"
-    microservice_container_port: "{{ lookup('env', 'MMIV_SERVICE_CONTAINER_PORT') }}"
-    microservice_host_port: "{{ lookup('env', 'MMIV_SERVICE_HOST_PORT') }}"
-    microservice_health_path: "{{ lookup('env', 'MMIV_SERVICE_HEALTH_PATH') }}"
-    microservice_bucket: "{{ lookup('env', 'MMIV_BUCKET_NAME') | default('media-migration-dev-landing', true) }}"
-    mmiv_docker_network: mmiv-backend
-    microservice_eureka_url: "{{ lookup('env', 'EUREKA_DEFAULT_ZONE') | default('http://service-registry:8761/eureka/', true) }}"
-    microservice_bind_address: "127.0.0.1"
-  tasks:
-    - name: Require previous image
-      ansible.builtin.stat:
-        path: "{{ microservice_previous_image_file }}"
-      register: previous_file
-
-    - name: Stop if rollback image is unavailable
-      ansible.builtin.fail:
-        msg: "No previous image exists for {{ microservice_name }}."
-      when: not previous_file.stat.exists
-
-    - name: Read previous image
-      ansible.builtin.slurp:
-        src: "{{ microservice_previous_image_file }}"
-      register: previous_image
-
-    - name: Authenticate Docker to ECR
-      ansible.builtin.shell: |
-        aws ecr get-login-password --region {{ aws_region }} | docker login --username AWS --password-stdin {{ ecr_registry }}
-      when: ecr_registry | length > 0
-      changed_when: true
-
-    - name: Restore previous image
-      ansible.builtin.shell: |
-        set -e
-        PREVIOUS_IMAGE="$(printf '%s' '{{ previous_image.content }}' | base64 -d)"
-        docker pull "$PREVIOUS_IMAGE"
-        docker rm -f {{ microservice_name }} 2>/dev/null || true
-        docker run -d --name {{ microservice_name }} --restart unless-stopped --network {{ mmiv_docker_network }} {% if microservice_name == 'integrity-service' %}--env-file /etc/mmiv/integrity.env{% endif %} -p {{ microservice_bind_address }}:{{ microservice_host_port }}:{{ microservice_container_port }} --mount type=bind,src=/var/lib/mmiv/media,dst=/media,readonly -e MMIV_MEDIA_ROOT=/media -e AWS_REGION={{ aws_region }} -e MMIV_BUCKET_NAME={{ microservice_bucket }}  -e EUREKA_DEFAULT_ZONE={{ microservice_eureka_url }} "$PREVIOUS_IMAGE"
-      changed_when: true
-
-    - name: Verify restored service
-      ansible.builtin.uri:
-        url: "http://127.0.0.1:{{ microservice_host_port }}{{ microservice_health_path }}"
-        status_code: 200
-      register: health
-      retries: 12
-      delay: 5
-      until: health.status == 200
+    microservice_rollback: true
+  roles:
+    - microservice
