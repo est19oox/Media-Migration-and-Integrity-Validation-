@@ -26,6 +26,20 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 class LocalFileUploadTest {
+    private mmiv.transfer.service.S3ObjectCleanup cleanup;
+    private mmiv.transfer.service.S3ObjectCleanup passingCleanup() {
+        cleanup = mock(mmiv.transfer.service.S3ObjectCleanup.class);
+        when(cleanup.delete(anyString(), anyString(), nullable(mmiv.transfer.dto.S3ObjectReference.class)))
+                .thenReturn(new mmiv.transfer.service.S3ObjectCleanup.Result("DELETED", "Uploaded file deleted"));
+        return cleanup;
+    }
+    private mmiv.transfer.integration.IntegrityValidationGateway gateway;
+    private mmiv.transfer.integration.IntegrityValidationGateway passingIntegrity() {
+        gateway = mock(mmiv.transfer.integration.IntegrityValidationGateway.class);
+        when(gateway.validate(anyString(), anyString(), anyString(), anyString())).thenReturn(
+                new mmiv.transfer.integration.IntegrityValidationGateway.Outcome("PASSED", true, "Verified"));
+        return gateway;
+    }
     S3Client s3;
     S3TransferStrategy strategy;
     MockMvc mvc;
@@ -34,7 +48,7 @@ class LocalFileUploadTest {
         s3 = mock(S3Client.class);
         var validator = new TransferRequestValidator("/unused-media-root");
         strategy = spy(new S3TransferStrategy(s3, "test-bucket", validator));
-        var service = new TransferService(validator, new TransferStrategyFactory(List.of(strategy)));
+        var service = new TransferService(validator, new TransferStrategyFactory(List.of(strategy)), passingIntegrity(), passingCleanup());
         mvc = MockMvcBuilders.standaloneSetup(new TransferController(service))
                 .setControllerAdvice(new TransferExceptionHandler()).build();
     }
@@ -63,6 +77,16 @@ class LocalFileUploadTest {
         var source = ArgumentCaptor.forClass(UploadSource.class);
         verify(strategy).transferUploaded(source.capture());
         assertFalse(Files.exists(source.getValue().path()));
+    }
+
+    @Test void integrityFailureStillReturnsUploadedMetadataWithoutSuccess() throws Exception {
+        when(gateway.validate(anyString(), anyString(), anyString(), anyString())).thenReturn(
+                new mmiv.transfer.integration.IntegrityValidationGateway.Outcome("FAILED", false, "Checksum mismatch"));
+        mvc.perform(multipart("/api/v1/transfers").file(new MockMultipartFile(
+                "file", "notes.txt", "text/plain", "hello".getBytes())))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.validationResult").value("FAILED"))
+                .andExpect(jsonPath("$.transferId").isNotEmpty()).andExpect(jsonPath("$.fileId").isNotEmpty());
     }
 
     @Test void missingFileReturns400WithoutUploading() throws Exception {
@@ -95,6 +119,7 @@ class LocalFileUploadTest {
         var source = ArgumentCaptor.forClass(UploadSource.class);
         verify(strategy).transferUploaded(source.capture());
         assertFalse(Files.exists(source.getValue().path()));
+        verify(gateway, never()).validate(anyString(), anyString(), anyString(), anyString());
     }
 
     @Test void validatorRejectsOversizedFileBeforeReadingIt() throws Exception {

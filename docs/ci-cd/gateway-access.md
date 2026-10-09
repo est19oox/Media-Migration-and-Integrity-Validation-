@@ -1,19 +1,36 @@
-# Browser access through the Gateway
+# Browser access through the API Gateway
 
-Authenticate AWS CLI with an identity permitted to start an SSM port-forwarding session on the MMIV instance, and install the AWS Session Manager plugin.
+After Terraform apply and Ansible deployment, open:
 
-Bash:
-~~~bash
+- http://<EC2-public-IP>:8080/upload.html
+- http://<EC2-public-IP>:8080/files.html
+- http://<EC2-public-IP>:8080/ (routes to upload.html)
+
+Terraform permits public IPv4 TCP 8080. Ansible publishes api-gateway at
+0.0.0.0:8080:8080. Backend service and registry host ports bind to 127.0.0.1;
+containers communicate over mmiv-backend. Deployment, rescue and rollback use
+the same binding default. API paths remain /api/v1/transfers and /api/v1/files/**.
+
+The gateway currently has no authentication; this configuration makes its
+upload and file APIs reachable by anyone with network access to port 8080.
+For restricted access, replace the security group's 0.0.0.0/0 ingress CIDR with
+your permitted client CIDR before applying Terraform.
+
+SSM port forwarding remains optional:
+
+```bash
 bash scripts/cd/open-gateway-tunnel.sh i-YOUR_INSTANCE_ID
-~~~
+```
 
-PowerShell (replace the instance ID):
-~~~powershell
-aws ssm start-session --region ap-southeast-1 --target i-YOUR_INSTANCE_ID --document-name AWS-StartPortForwardingSession --parameters "portNumber=8080,localPortNumber=8080"
-~~~
+Then open http://localhost:8080/upload.html while the session runs.
 
-Keep the command running and open http://localhost:8080/upload.html. File and API requests go through Gateway to Transfer. Port 8080 must be free locally. This is authenticated developer access, not a public website. EC2 retains no public inbound rules. Gateway and backend host ports bind to 127.0.0.1; containers communicate over mmiv-backend independently of Redis.
+The real Discovery Service from main is preserved, including Oracle configuration,
+CSV processing, repositories and tests. Its automatic CD entry is commented out
+because its DB_URL, DB_USERNAME, DB_PASSWORD and DISCOVERY_ROOT must be supplied.
+It currently has no Eureka client, so its gateway route is not functional yet.
+For local Compose, enable it explicitly with --profile discovery after supplying
+the database settings and DISCOVERY_MEDIA_PATH. Other services use the registry.
 
-Folder API: POST /api/v1/transfers/folder, multipart fields files and relativePaths, up to 500 files and 100 MiB total. Supported extensions: png, jpg, jpeg, mp4, txt, pdf, ppt, pptx, doc, docx. Empty folders are not uploaded. Office files download for viewing.
-
-Redis definitions and invocation are commented out. Existing Redis containers are not removed. Restore the commented playbook, role and settings deliberately if Redis is needed later.
+Folder API: POST /api/v1/transfers/folder with matching files and relativePaths.
+Limit: 500 files and 100 MiB total. Integrity invocation from Transfer remains
+commented out. Redis remains disabled as in the uploaded transfer project.

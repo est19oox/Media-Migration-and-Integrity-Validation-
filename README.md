@@ -35,3 +35,10 @@ mvn clean verify
 
 
 Gateway browser access and temporary Redis disabling: see docs/ci-cd/gateway-access.md.
+
+
+## Merged gateway access
+
+Gateway is public on EC2 TCP 8080; backends bind to localhost. See
+[Gateway access](docs/ci-cd/gateway-access.md). The real Discovery Service from
+main is preserved; its CD entry is disabled pending Oracle/runtime configuration.

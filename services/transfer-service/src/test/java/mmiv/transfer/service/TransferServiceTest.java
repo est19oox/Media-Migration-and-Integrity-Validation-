@@ -14,22 +14,35 @@ class TransferServiceTest {
     TransferStrategyFactory factory;
     TransferStrategy strategy;
     TransferService service;
+    S3ObjectCleanup cleanup;
+    mmiv.transfer.integration.IntegrityValidationGateway integrity;
     final TransferRequest request = new TransferRequest("sample.txt", "key", "text/plain");
     @BeforeEach void setUp() {
         validator = mock(TransferRequestValidator.class);
         factory = mock(TransferStrategyFactory.class);
         strategy = mock(TransferStrategy.class);
-        service = new TransferService(validator, factory);
+        integrity = mock(mmiv.transfer.integration.IntegrityValidationGateway.class);
+        when(integrity.validate(anyString(), anyString(), anyString(), nullable(String.class))).thenReturn(
+                new mmiv.transfer.integration.IntegrityValidationGateway.Outcome("PASSED", true, "Verified"));
+        cleanup = mock(S3ObjectCleanup.class);
+        when(cleanup.delete(anyString(), anyString(), nullable(S3ObjectReference.class)))
+                .thenReturn(new S3ObjectCleanup.Result("DELETED", "Uploaded file deleted"));
+        service = new TransferService(validator, factory, integrity, cleanup);
     }
     @Test void validatesThenSelectsThenTransfers() {
         var response = new TransferResponse("bucket", "key", "text/plain", 5);
         when(factory.getStrategy(request)).thenReturn(strategy);
         when(strategy.transfer(request)).thenReturn(response);
-        assertSame(response, service.transfer(request));
-        var order = inOrder(validator, factory, strategy);
+        var result = service.transfer(request);
+        assertEquals(response.key(), result.key());
+        assertTrue(result.success());
+        assertEquals("PASSED", result.validationResult());
+        assertNotNull(result.transferId());
+        var order = inOrder(validator, factory, strategy, integrity);
         order.verify(validator).validate(request);
         order.verify(factory).getStrategy(request);
         order.verify(strategy).transfer(request);
+        order.verify(integrity).validate(eq(result.transferId()), eq("bucket"), eq("key"), isNull());
     }
     @Test void invalidRequestStopsBeforeStrategySelection() {
         var error = new IllegalArgumentException("invalid request");

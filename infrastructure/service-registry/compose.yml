@@ -12,8 +12,6 @@ services:
         condition: service_healthy
       transfer-service:
         condition: service_started
-      discovery-service:
-        condition: service_started
       user-access-service:
         condition: service_started
       reporting-service:
@@ -46,7 +44,7 @@ services:
     build:
       context: ../../services/transfer-service
     ports:
-    - 8081:8081
+    - 127.0.0.1:8081:8081
     restart: unless-stopped
     networks:
     - registry
@@ -71,8 +69,16 @@ services:
         condition: service_healthy
     environment:
       EUREKA_DEFAULT_ZONE: http://service-registry:8761/eureka/
+      DB_URL: ${DB_URL:-}
+      DB_USERNAME: ${DB_USERNAME:-}
+      DB_PASSWORD: ${DB_PASSWORD:-}
+      DISCOVERY_ROOT: ${DISCOVERY_ROOT:-/media}
     ports:
-    - 8085:8085
+    - 127.0.0.1:8085:8085
+    profiles:
+    - discovery
+    volumes:
+    - ${DISCOVERY_MEDIA_PATH:-../../media}:/media:ro
   user-access-service:
     build:
       context: ../../services/user-access-service
@@ -85,7 +91,7 @@ services:
     environment:
       EUREKA_DEFAULT_ZONE: http://service-registry:8761/eureka/
     ports:
-    - 8083:8083
+    - 127.0.0.1:8083:8083
   reporting-service:
     build:
       context: ../../services/reporting-service
@@ -98,7 +104,7 @@ services:
     environment:
       EUREKA_DEFAULT_ZONE: http://service-registry:8761/eureka/
     ports:
-    - 8084:8084
+    - 127.0.0.1:8084:8084
   integrity-service:
     build:
       context: ../../services/integrity-service
@@ -111,6 +117,6 @@ services:
     environment:
       EUREKA_DEFAULT_ZONE: http://service-registry:8761/eureka/
     ports:
-    - 8082:8082
+    - 127.0.0.1:8082:8082
 networks:
   registry: null

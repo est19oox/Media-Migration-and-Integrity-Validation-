@@ -4,8 +4,9 @@ API Gateway listens on 8080. It uses Eureka service-registry on 8761 and Spring
 Cloud LoadBalancer to select registered backend instances with default round
 robin. It is a software load balancer inside Gateway, not an AWS ALB.
 
-All five services have active registration and routes. Transfer uses 8081,
-Discovery 8085, User Access 8083, Reporting 8084, and Integrity 8082.
+Transfer (8081), User Access (8083), Reporting (8084), and Integrity (8082)
+register with Eureka. Main's real Discovery Service (8085) is preserved but
+requires Oracle configuration and has no Eureka client yet. Its route is reserved.
 
 ## Routes
 
@@ -26,7 +27,7 @@ Examples:
 
 - POST http://localhost:8080/api/v1/transfers/folder uses the existing multipart folder API.
 - POST http://localhost:8080/api/access/check uses the existing User Access request DTO.
-- GET http://localhost:8080/discovery/actuator/health checks Discovery through Gateway.
+- /discovery/** is reserved until Discovery registration is implemented.
 - GET http://localhost:8080/user-access/actuator/health checks User Access.
 - GET http://localhost:8080/reporting/actuator/health checks Reporting.
 - GET http://localhost:8080/integrity/actuator/health checks Integrity.
@@ -43,7 +44,8 @@ build and Compose commands. For local Java processes, start the registry JAR
 first, then each backend JAR and Gateway JAR. The default registry URL is
 http://localhost:8761/eureka/; override EUREKA_DEFAULT_ZONE when needed.
 
-The active Compose file exposes 8080 and 8081 through 8085, plus loopback 8761.
+The active Compose file exposes Gateway on 8080; backend and registry ports
+bind to localhost. Discovery is available with the optional discovery profile.
 Stop any conflicting root Compose setup before starting it. Actual S3 uploads
 still require AWS credentials, region and bucket configuration.
 
@@ -79,17 +81,18 @@ allow time for registration and Eureka cache updates after startup or shutdown.
 Authentication, rate limiting and cross-origin frontend CORS policies are not
 configured here. The provided UI uses the same origin.
 
-The CI/CD matrix has all seven services enabled, on one EC2 instance with the
+The CI/CD workflow enables six services; Discovery deployment is commented out
+pending database and media configuration. These services run on one EC2 instance with the
 shared Ansible network. Deploy/rollback use the Eureka URL. Terraform precedes
 deployment; matrix ordering is not guaranteed and clients retry registration.
 CI/CD deploys one container per service; scaled Compose is a replica example,
 not automatic EC2 scaling. Gateway health alone does not prove every route works.
-The existing Terraform configuration has no public gateway ingress: use SSM
-forwarding or a deliberately configured ingress/TLS entry point for remote access.
+Terraform allows public TCP 8080 and Ansible binds Gateway to 0.0.0.0.
+Open http://<EC2-public-IP>:8080/upload.html after deployment.
+See ../../docs/ci-cd/gateway-access.md for direct and optional SSM access.
 
 GatewayRoutingTest uses two local HTTP backends and static discovery to verify
 round robin, multipart forwarding, all backend routes, pages and gateway health.
 Its static discovery replaces external Eureka only during tests.
 
-When applying the changed-files ZIP, delete the duplicate production source
-listed in APPLY-CHANGES.md. Keep FolderUploadService under src/main.
+This merged project is complete. Keep FolderUploadService under src/main.

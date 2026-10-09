@@ -24,18 +24,34 @@ public class TransferService {
     private final TransferStrategyFactory factory;
     @Value("${mmiv.upload.max-size-bytes:104857600}")
     private long maxUploadBytes = 104857600;
-    // Future: import and constructor-inject the fully commented gateway.
-    // private final IntegrityValidationGateway integrityValidationGateway;
+    private final mmiv.transfer.integration.IntegrityValidationGateway integrity;
+    private final S3ObjectCleanup cleanup;
 
-    public TransferService(TransferRequestValidator validator, TransferStrategyFactory factory) {
+    public TransferService(TransferRequestValidator validator, TransferStrategyFactory factory,
+            mmiv.transfer.integration.IntegrityValidationGateway integrity, S3ObjectCleanup cleanup) {
         this.validator = validator;
         this.factory = factory;
+        this.integrity = integrity;
+        this.cleanup = cleanup;
     }
 
     public TransferResponse transfer(TransferRequest request) {
         validator.validate(request);
         TransferStrategy strategy = factory.getStrategy(request);
-        return strategy.transfer(request);
+        TransferResponse uploaded = strategy.transfer(request);
+        String transferId = UUID.randomUUID().toString();
+        var outcome = integrity.validate(transferId, uploaded.bucket(), uploaded.key(), uploaded.sha256());
+        var removal = finish(outcome.success(), uploaded.bucket(), uploaded.key(), uploaded.objectReference());
+        return new TransferResponse(uploaded.bucket(), uploaded.key(), uploaded.mediaType(), uploaded.sizeBytes(),
+                uploaded.fileId(), uploaded.sha256(), transferId, outcome.validationResult(),
+                outcome.success(), outcome.message() + ". " + removal.message(),
+                uploaded.objectReference(), removal.status());
+    }
+
+    private S3ObjectCleanup.Result finish(boolean success, String bucket, String key,
+            mmiv.transfer.dto.S3ObjectReference reference) {
+        return success ? new S3ObjectCleanup.Result("NOT_REQUIRED", "No cleanup required")
+                : cleanup.delete(bucket, key, reference);
     }
 
     public UploadResponse upload(MultipartFile file) {
@@ -61,11 +77,13 @@ public class TransferService {
             String sha256 = HexFormat.of().formatHex(digest.digest());
             UploadResponse response = strategy.transferUploaded(new UploadSource(
                     temporary, fileName, key, contentType, actualSize, sha256));
-            // Future API call via Feign + Eureka. This is NOT executed:
-            // IntegrityValidationResponse validation = integrityValidationGateway.validate(response);
-            // Persist a pending validation job and handle API failures/retries before enabling.
-            // S3 upload success does not mean the Integrity Service has validated the file.
-            return response;
+            String transferId = UUID.randomUUID().toString();
+            var outcome = integrity.validate(transferId, response.bucket(), response.key(), sha256);
+            var removal = finish(outcome.success(), response.bucket(), response.key(), response.objectReference());
+            return new UploadResponse(response.bucket(), response.key(), response.fileName(), response.mediaType(),
+                    response.sizeBytes(), sha256, response.fileId(), transferId, outcome.validationResult(),
+                    outcome.success(), outcome.message() + ". " + removal.message(),
+                    response.objectReference(), removal.status());
         } catch (IOException | java.security.NoSuchAlgorithmException e) {
             throw new IllegalStateException("Upload processing failed", e);
         } finally {

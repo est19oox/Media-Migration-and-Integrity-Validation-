@@ -12,8 +12,6 @@ services:
         condition: service_healthy
       transfer-service:
         condition: service_started
-      discovery-service:
-        condition: service_started
       user-access-service:
         condition: service_started
       reporting-service:
@@ -69,6 +67,14 @@ services:
         condition: service_healthy
     environment:
       EUREKA_DEFAULT_ZONE: http://service-registry:8761/eureka/
+      DB_URL: ${DB_URL:-}
+      DB_USERNAME: ${DB_USERNAME:-}
+      DB_PASSWORD: ${DB_PASSWORD:-}
+      DISCOVERY_ROOT: ${DISCOVERY_ROOT:-/media}
+    profiles:
+    - discovery
+    volumes:
+    - ${DISCOVERY_MEDIA_PATH:-../../media}:/media:ro
   user-access-service:
     build:
       context: ../../services/user-access-service

@@ -8,8 +8,17 @@ microservice_bucket: "{{ lookup('env', 'MMIV_BUCKET_NAME') | default('media-migr
 aws_region: "{{ lookup('env', 'AWS_REGION') | default('ap-southeast-1', true) }}"
 ecr_registry: "{{ lookup('env', 'ECR_REGISTRY') | default('', true) }}"
 microservice_previous_image_file: "/var/lib/mmiv/{{ microservice_name }}.previous-image"
+microservice_compose_directory: "/opt/mmiv/{{ microservice_name }}"
+microservice_compose_project: "mmiv-{{ microservice_name }}"
+microservice_rollback: false
+microservice_media_directory: /var/lib/mmiv/media
+microservice_health_retries: 12
+microservice_health_delay: 5
 
 # Eureka clients share a Docker network with the registry, independently of Redis.
 mmiv_docker_network: mmiv-backend
 microservice_eureka_url: "{{ lookup('env', 'EUREKA_DEFAULT_ZONE') | default('http://service-registry:8761/eureka/', true) }}"
-microservice_bind_address: "127.0.0.1"
+# Only the browser-facing Gateway is published on all EC2 interfaces.
+# This default is shared by deployment, rescue, and explicit rollback.
+microservice_bind_address: "{{ '0.0.0.0' if microservice_name == 'api-gateway' else '127.0.0.1' }}"
+microservice_integrity_env_file: /etc/mmiv/integrity.env

@@ -45,11 +45,36 @@ document.querySelector('#uploadForm').addEventListener('submit', async event => 
     const text = await response.text();
     let data; try { data = JSON.parse(text); } catch { throw new Error('服务器未返回有效 JSON，HTTP ' + response.status); }
     if (!response.ok) throw new Error(data.error || '上传失败，HTTP ' + response.status);
-    result.textContent = '上传成功（尚未调用 Integrity Service）\n' + JSON.stringify(data, null, 2);
+    result.textContent = (data.success ? '传输成功，完整性验证通过' : data.cleanupStatus === 'DELETED' ? '传输未通过验证，已删除上传文件' : '传输未通过验证，自动删除未确认，请手动处理') + '\n' + JSON.stringify(data, null, 2);
     const id = encodeURIComponent(data.fileId);
     document.querySelector('#preview').href = '/api/v1/files/' + id + '/content';
     document.querySelector('#download').href = '/api/v1/files/' + id + '/download';
-    document.querySelector('#links').hidden = false;
+    document.querySelector('#links').hidden = !data.success;
+  } catch (error) { result.textContent = error.message; }
+  finally { button.disabled = false; }
+});
+document.querySelector('#folderForm').addEventListener('submit', async event => {
+  event.preventDefault();
+  const files = Array.from(document.querySelector('#folder').files);
+  const result = document.querySelector('#folderResult');
+  const button = document.querySelector('#folderSubmit');
+  if (!files.length || files.length > 500 || files.reduce((n, f) => n + f.size, 0) > 104857600) {
+    result.textContent = '请选择包含 1–500 个文件且总计不超过 100 MiB 的文件夹。'; return;
+  }
+  const body = new FormData();
+  for (const file of files) {
+    if (!file.webkitRelativePath || !file.size || !/\.(png|jpe?g|mp4|txt|pdf|pptx?|docx?)$/i.test(file.name)) {
+      result.textContent = '文件为空或类型不支持：' + (file.webkitRelativePath || file.name); return;
+    }
+    body.append('files', file, file.name);
+    body.append('relativePaths', file.webkitRelativePath);
+  }
+  button.disabled = true; result.textContent = '正在上传文件夹……';
+  try {
+    const response = await fetch('/api/v1/transfers/folder', {method: 'POST', body});
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || '上传失败，HTTP ' + response.status);
+    result.textContent = '完整性验证通过：' + data.succeeded + '，失败或未确认：' + data.failed + '\n' + JSON.stringify(data, null, 2);
   } catch (error) { result.textContent = error.message; }
   finally { button.disabled = false; }
 });

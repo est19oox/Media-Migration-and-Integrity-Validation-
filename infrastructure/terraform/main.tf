@@ -170,7 +170,8 @@ resource "aws_iam_role_policy" "mmiv_ec2_s3" {
         Action = [
           "s3:GetObject",
           "s3:PutObject",
-          "s3:DeleteObject"
+          "s3:DeleteObject",
+          "s3:DeleteObjectVersion"
         ]
         Resource = "${aws_s3_bucket.migration.arn}/*"
       }
@@ -275,8 +276,15 @@ resource "aws_security_group" "mmiv_ec2" {
   description = "Security group for MMIV EC2"
   vpc_id      = aws_vpc.mmiv.id
 
-  # No inbound rules.
-  # The EC2 instance will be managed through SSM.
+  # Browser traffic enters through the API Gateway on TCP 8080.
+  # Administration remains through SSM; backend ports have no inbound rules.
+  ingress {
+    description = "API Gateway HTTP"
+    from_port   = 8080
+    to_port     = 8080
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
 
   egress {
     description = "Allow outbound HTTPS"
@@ -318,6 +326,12 @@ data "aws_ami" "amazon_linux" {
 
 # Creates the MMIV application server.
 resource "aws_instance" "mmiv" {
+  # Reuse the managed host. A newer AMI must not replace a working EC2 instance.
+  lifecycle {
+    prevent_destroy = true
+    ignore_changes  = [ami, user_data]
+  }
+
   ami                         = data.aws_ami.amazon_linux.id
   instance_type               = "t3.medium"
   subnet_id                   = aws_subnet.mmiv_public.id
@@ -325,7 +339,7 @@ resource "aws_instance" "mmiv" {
   monitoring                  = true
   ebs_optimized               = true
 
-  #checkov:skip=CKV_AWS_88:The dev host has no inbound security-group rules and needs direct outbound access without a NAT gateway.
+  #checkov:skip=CKV_AWS_88:The dev host exposes only the API Gateway and needs direct outbound access without a NAT gateway.
 
   vpc_security_group_ids = [
     aws_security_group.mmiv_ec2.id
@@ -343,11 +357,7 @@ resource "aws_instance" "mmiv" {
     encrypted = true
   }
 
-  user_data = <<-EOF
-    #!/bin/bash
-    dnf install -y docker
-    systemctl enable --now docker
-  EOF
+  # setup-host.yml is the single installer for persistent host components.
 
   tags = {
     Name        = "MMIV-EC2"

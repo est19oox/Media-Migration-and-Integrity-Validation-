@@ -2,6 +2,11 @@
   hosts: mmiv
   become: true
   gather_facts: false
+  vars:
+    docker_compose_version: '2.40.3'
+    docker_compose_checksums:
+      x86_64: dba9d98e1ba5bfe11d88c99b9bd32fc4a0624a30fafe68eea34d61a3e42fd372
+      aarch64: d26373b19e89160546d15407516cc59f453030d9bc5b43ba7faf16f7b4980137
   pre_tasks:
     - name: Wait for SSM connectivity
       ansible.builtin.wait_for_connection:
@@ -20,23 +25,45 @@
         path: /var/lib/mmiv/media
         state: directory
         mode: '0755'
-    - name: Install Docker
+    - name: Install missing host components
       ansible.builtin.dnf:
-        name: docker
+        name:
+          - docker
+          - awscli
+          - python3-requests
         state: present
     - name: Enable Docker
       ansible.builtin.service:
         name: docker
         enabled: true
         state: started
+    - name: Check installed Compose version
+      ansible.builtin.command:
+        argv: [docker, compose, version, --short]
+      register: installed_compose
+      changed_when: false
+      failed_when: false
+    - name: Install Compose only when missing or its pinned version changes
+      when: installed_compose.rc != 0 or installed_compose.stdout | trim != docker_compose_version
+      block:
+        - name: Require a supported Compose architecture
+          ansible.builtin.assert:
+            that: ansible_facts.architecture in docker_compose_checksums
+        - name: Create Docker CLI plugin directory
+          ansible.builtin.file:
+            path: /usr/local/lib/docker/cli-plugins
+            state: directory
+            mode: '0755'
+        - name: Install checksum-verified Compose plugin
+          ansible.builtin.get_url:
+            url: "https://github.com/docker/compose/releases/download/v{{ docker_compose_version }}/docker-compose-linux-{{ ansible_facts.architecture }}"
+            dest: /usr/local/lib/docker/cli-plugins/docker-compose
+            checksum: "sha256:{{ docker_compose_checksums[ansible_facts.architecture] }}"
+            mode: '0755'
+            force: true
     - name: Ensure shared microservice network exists
-      ansible.builtin.shell: |
-        docker network inspect {{ mmiv_docker_network }} >/dev/null 2>&1 || docker network create {{ mmiv_docker_network }}
-      register: microservice_network
-      changed_when: microservice_network.stdout | trim | length > 0
-    - name: Install AWS CLI
-      ansible.builtin.dnf:
-        name: awscli
+      community.docker.docker_network:
+        name: "{{ mmiv_docker_network }}"
         state: present
     # Redis preparation is temporarily commented out.
     # - name: Prepare Redis when enabled
