@@ -89,6 +89,9 @@ jobs:
           ansible-galaxy collection install -r requirements.yml
           ansible-playbook -i inventory/ci.ini playbook.yml --syntax-check
           ansible-playbook -i inventory/ci.ini rollback.yml --syntax-check
+          ansible-playbook -i inventory/ci.ini setup-host.yml --syntax-check
+          python ../../tests/ci/test-deployment-config.py
+          python ../../tests/ci/test-compose-runtime.py
       - name: Docker build
         shell: bash
         run: |

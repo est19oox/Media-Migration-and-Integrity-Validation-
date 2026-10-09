@@ -1,0 +1,132 @@
+---
+- name: Prepare private Integrity configuration directory
+  ansible.builtin.file:
+    path: "{{ microservice_integrity_env_file | dirname }}"
+    state: directory
+    mode: '0700'
+  when: microservice_name == 'integrity-service'
+
+- name: Render desired service configuration
+  ansible.builtin.set_fact:
+    desired_compose: "{{ lookup('template', 'compose.yaml.j2') }}"
+    desired_integrity_environment: |
+      {% if lookup('env', 'INTEGRITY_DB_URL') | length > 0 and lookup('env', 'INTEGRITY_DB_PASSWORD') | length > 0 %}
+      SPRING_PROFILES_ACTIVE=oracle
+      INTEGRITY_DB_URL={{ lookup('env', 'INTEGRITY_DB_URL') }}
+      INTEGRITY_DB_USERNAME={{ lookup('env', 'INTEGRITY_DB_USERNAME') | default('INTEGRITY_SERVICE', true) }}
+      INTEGRITY_DB_PASSWORD={{ lookup('env', 'INTEGRITY_DB_PASSWORD') }}
+      {% else %}
+      # Embedded H2 mode: no Oracle secrets required.
+      {% endif %}
+  no_log: true
+
+- name: Check existing Compose file
+  ansible.builtin.stat:
+    path: "{{ microservice_compose_directory }}/compose.yaml"
+  register: compose_file
+
+- name: Read existing Compose file
+  ansible.builtin.slurp:
+    src: "{{ microservice_compose_directory }}/compose.yaml"
+  register: previous_compose
+  when: compose_file.stat.exists
+
+- name: Check existing Integrity environment
+  ansible.builtin.stat:
+    path: "{{ microservice_integrity_env_file }}"
+  register: integrity_file
+  when: microservice_name == 'integrity-service'
+
+- name: Read existing Integrity environment
+  ansible.builtin.slurp:
+    src: "{{ microservice_integrity_env_file }}"
+  register: previous_integrity
+  when: microservice_name == 'integrity-service' and integrity_file.stat.exists
+  no_log: true
+
+- name: Determine whether deployment configuration changed
+  ansible.builtin.set_fact:
+    integrity_environment_changed: "{{ microservice_name == 'integrity-service' and (previous_integrity.content | default('') | b64decode) != desired_integrity_environment }}"
+    deployment_configuration_changed: >-
+      {{ (previous_compose.content | default('') | b64decode) != desired_compose or
+         (microservice_name == 'integrity-service' and
+          (previous_integrity.content | default('') | b64decode) != desired_integrity_environment) or
+         (service_container.exists and
+          (service_container.container.Config.Image != microservice_image or
+           'com.docker.compose.project' not in (service_container.container.Config.Labels or {}))) }}
+  no_log: true
+
+- name: Save previous deployment for rollback only when configuration changes
+  when: deployment_configuration_changed | bool
+  block:
+    - name: Store previous container image
+      ansible.builtin.copy:
+        content: "{{ service_container.container.Config.Image }}\n"
+        dest: "{{ microservice_previous_image_file }}"
+        mode: '0600'
+      when: service_container.exists
+
+    - name: Clear stale rollback image on first deployment
+      ansible.builtin.file:
+        path: "{{ microservice_previous_image_file }}"
+        state: absent
+      when: not service_container.exists
+
+    - name: Store previous Compose configuration
+      ansible.builtin.copy:
+        content: "{{ previous_compose.content | b64decode }}"
+        dest: "{{ microservice_compose_directory }}/previous-compose.yaml"
+        mode: '0600'
+      when: compose_file.stat.exists
+
+    - name: Clear stale Compose backup for legacy migration
+      ansible.builtin.file:
+        path: "{{ microservice_compose_directory }}/previous-compose.yaml"
+        state: absent
+      when: not compose_file.stat.exists
+
+    - name: Store previous Integrity configuration
+      ansible.builtin.copy:
+        content: "{{ previous_integrity.content | default('') | b64decode }}"
+        dest: "{{ microservice_compose_directory }}/previous-integrity.env"
+        mode: '0600'
+      when: microservice_name == 'integrity-service'
+      no_log: true
+
+- name: Apply deployment with automatic rollback on failure
+  block:
+    - name: Write Compose configuration
+      ansible.builtin.copy:
+        content: "{{ desired_compose }}"
+        dest: "{{ microservice_compose_directory }}/compose.yaml"
+        mode: '0600'
+
+    - name: Write Integrity database environment
+      ansible.builtin.copy:
+        content: "{{ desired_integrity_environment }}"
+        dest: "{{ microservice_integrity_env_file }}"
+        mode: '0600'
+      when: microservice_name == 'integrity-service'
+      no_log: true
+
+    - name: Apply requested image
+      ansible.builtin.include_tasks: apply.yml
+      vars:
+        compose_image: "{{ microservice_image }}"
+
+    - name: Report deployment change to GitHub Actions
+      ansible.builtin.lineinfile:
+        path: "{{ lookup('env', 'GITHUB_OUTPUT') }}"
+        line: "deployment_changed={{ (deployment_configuration_changed | bool or compose_result.changed) | ternary('true', 'false') }}"
+      delegate_to: localhost
+      become: false
+      when: lookup('env', 'GITHUB_OUTPUT') | length > 0
+
+  rescue:
+    - name: Restore previous deployment after failed rollout
+      ansible.builtin.include_tasks: rollback.yml
+      when: service_container.exists and deployment_configuration_changed | bool
+
+    - name: Fail deployment after rollback
+      ansible.builtin.fail:
+        msg: "Deployment failed; restored the previous deployment when available."

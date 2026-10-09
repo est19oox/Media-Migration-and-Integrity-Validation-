@@ -75,20 +75,37 @@ jobs:
       - name: Login to Amazon ECR
         id: ecr
         uses: aws-actions/amazon-ecr-login@v2
-      - name: Build Docker image
+      - name: Build or reuse immutable Docker image
         id: image
         env:
           ECR_REGISTRY: ${{ steps.ecr.outputs.registry }}
-          IMAGE_TAG: ${{ inputs.service-name }}-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          IMAGE_TAG: ${{ inputs.service-name }}-${{ github.sha }}
         run: |
           set -euo pipefail
 
           IMAGE="$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
 
-          docker build \
-            -f "${{ inputs.service-path }}/Dockerfile" \
-            -t "$IMAGE" \
-            "${{ inputs.service-path }}"
+          EXISTING=$(aws ecr batch-get-image --repository-name "$ECR_REPOSITORY" \
+            --image-ids "imageTag=$IMAGE_TAG" \
+            --query '{images:images[].imageId,failures:failures[].failureCode}' --output json)
+          IMAGE_EXISTS=$(python3 -c '
+          import json, sys
+          result = json.load(sys.stdin)
+          if result["images"] and not result["failures"]:
+              print("true")
+          elif not result["images"] and result["failures"] == ["ImageNotFound"]:
+              print("false")
+          else:
+              sys.exit("Unexpected ECR response; refusing to overwrite an image")
+          ' <<< "$EXISTING")
+          if [ "$IMAGE_EXISTS" = true ]; then
+            docker pull "$IMAGE"
+          else
+            docker build \
+              -f "${{ inputs.service-path }}/Dockerfile" \
+              -t "$IMAGE" \
+              "${{ inputs.service-path }}"
+          fi
 
           mkdir -p .ci
           printf '%s\n' "$IMAGE" > .ci/image-ref
@@ -96,9 +113,11 @@ jobs:
           echo "IMAGE=$IMAGE" >> "$GITHUB_ENV"
           echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
           echo "registry=$ECR_REGISTRY" >> "$GITHUB_OUTPUT"
+          echo "image_exists=$IMAGE_EXISTS" >> "$GITHUB_OUTPUT"
       - name: Scan Docker image
         run: bash scripts/ci/scan-image.sh .
       - name: Push Docker image
+        if: steps.image.outputs.image_exists != 'true'
         run: docker push "$IMAGE"
       - name: Use prepared EC2 instance
         id: deployment
@@ -113,13 +132,14 @@ jobs:
         run: bash ./scripts/cd/wait-for-ssm.sh
       - name: Install Session Manager plugin
         run: |
-          curl -fsSL https://s3.amazonaws.com/session-manager-downloads/plugin/latest/ubuntu_64bit/session-manager-plugin.deb -o /tmp/session-manager-plugin.deb
-          sudo dpkg -i /tmp/session-manager-plugin.deb
+          if ! command -v session-manager-plugin >/dev/null 2>&1; then
+            curl -fsSL https://s3.amazonaws.com/session-manager-downloads/plugin/latest/ubuntu_64bit/session-manager-plugin.deb -o /tmp/session-manager-plugin.deb
+            sudo dpkg -i /tmp/session-manager-plugin.deb
+          fi
           session-manager-plugin --version
       - name: Install Ansible
         run: |
-          python -m pip install --upgrade pip
-          python -m pip install --upgrade ansible "boto3>=1.35.0" "botocore>=1.35.0"
+          python -m pip install ansible "boto3>=1.35.0" "botocore>=1.35.0"
           ansible-galaxy collection install -r infrastructure/ansible/requirements.yml
       - name: Generate SSM inventory
         env:
@@ -182,7 +202,7 @@ jobs:
           bash ./scripts/cd/run-dast-ssm.sh 2>&1 \
             | tee ".ci/reports/dast-${{ inputs.service-name }}.log"
       - name: Roll back after failure
-        if: ${{ failure() && steps.ansible_deploy.outcome == 'success' }}
+        if: ${{ failure() && steps.ansible_deploy.outcome == 'success' && steps.ansible_deploy.outputs.deployment_changed == 'true' }}
         working-directory: infrastructure/ansible
         env:
           SERVICE_NAME: ${{ inputs.service-name }}
