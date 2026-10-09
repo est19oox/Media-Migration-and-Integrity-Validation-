@@ -1,6 +1,5 @@
-// RESERVED: fully commented out; no runtime dependency or API call.
-// package mmiv.transfer.integration;
-// 
-// /** Proposed contract: agree with Integrity developer before enabling. SHA-256 is hex. */
-// public record IntegrityValidationRequest(String requestId, String bucket,
-//         String key, String expectedSha256, long expectedSizeBytes) {}
+package mmiv.transfer.integration;
+
+/** SHA-256 of the exact bytes sent to S3; local paths cannot cross service boundaries. */
+public record IntegrityValidationRequest(String transferId, String bucket,
+        String objectKey, String sourceChecksum) {}

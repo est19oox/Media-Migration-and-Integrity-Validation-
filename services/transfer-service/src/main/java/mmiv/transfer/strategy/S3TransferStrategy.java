@@ -31,6 +31,11 @@ public class S3TransferStrategy implements TransferStrategy {
         this.validator = validator;
     }
 
+    private static mmiv.transfer.dto.S3ObjectReference reference(
+            software.amazon.awssdk.services.s3.model.PutObjectResponse stored) {
+        return stored == null ? null : new mmiv.transfer.dto.S3ObjectReference(stored.eTag(), stored.versionId());
+    }
+
     @Override
     public boolean supports(TransferRequest request) {
         String name = Path.of(request.sourcePath()).getFileName().toString();
@@ -40,6 +45,7 @@ public class S3TransferStrategy implements TransferStrategy {
 
     @Override
     public TransferResponse transfer(TransferRequest request) {
+        Path temporary = null;
         try {
             Path source = validator.resolveSource(request.sourcePath());
             if (!Files.isRegularFile(source)) {
@@ -52,17 +58,36 @@ public class S3TransferStrategy implements TransferStrategy {
             }
             if (contentType == null) contentType = "application/octet-stream";
 
+            temporary = Files.createTempFile("mmiv-transfer-", ".tmp");
+            Files.copy(source, temporary, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            var digest = java.security.MessageDigest.getInstance("SHA-256");
+            try (var input = new java.security.DigestInputStream(Files.newInputStream(temporary), digest)) {
+                input.transferTo(java.io.OutputStream.nullOutputStream());
+            }
+            byte[] checksum = digest.digest();
+            String sha256 = java.util.HexFormat.of().formatHex(checksum);
             PutObjectRequest put = PutObjectRequest.builder()
+                    .checksumSHA256(java.util.Base64.getEncoder().encodeToString(checksum))
                     .bucket(bucket)
                     .key(request.destinationKey())
                     .contentType(contentType)
                     .build();
 
-            s3Client.putObject(put, RequestBody.fromFile(source));
-            return new TransferResponse(bucket, request.destinationKey(), contentType, Files.size(source));
+            var stored = s3Client.putObject(put, RequestBody.fromFile(temporary));
+            return new TransferResponse(bucket, request.destinationKey(), contentType, Files.size(temporary),
+                    mmiv.transfer.files.FileIds.encode(request.destinationKey()), sha256, null,
+                    "NOT_REQUESTED", false, "Uploaded; integrity has not been checked",
+                    reference(stored), "NOT_ATTEMPTED");
         } catch (Exception e) {
             if (e instanceof IllegalArgumentException iae) throw iae;
             throw new IllegalStateException("S3 transfer failed", e);
+        } finally {
+            if (temporary != null) {
+                try { Files.deleteIfExists(temporary); }
+                catch (java.io.IOException e) {
+                    org.slf4j.LoggerFactory.getLogger(S3TransferStrategy.class).warn("Could not delete transfer temporary file");
+                }
+            }
         }
     }
 
@@ -75,9 +100,11 @@ public class S3TransferStrategy implements TransferStrategy {
                     .bucket(bucket).key(source.key()).contentType(source.contentType())
                     .checksumSHA256(java.util.Base64.getEncoder().encodeToString(digest))
                     .build();
-            s3Client.putObject(put, RequestBody.fromFile(source.path()));
+            var stored = s3Client.putObject(put, RequestBody.fromFile(source.path()));
             return new UploadResponse(bucket, source.key(), source.fileName(),
-                    source.contentType(), source.sizeBytes(), source.sha256());
+                    source.contentType(), source.sizeBytes(), source.sha256(),
+                    mmiv.transfer.files.FileIds.encode(source.key()), null, "NOT_REQUESTED", false,
+                    "Uploaded; integrity has not been checked", reference(stored), "NOT_ATTEMPTED");
         } catch (Exception e) {
             throw new IllegalStateException("S3 upload failed", e);
         }

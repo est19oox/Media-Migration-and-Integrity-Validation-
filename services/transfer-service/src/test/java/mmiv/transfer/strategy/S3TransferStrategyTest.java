@@ -34,6 +34,13 @@ class S3TransferStrategyTest {
     @Test void uploadsExactBytesAndMetadata() throws IOException {
         byte[] bytes = {0, 1, 2, 3, -1};
         Files.write(media.resolve("photo.png"), bytes);
+        when(s3.putObject(any(PutObjectRequest.class), any(RequestBody.class))).thenAnswer(call -> {
+            RequestBody uploaded = call.getArgument(1);
+            try (var stream = uploaded.contentStreamProvider().newStream()) {
+                assertArrayEquals(bytes, stream.readAllBytes());
+            }
+            return PutObjectResponse.builder().build();
+        });
         var response = strategy.transfer(new TransferRequest("photo.png", "archive/photo.png", "image/png"));
         var put = ArgumentCaptor.forClass(PutObjectRequest.class);
         var body = ArgumentCaptor.forClass(RequestBody.class);
@@ -42,9 +49,10 @@ class S3TransferStrategyTest {
         assertEquals("archive/photo.png", put.getValue().key());
         assertEquals("image/png", put.getValue().contentType());
         assertEquals(bytes.length, body.getValue().contentLength());
-        try (var stream = body.getValue().contentStreamProvider().newStream()) {
-            assertArrayEquals(bytes, stream.readAllBytes());
-        }
+        assertNotNull(put.getValue().checksumSHA256());
+        assertEquals(64, response.sha256().length());
+        assertThrows(java.io.UncheckedIOException.class,
+                () -> body.getValue().contentStreamProvider().newStream());
         assertEquals("media-bucket", response.bucket());
         assertEquals("archive/photo.png", response.key());
         assertEquals("image/png", response.mediaType());

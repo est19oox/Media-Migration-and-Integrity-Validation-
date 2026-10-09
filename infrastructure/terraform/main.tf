@@ -170,7 +170,8 @@ resource "aws_iam_role_policy" "mmiv_ec2_s3" {
         Action = [
           "s3:GetObject",
           "s3:PutObject",
-          "s3:DeleteObject"
+          "s3:DeleteObject",
+          "s3:DeleteObjectVersion"
         ]
         Resource = "${aws_s3_bucket.migration.arn}/*"
       }

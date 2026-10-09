@@ -4,7 +4,7 @@ on:
   push:
     branches:
       - main
-      - transfer-service
+#      - transfer-service
     paths:
       - 'services/**'
       - 'infrastructure/bootstrap/**'
@@ -332,12 +332,12 @@ jobs:
           - name: integrity-service
             path: services/integrity-service
             port: '8082'
-          - name: user-access-service
-            path: services/user-access-service
-            port: '8083'
-          - name: reporting-service
-            path: services/reporting-service
-            port: '8084'
+#          - name: user-access-service
+#            path: services/user-access-service
+#            port: '8083'
+#          - name: reporting-service
+#            path: services/reporting-service
+#            port: '8084'
           # Main's Discovery Service requires Oracle credentials and DISCOVERY_ROOT.
           # Enable deployment after providing those settings to its container.
           # - name: discovery-service

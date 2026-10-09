@@ -57,7 +57,7 @@
         },
         "responses": {
           "200": {
-            "description": "Uploaded to S3; Integrity validation not enabled",
+            "description": "S3 uploaded; inspect success and validationResult for integrity outcome",
             "content": {
               "application/json": {
                 "schema": {
@@ -86,6 +86,46 @@
                     "fileId": {
                       "type": "string",
                       "description": "Opaque-looking reversible S3 key identifier; not an access token"
+                    },
+                    "transferId": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "validationResult": {
+                      "type": "string",
+                      "enum": [
+                        "PASSED",
+                        "FAILED",
+                        "UNAVAILABLE"
+                      ]
+                    },
+                    "success": {
+                      "type": "boolean",
+                      "description": "True only when uploaded bytes pass independent integrity validation"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "cleanupStatus": {
+                      "type": "string",
+                      "enum": [
+                        "NOT_REQUIRED",
+                        "DELETED",
+                        "DELETE_FAILED"
+                      ]
+                    },
+                    "objectReference": {
+                      "type": "object",
+                      "properties": {
+                        "eTag": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "versionId": {
+                          "type": "string",
+                          "nullable": true
+                        }
+                      }
                     }
                   }
                 }

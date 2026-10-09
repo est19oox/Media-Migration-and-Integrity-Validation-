@@ -11,19 +11,24 @@ spring:
       max-file-size: 100MB
       max-request-size: 101MB
       file-size-threshold: 0B
-  # Future: uncomment after adding Spring Cloud dependencies and client classes.
-  # cloud:
-  #   openfeign:
-  #     client:
-  #       config:
-  #         integrity-service:
-  #           connectTimeout: 3000
-  #           readTimeout: 30000
+  cloud:
+    openfeign:
+      client:
+        config:
+          integrity-service:
+            connectTimeout: ${INTEGRITY_CONNECT_TIMEOUT_MS:3000}
+            readTimeout: ${INTEGRITY_READ_TIMEOUT_MS:30000}
 
 aws:
   region: ${AWS_REGION:ap-southeast-1}
 
 mmiv:
+  integrity:
+    max-attempts: ${INTEGRITY_MAX_ATTEMPTS:3}
+    retry-delay-ms: ${INTEGRITY_RETRY_DELAY_MS:1000}
+  cleanup:
+    max-attempts: ${CLEANUP_MAX_ATTEMPTS:3}
+    retry-delay-ms: ${CLEANUP_RETRY_DELAY_MS:1000}
   upload:
     max-size-bytes: 104857600
     folder:
