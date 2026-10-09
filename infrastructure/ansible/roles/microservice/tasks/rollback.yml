@@ -35,6 +35,24 @@
     mode: '0600'
   when: previous_compose_file.stat.exists
 
+# The saved file can differ from the image actually running before deployment
+# (for example after a manual update). Roll back to the captured runtime image.
+- name: Read restored Compose configuration
+  ansible.builtin.slurp:
+    src: "{{ microservice_compose_directory }}/compose.yaml"
+  register: restored_compose
+  when: previous_compose_file.stat.exists
+
+- name: Restore captured image in Compose configuration
+  ansible.builtin.copy:
+    content: >-
+      {{ (restored_compose.content | b64decode | from_yaml) |
+         combine({'services': {microservice_name: {'image': rollback_image}}}, recursive=true) |
+         to_nice_yaml }}
+    dest: "{{ microservice_compose_directory }}/compose.yaml"
+    mode: '0600'
+  when: previous_compose_file.stat.exists
+
 - name: Render rollback configuration for a legacy container
   ansible.builtin.template:
     src: compose.yaml.j2

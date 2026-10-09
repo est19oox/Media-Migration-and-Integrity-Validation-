@@ -105,6 +105,14 @@ class ComposeRuntimeTest(unittest.TestCase):
                 self.assertEqual(migrated['Config']['Labels']['com.docker.compose.project'], name)
                 run(images[0])
                 self.assertEqual(container()['Id'], migrated['Id'])
+
+                # A manual image update can leave the on-disk Compose file stale.
+                subprocess.run(['docker', 'rm', '-f', name], check=True, capture_output=True)
+                subprocess.run(['docker', 'run', '-d', '--name', name, '--network', network,
+                    '-p', f'127.0.0.1:{port}:8081', images[1]], check=True, capture_output=True)
+                run(images[2], success=False)
+                self.assertEqual(container()['Config']['Image'], images[1],
+                                 'Rollback used stale Compose image instead of prior running image')
             finally:
                 subprocess.run(['docker', 'rm', '-f', name], capture_output=True)
                 subprocess.run(['docker', 'network', 'rm', network], capture_output=True)
