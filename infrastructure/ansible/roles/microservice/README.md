@@ -26,7 +26,7 @@ preserve existing rollback backups and report `deployment_changed=false` to GitH
 Actions, preventing a later check failure from rolling back an unchanged service.
 
 Run regression checks from the repository root with Python, Ansible, the required
-collections, and a running Docker daemon:
+collections, Python `requests` in the Ansible interpreter, and a running Docker daemon:
 
 ```sh
 python tests/ci/test-deployment-config.py
