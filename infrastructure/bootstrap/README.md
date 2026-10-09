@@ -21,3 +21,20 @@ If the original state is available, migrate it instead with terraform init -migr
 Preserve backend.tf, all Terraform resource definitions, and the bootstrap job in cicd.yml. Do not remove the state-verification step to bypass missing state. This does not establish that recovery succeeded in AWS; enable normal deployment only after confirming bootstrap state is populated. If state is later lost, restore an appropriate S3 state version or recover it from a protected backup before applying changes.
 
 Local verification: HCL parsing, recovery import-address matching, bootstrap variable-reference checks, workflow YAML and shell syntax, Terraform formatting. Full provider validation and AWS recovery were not executed locally.
+
+## OIDC authentication after a repository transfer
+
+Both deployment roles trust branch runs from
+`repo:AcediaAlive/Media-Migration-and-Integrity-Validation-:ref:refs/heads/*`
+with audience `sts.amazonaws.com`. This is the default GitHub OIDC subject format.
+The previous subject named `est19oox` with numeric identity suffixes and does not
+match default tokens from the current repository. If the repository uses a custom
+OIDC subject template, match that actual template instead of the default.
+
+A code change does not update an existing IAM role. If OIDC is already denied,
+authorized AWS administration access is required to correct the trust policy
+for `GitHubActions-MMIV-Terraform` and `GitHubActions-MMIV-App`. Keep the existing
+GitHub OIDC provider principal, `sts:AssumeRoleWithWebIdentity` action, and audience
+condition. Then apply the bootstrap configuration using its existing state to
+keep Terraform and IAM consistent. The failing workflow cannot repair its own
+trust policy before authenticating. Rerun the workflow after the AWS change.
