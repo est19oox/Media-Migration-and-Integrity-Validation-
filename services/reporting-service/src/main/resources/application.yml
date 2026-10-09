@@ -1,5 +1,5 @@
 server:
-  port: 8084
+  port: ${SERVER_PORT:8084}
 management:
   endpoints:
     web:
@@ -9,3 +9,18 @@ management:
     health:
       probes:
         enabled: true
+spring:
+  application:
+    name: reporting-service
+eureka:
+  client:
+    enabled: ${EUREKA_CLIENT_ENABLED:true}
+    service-url:
+      defaultZone: ${EUREKA_DEFAULT_ZONE:http://localhost:8761/eureka/}
+    register-with-eureka: true
+    fetch-registry: true
+    healthcheck:
+      enabled: true
+  instance:
+    prefer-ip-address: true
+    instance-id: ${spring.application.name}:${spring.cloud.client.ip-address}:${server.port}

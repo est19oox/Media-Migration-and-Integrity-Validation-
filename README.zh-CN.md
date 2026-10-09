@@ -9,10 +9,10 @@ MMIV 是一个基于微服务的系统，用于在访问控制下发现、传输
 | 服务 | 端口 | 职责 |
 | --- | ---: | --- |
 | Transfer | 8081 | 在存储位置之间传输媒体 |
-| Discovery | 8082 | 发现媒体和资源 |
+| Discovery | 8085 | 发现媒体和资源 |
 | User Access | 8083 | 管理并检查访问权限 |
 | Reporting | 8084 | 生成迁移和验证报告 |
-| Integrity | 8085 | 验证已迁移媒体的完整性 |
+| Integrity | 8082 | 验证已迁移媒体的完整性 |
 
 ## 文档
 
@@ -32,3 +32,13 @@ MMIV 是一个基于微服务的系统，用于在访问控制下发现、传输
 ```bash
 mvn clean verify
 ```
+
+
+Gateway browser access and temporary Redis disabling: see docs/ci-cd/gateway-access.md.
+
+
+## Merged gateway access
+
+Gateway is public on EC2 TCP 8080; backends bind to localhost. See
+[Gateway access](docs/ci-cd/gateway-access.md). The real Discovery Service from
+main is preserved; its CD entry is disabled pending Oracle/runtime configuration.

@@ -1,0 +1,10 @@
+# Optional: activate only when using a prepared Oracle database.
+spring:
+  datasource:
+    url: ${INTEGRITY_DB_URL}
+    username: ${INTEGRITY_DB_USERNAME:INTEGRITY_SERVICE}
+    password: ${INTEGRITY_DB_PASSWORD}
+    driver-class-name: oracle.jdbc.OracleDriver
+  jpa:
+    hibernate:
+      ddl-auto: validate
