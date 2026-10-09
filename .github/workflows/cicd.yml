@@ -11,6 +11,9 @@ on:
       - 'infrastructure/terraform/**'
       - 'infrastructure/ansible/**'
       - 'scripts/cd/**'
+      - 'scripts/ci/**'
+      - 'tests/api/**'
+      - 'tests/ci/**'
       - '.github/workflows/cicd.yml'
       - '.github/workflows/deploy-service.yml'
   workflow_dispatch:
@@ -156,8 +159,9 @@ jobs:
           ansible-galaxy collection install -r requirements.yml
           ansible-playbook -i inventory/ci.ini playbook.yml --syntax-check
           ansible-playbook -i inventory/ci.ini rollback.yml --syntax-check
-          ansible-playbook -i inventory/ci.ini redis.yml --syntax-check
+          # Redis playbook is temporarily disabled.
           ansible-playbook -i inventory/ci.ini setup-host.yml --syntax-check
+          python ../../tests/ci/test-deployment-config.py
 
       - name: Upload CI evidence
         if: always()

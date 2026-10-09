@@ -7,6 +7,7 @@ REGION="${AWS_REGION:-ap-southeast-1}"
 PORT="${DAST_PORT:?DAST_PORT is required}"
 LOCAL_PORT="${DAST_LOCAL_PORT:-18081}"
 PATH_SUFFIX="${DAST_PATH:-/}"
+READY_PATH="${DAST_READY_PATH:-/actuator/health}"
 SCAN_MODE="${DAST_SCAN_MODE:-baseline}"
 SERVICE_NAME="${DAST_SERVICE_NAME:?DAST_SERVICE_NAME is required}"
 OPENAPI_FILE="${DAST_OPENAPI_FILE:-tests/api/${SERVICE_NAME%-service}-openapi.json}"
@@ -19,7 +20,7 @@ for VALUE in "$PORT" "$LOCAL_PORT"; do
     echo '::error::DAST ports must be between 1 and 65535.'; exit 1;
   }
 done
-[[ "$PATH_SUFFIX" == /* ]] || { echo '::error::DAST_PATH must start with /.'; exit 1; }
+[[ "$PATH_SUFFIX" == /* && "$READY_PATH" == /* ]] || { echo '::error::DAST_PATH must start with /.'; exit 1; }
 for COMMAND in aws session-manager-plugin docker curl python3 timeout setsid; do
   command -v "$COMMAND" >/dev/null || { echo "::error::Missing command: $COMMAND"; exit 1; }
 done
@@ -80,6 +81,7 @@ setsid aws ssm start-session --region "$REGION" --target "$INSTANCE_ID" \
   > "$REPORT_DIR/tunnel.log" 2>&1 < /dev/null &
 TUNNEL_PID=$!
 TARGET_URL="http://127.0.0.1:$LOCAL_PORT$PATH_SUFFIX"
+READY_URL="http://127.0.0.1:$LOCAL_PORT$READY_PATH"
 READY=false
 for ATTEMPT in $(seq 1 30); do
   if ! kill -0 "$TUNNEL_PID" 2>/dev/null; then
@@ -87,7 +89,7 @@ for ATTEMPT in $(seq 1 30); do
     echo '::error::SSM tunnel exited. Check StartSession document permissions and the Session Manager plugin.'
     exit 1
   fi
-  if curl --fail --silent --show-error --max-time 3 "$TARGET_URL" \
+  if curl --fail --silent --show-error --max-time 3 "$READY_URL" \
     > "$REPORT_DIR/endpoint-response.txt" 2> "$TEMP_DIR/curl-error.txt"; then
     READY=true; break
   fi
@@ -100,7 +102,8 @@ if [[ "$READY" != true ]]; then
   echo '::error::The deployed endpoint could not be reached through the SSM tunnel.'
   exit 1
 fi
-echo "Deployed endpoint reachable: $TARGET_URL"
+echo "Deployed health endpoint reachable: $READY_URL"
+echo "ZAP scan starts at: $TARGET_URL"
 
 echo 'Running functional endpoint tests through the SSM tunnel'
 python3 scripts/cd/test-endpoints.py \

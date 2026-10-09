@@ -18,7 +18,7 @@ import java.util.Set;
 
 @Component
 public class S3TransferStrategy implements TransferStrategy {
-    private static final Set<String> SUPPORTED = Set.of("png", "jpg", "jpeg", "mp4", "txt", "pdf");
+    private static final Set<String> SUPPORTED = Set.of("png", "jpg", "jpeg", "mp4", "txt", "pdf", "ppt", "pptx", "doc", "docx");
 
     private final S3Client s3Client;
     private final String bucket;
@@ -48,7 +48,7 @@ public class S3TransferStrategy implements TransferStrategy {
 
             String contentType = request.contentType();
             if (contentType == null || contentType.isBlank()) {
-                contentType = Files.probeContentType(source);
+                contentType = validator.uploadContentType(source.getFileName().toString());
             }
             if (contentType == null) contentType = "application/octet-stream";
 

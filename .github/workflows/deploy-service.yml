@@ -174,7 +174,8 @@ jobs:
           DAST_PORT: ${{ inputs.service-port }}
           DAST_SERVICE_NAME: ${{ inputs.service-name }}
           DAST_SCAN_MODE: ${{ inputs.service-name == 'transfer-service' && 'api' || 'baseline' }}
-          DAST_PATH: /actuator/health
+          DAST_PATH: ${{ inputs.service-name == 'service-registry' && '/' || inputs.service-name == 'api-gateway' && '/upload.html' || '/actuator/health' }}
+          DAST_READY_PATH: /actuator/health
         run: |
           mkdir -p .ci/reports
           set -o pipefail

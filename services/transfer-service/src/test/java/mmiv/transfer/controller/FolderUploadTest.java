@@ -102,4 +102,18 @@ class FolderUploadTest {
         verify(strategy, times(2)).transferUploaded(sources.capture());
         for (var source : sources.getAllValues()) assertFalse(Files.exists(source.path()));
     }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings = {"deck.ppt", "deck.pptx", "report.doc", "report.docx"})
+    void uploadsOfficeFileWithItsNestedPath(String name) throws Exception {
+        mvc.perform(multipart("/api/v1/transfers/folder").file(file(name))
+                .param("relativePaths", "Office/sub/" + name))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.succeeded").value(1))
+                .andExpect(jsonPath("$.failed").value(0))
+                .andExpect(jsonPath("$.files[0].relativePath").value("Office/sub/" + name));
+        var source = ArgumentCaptor.forClass(UploadSource.class);
+        verify(strategy).transferUploaded(source.capture());
+        assertEquals(new TransferRequestValidator("/unused").uploadContentType(name),
+                source.getValue().contentType());
+    }
 }

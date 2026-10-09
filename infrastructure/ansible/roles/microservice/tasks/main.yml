@@ -67,12 +67,12 @@
           docker run -d
           --name {{ microservice_name }}
           --restart unless-stopped
-          {% if mmiv_redis_enabled | default(true) | bool %}--network {{ mmiv_docker_network }}{% endif %}
+          --network {{ mmiv_docker_network }}
           {% if microservice_name == 'integrity-service' %}--env-file /etc/mmiv/integrity.env{% endif %}
-          {% if mmiv_redis_enabled | default(true) | bool %}--env-file {{ mmiv_redis_env_file }}{% endif %}
-          -p {{ microservice_host_port }}:{{ microservice_container_port }}
+          -p {{ microservice_bind_address }}:{{ microservice_host_port }}:{{ microservice_container_port }}
           --mount type=bind,src=/var/lib/mmiv/media,dst=/media,readonly -e MMIV_MEDIA_ROOT=/media -e AWS_REGION={{ aws_region }}
           -e MMIV_BUCKET_NAME={{ microservice_bucket }}
+          -e EUREKA_DEFAULT_ZONE={{ microservice_eureka_url }}
           {{ microservice_image }}
       changed_when: true
 
@@ -107,12 +107,12 @@
         docker run -d \
           --name {{ microservice_name }} \
           --restart unless-stopped \
-          {% if mmiv_redis_enabled | default(true) | bool %}--network {{ mmiv_docker_network }}{% endif %} \
+          --network {{ mmiv_docker_network }} \
           {% if microservice_name == 'integrity-service' %}--env-file /etc/mmiv/integrity.env{% endif %} \
-          {% if mmiv_redis_enabled | default(true) | bool %}--env-file {{ mmiv_redis_env_file }}{% endif %} \
-          -p {{ microservice_host_port }}:{{ microservice_container_port }} \
+          -p {{ microservice_bind_address }}:{{ microservice_host_port }}:{{ microservice_container_port }} \
           --mount type=bind,src=/var/lib/mmiv/media,dst=/media,readonly -e MMIV_MEDIA_ROOT=/media -e AWS_REGION={{ aws_region }} \
           -e MMIV_BUCKET_NAME={{ microservice_bucket }} \
+          -e EUREKA_DEFAULT_ZONE={{ microservice_eureka_url }} \
           "$PREVIOUS_IMAGE"
       when:
         - previous_image_file.stat.exists

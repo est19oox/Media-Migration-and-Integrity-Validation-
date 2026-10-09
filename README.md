@@ -32,3 +32,6 @@ Build and test a service from its own directory:
 ```bash
 mvn clean verify
 ```
+
+
+Gateway browser access and temporary Redis disabling: see docs/ci-cd/gateway-access.md.

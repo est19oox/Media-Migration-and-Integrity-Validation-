@@ -39,3 +39,15 @@ The replacement S3Config is under src/main/java/mmiv/config.
 ## Verification
 
 Configuration checks, conflict-marker scan, XML parsing and deployment template rendering were run for this revision. Full Maven tests and a live container deployment were not run: this environment has Java 17 and no Maven, while Integrity targets Java 25. CI must verify the application build and runtime.
+
+## 2026-10-09 deployment, rollback and coverage repairs
+
+- Decoupled mmiv-backend networking from Redis; rollout, Ansible rescue and explicit rollback all set the shared network and EUREKA_DEFAULT_ZONE=http://service-registry:8761/eureka/.
+- Fixed rollback image argument separation and moved changed_when outside the shell script.
+- All published service ports use 127.0.0.1 binding. Browser access is available through scripts/cd/open-gateway-tunnel.sh and the PowerShell command in docs/ci-cd/gateway-access.md. Terraform keeps authenticated SSM access with no public ingress; EC2 remains t3.medium.
+- Commented Redis role YAML, standalone playbook, inventory options and setup invocation. No Redis environment files are attached to application containers. Existing Redis containers are not deleted.
+- Restored PPT/PPTX/DOC/DOCX uploads, server-side transfers and MIME types; Office file reads use attachment disposition. Preserved the uploaded project's folder endpoint /api/v1/transfers/folder, 500 files and 100 MiB total.
+- Registry functional tests remain configured. Gateway deployed tests now exercise Transfer through discovery, including file upload/read/ranges, Word upload/download and an Office folder batch. ZAP baseline scans start at the Registry dashboard and Gateway upload page, while readiness is checked independently at /actuator/health. Registry/Gateway use passive baseline scans, not active API scans.
+- Added a Docker command regression test, invoked in GitHub CI after Ansible installation. CI triggers include tests/api and helper changes. ZIP shell scripts retain executable permissions; files/directories avoid world-writable modes so Ansible loads its configuration.
+
+Validation: Ansible syntax checks, Docker command execution against a mocked CLI, configuration/syntax checks, CI helper runtime tests and local Java Office-validator execution. Full Maven/JUnit, live AWS/S3/Eureka and live ZAP scans must be verified in CI. This ZIP does not claim an error-free live deployment.

@@ -12,4 +12,4 @@ microservice_previous_image_file: "/var/lib/mmiv/{{ microservice_name }}.previou
 # Eureka clients share a Docker network with the registry, independently of Redis.
 mmiv_docker_network: mmiv-backend
 microservice_eureka_url: "{{ lookup('env', 'EUREKA_DEFAULT_ZONE') | default('http://service-registry:8761/eureka/', true) }}"
-microservice_bind_address: "{{ '127.0.0.1' if microservice_name == 'service-registry' else '0.0.0.0' }}"
+microservice_bind_address: "127.0.0.1"

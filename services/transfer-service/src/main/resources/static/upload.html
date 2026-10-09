@@ -12,8 +12,8 @@ main{background:white;padding:32px;border-radius:16px}button{padding:12px 24px;b
 <p>选择电脑上的文件，由 Transfer Service 上传到 Amazon S3。</p>
 <form id="uploadForm">
 <label for="file">选择文件</label>
-<input id="file" name="file" type="file" accept=".png,.jpg,.jpeg,.mp4,.txt,.pdf" required>
-<small>支持 PNG、JPG、JPEG、MP4、TXT、PDF，最大 100 MiB。</small>
+<input id="file" name="file" type="file" accept=".png,.jpg,.jpeg,.mp4,.txt,.pdf,.ppt,.pptx,.doc,.docx" required>
+<small>支持 PNG、JPG、JPEG、MP4、TXT、PDF、PPT、PPTX、DOC、DOCX，最大 100 MiB。</small>
 <button id="submit" type="submit">上传</button>
 </form>
 <hr>
@@ -21,7 +21,7 @@ main{background:white;padding:32px;border-radius:16px}button{padding:12px 24px;b
 <form id="folderForm">
 <label for="folder">选择本地文件夹</label>
 <input id="folder" type="file" webkitdirectory multiple required>
-<small>保留文件夹路径。最多 500 个文件，总计 100 MiB；支持 PNG、JPG、JPEG、MP4、TXT、PDF。空文件和空文件夹不支持。部分失败时，请查看每个文件的结果。</small>
+<small>保留文件夹路径。最多 500 个文件，总计 100 MiB；支持 PNG、JPG、JPEG、MP4、TXT、PDF、PPT、PPTX、DOC、DOCX。空文件和空文件夹不支持。部分失败时，请查看每个文件的结果。</small>
 <button id="folderSubmit" type="submit">上传文件夹</button>
 </form>
 <pre id="folderResult" role="status" aria-live="polite"></pre>
@@ -63,7 +63,7 @@ document.querySelector('#folderForm').addEventListener('submit', async event => 
   }
   const body = new FormData();
   for (const file of files) {
-    if (!file.webkitRelativePath || !file.size || !/\.(png|jpe?g|mp4|txt|pdf)$/i.test(file.name)) {
+    if (!file.webkitRelativePath || !file.size || !/\.(png|jpe?g|mp4|txt|pdf|pptx?|docx?)$/i.test(file.name)) {
       result.textContent = '文件为空或类型不支持：' + (file.webkitRelativePath || file.name); return;
     }
     body.append('files', file, file.name);

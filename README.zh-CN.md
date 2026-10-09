@@ -32,3 +32,6 @@ MMIV 是一个基于微服务的系统，用于在访问控制下发现、传输
 ```bash
 mvn clean verify
 ```
+
+
+Gateway browser access and temporary Redis disabling: see docs/ci-cd/gateway-access.md.

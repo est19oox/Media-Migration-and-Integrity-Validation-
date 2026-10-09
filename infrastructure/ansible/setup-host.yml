@@ -38,7 +38,8 @@
       ansible.builtin.dnf:
         name: awscli
         state: present
-    - name: Prepare Redis when enabled
-      ansible.builtin.include_role:
-        name: redis
-      when: mmiv_redis_enabled | default(false) | bool
+    # Redis preparation is temporarily commented out.
+    # - name: Prepare Redis when enabled
+    #   ansible.builtin.include_role:
+    #     name: redis
+    #   when: mmiv_redis_enabled | default(false) | bool

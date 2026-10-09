@@ -2,7 +2,7 @@
 
 POST /api/v1/transfers accepts multipart/form-data with one part named file. Users send actual local bytes; no EC2 sourcePath is required. Existing JSON path migration remains available with Content-Type application/json.
 
-Start the deployed service and open http://EC2_PUBLIC_IP:8081/upload.html for the same-origin upload form. A temporary inbound rule from your IP is needed for direct public access. On EC2 the same page is served at port 8081. For a local Spring Boot run, open http://localhost:8081/upload.html.
+For deployed browser access, run bash scripts/cd/open-gateway-tunnel.sh <instance-id> and open http://localhost:8080/upload.html while the tunnel is running. Requests go through API Gateway. See docs/ci-cd/gateway-access.md for PowerShell instructions. Deployed host ports bind to loopback and EC2 has no public inbound rules. For a local Spring Boot run, open http://localhost:8081/upload.html.
 
 Postman: POST /api/v1/transfers -> Body -> form-data -> file (type File) -> choose your file. Do not set Content-Type manually. Example from your own terminal:
 
@@ -45,3 +45,5 @@ Single byte ranges support MP4 seeking: closed, open-ended and suffix forms retu
 `fileId` is URL-safe Base64 of the S3 key. It is reversible and does not expire; it is NOT an access credential. There is no ownership enforcement or file-list database in this version. Anyone able to reach this unauthenticated test service and construct an ID can request objects in its configured bucket. Add User Access authorization and ownership checks before shared or public use. Keep this deployment restricted to the test environment. Existing legacy transfer responses also include fileId, so migrated objects can be downloaded.
 
 The existing Terraform policy already grants GetObject; no IAM or Terraform change is needed. Do not make the bucket public. Integrity/Feign/Eureka code remains fully commented out. Metadata and presigned URLs are not used.
+
+Office formats PPT, PPTX, DOC and DOCX are supported for single and folder uploads and server-side transfers. Office files download for viewing. Folder uploads use POST /api/v1/transfers/folder with files and relativePaths; the 500-file and 100 MiB total limits remain in effect.
