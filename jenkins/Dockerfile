@@ -7,6 +7,7 @@ USER root
 COPY --from=application-jdk /opt/java/openjdk /opt/jdk-25
 
 ARG SEMGREP_VERSION=1.138.0
+ARG SEMGREP_PYDANTIC_VERSION=2.13.5
 ARG CHECKOV_VERSION=3.2.489
 ARG TRIVY_VERSION=0.74.0
 ARG TRIVY_AMD64_SHA256=cf1e32ec8d4d8823e023096a28cadb14f5b5123ce03f201fb633c5b76aa712dd
@@ -48,10 +49,20 @@ RUN apt-get update \
     && echo "${TRIVY_SHA256}  /tmp/${TRIVY_PACKAGE}" | sha256sum --check --strict \
     && apt-get install --yes --no-install-recommends "/tmp/${TRIVY_PACKAGE}" \
     && rm -f "/tmp/${TRIVY_PACKAGE}" \
-    && python3 -m venv /opt/ci-tools \
-    && /opt/ci-tools/bin/pip install --no-cache-dir \
-        "semgrep==${SEMGREP_VERSION}" \
-        "checkov==${CHECKOV_VERSION}" \
+    && python3 -m venv /opt/semgrep \
+    && python3 -m venv /opt/checkov \
+    && /opt/semgrep/bin/python -m pip install --no-cache-dir \
+        "semgrep==${SEMGREP_VERSION}" "pydantic==${SEMGREP_PYDANTIC_VERSION}" \
+    && /opt/checkov/bin/python -m pip install --no-cache-dir "checkov==${CHECKOV_VERSION}" \
+    && /opt/semgrep/bin/python -m pip check \
+    && /opt/checkov/bin/python -m pip check \
+    && /opt/semgrep/bin/python -c "from mcp.server.fastmcp import FastMCP" \
+    && /opt/semgrep/bin/semgrep --version \
+    && /opt/checkov/bin/checkov --version \
+    && mkdir -p /opt/ci-tools/bin \
+    && printf '#!/bin/sh\nexec /opt/semgrep/bin/semgrep "$@"\n' > /opt/ci-tools/bin/semgrep \
+    && printf '#!/bin/sh\nexec /opt/checkov/bin/checkov "$@"\n' > /opt/ci-tools/bin/checkov \
+    && chmod +x /opt/ci-tools/bin/semgrep /opt/ci-tools/bin/checkov \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
