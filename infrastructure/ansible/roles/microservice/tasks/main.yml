@@ -1,31 +1,26 @@
 ---
-- name: Ensure MMIV state directory exists
+- name: Ensure private service configuration directory exists
   ansible.builtin.file:
-    path: /var/lib/mmiv
+    path: /etc/mmiv
     state: directory
-    mode: '0755'
+    mode: '0700'
+  when: microservice_name == 'integrity-service'
 
-- name: Create media input directory
-  ansible.builtin.file:
-    path: /var/lib/mmiv/media
-    state: directory
-    mode: '0755'
-
-- name: Install Docker
-  ansible.builtin.dnf:
-    name: docker
-    state: present
-
-- name: Enable Docker
-  ansible.builtin.service:
-    name: docker
-    enabled: true
-    state: started
-
-- name: Install AWS CLI
-  ansible.builtin.dnf:
-    name: awscli
-    state: present
+- name: Write Integrity database environment
+  ansible.builtin.copy:
+    dest: /etc/mmiv/integrity.env
+    mode: '0600'
+    content: |
+      {% if lookup('env', 'INTEGRITY_DB_URL') | length > 0 and lookup('env', 'INTEGRITY_DB_PASSWORD') | length > 0 %}
+      SPRING_PROFILES_ACTIVE=oracle
+      INTEGRITY_DB_URL={{ lookup('env', 'INTEGRITY_DB_URL') }}
+      INTEGRITY_DB_USERNAME={{ lookup('env', 'INTEGRITY_DB_USERNAME') | default('INTEGRITY_SERVICE', true) }}
+      INTEGRITY_DB_PASSWORD={{ lookup('env', 'INTEGRITY_DB_PASSWORD') }}
+      {% else %}
+      # Embedded H2 mode: no Oracle secrets required.
+      {% endif %}
+  when: microservice_name == 'integrity-service'
+  no_log: true
 
 - name: Capture currently deployed image for rollback
   ansible.builtin.shell: |
@@ -72,11 +67,12 @@
           docker run -d
           --name {{ microservice_name }}
           --restart unless-stopped
-          {% if mmiv_redis_enabled | default(true) | bool %}--network {{ mmiv_docker_network }}{% endif %}
-          {% if mmiv_redis_enabled | default(true) | bool %}--env-file {{ mmiv_redis_env_file }}{% endif %}
-          -p {{ microservice_host_port }}:{{ microservice_container_port }}
+          --network {{ mmiv_docker_network }}
+          {% if microservice_name == 'integrity-service' %}--env-file /etc/mmiv/integrity.env{% endif %}
+          -p {{ microservice_bind_address }}:{{ microservice_host_port }}:{{ microservice_container_port }}
           --mount type=bind,src=/var/lib/mmiv/media,dst=/media,readonly -e MMIV_MEDIA_ROOT=/media -e AWS_REGION={{ aws_region }}
           -e MMIV_BUCKET_NAME={{ microservice_bucket }}
+          -e EUREKA_DEFAULT_ZONE={{ microservice_eureka_url }}
           {{ microservice_image }}
       changed_when: true
 
@@ -111,11 +107,12 @@
         docker run -d \
           --name {{ microservice_name }} \
           --restart unless-stopped \
-          {% if mmiv_redis_enabled | default(true) | bool %}--network {{ mmiv_docker_network }}{% endif %} \
-          {% if mmiv_redis_enabled | default(true) | bool %}--env-file {{ mmiv_redis_env_file }}{% endif %} \
-          -p {{ microservice_host_port }}:{{ microservice_container_port }} \
+          --network {{ mmiv_docker_network }} \
+          {% if microservice_name == 'integrity-service' %}--env-file /etc/mmiv/integrity.env{% endif %} \
+          -p {{ microservice_bind_address }}:{{ microservice_host_port }}:{{ microservice_container_port }} \
           --mount type=bind,src=/var/lib/mmiv/media,dst=/media,readonly -e MMIV_MEDIA_ROOT=/media -e AWS_REGION={{ aws_region }} \
           -e MMIV_BUCKET_NAME={{ microservice_bucket }} \
+          -e EUREKA_DEFAULT_ZONE={{ microservice_eureka_url }} \
           "$PREVIOUS_IMAGE"
       when:
         - previous_image_file.stat.exists

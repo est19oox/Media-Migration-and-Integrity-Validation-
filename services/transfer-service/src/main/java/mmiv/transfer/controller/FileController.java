@@ -40,7 +40,8 @@ public class FileController {
 
     private void headers(HttpServletResponse response, StoredFile file, ByteRange range, boolean download) {
         String type = previewType(file.fileName());
-        boolean inline = !download && !type.equals("application/octet-stream");
+        boolean inline = !download && (type.startsWith("image/") || type.startsWith("video/")
+                || type.startsWith("text/plain") || type.equals("application/pdf"));
         response.setStatus(range == null ? 200 : 206);
         response.setContentType(type);
         response.setContentLengthLong(range == null ? file.sizeBytes() : range.length());
@@ -63,6 +64,10 @@ public class FileController {
             case "jpg", "jpeg" -> "image/jpeg";
             case "mp4" -> "video/mp4";
             case "pdf" -> "application/pdf";
+            case "ppt" -> "application/vnd.ms-powerpoint";
+            case "pptx" -> "application/vnd.openxmlformats-officedocument.presentationml.presentation";
+            case "doc" -> "application/msword";
+            case "docx" -> "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
             case "txt" -> "text/plain; charset=UTF-8";
             default -> "application/octet-stream";
         };

@@ -22,10 +22,10 @@ Before finalising cross-service APIs, the team needs to agree on:
 | Service | Port | Responsibility |
 | --- | ---: | --- |
 | Transfer | 8081 | Transfer media between storage locations |
-| Discovery | 8082 | Discover media/resources |
+| Discovery | 8085 | Discover media/resources |
 | User Access | 8083 | Check user access permissions |
 | Reporting | 8084 | Generate migration/validation reports |
-| Integrity | 8085 | Validate migrated media integrity |
+| Integrity | 8082 | Validate migrated media integrity |
 
 Each service is independently built and containerized.
 

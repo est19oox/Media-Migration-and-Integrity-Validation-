@@ -60,6 +60,10 @@ public class TransferRequestValidator {
             case "mp4" -> "video/mp4";
             case "txt" -> "text/plain";
             case "pdf" -> "application/pdf";
+            case "ppt" -> "application/vnd.ms-powerpoint";
+            case "pptx" -> "application/vnd.openxmlformats-officedocument.presentationml.presentation";
+            case "doc" -> "application/msword";
+            case "docx" -> "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
             default -> throw new IllegalArgumentException("Unsupported file type");
         };
     }
