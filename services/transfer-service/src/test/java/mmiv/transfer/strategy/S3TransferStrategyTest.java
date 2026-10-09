@@ -23,7 +23,7 @@ class S3TransferStrategyTest {
         s3 = mock(S3Client.class);
         strategy = new S3TransferStrategy(s3, "media-bucket", new TransferRequestValidator(media.toString()));
     }
-    @ParameterizedTest @ValueSource(strings = {"photo.png", "photo.jpg", "photo.jpeg", "clip.mp4", "notes.txt", "doc.pdf", "PHOTO.PNG", "PHOTO.JpEg"})
+    @ParameterizedTest @ValueSource(strings = {"photo.png", "photo.jpg", "photo.jpeg", "clip.mp4", "notes.txt", "doc.pdf", "PHOTO.PNG", "PHOTO.JpEg", "deck.ppt", "deck.pptx", "report.doc", "report.docx"})
     void supportsExpectedExtensions(String name) {
         assertTrue(strategy.supports(new TransferRequest(name, "key", null)));
     }

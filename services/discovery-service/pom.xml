@@ -8,7 +8,7 @@
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
-        <version>3.5.14</version>
+        <version>4.1.1</version>
         <relativePath/>
     </parent>
 
@@ -19,17 +19,17 @@
 
     <properties>
         <java.version>25</java.version>
-        <tomcat.version>10.1.60</tomcat.version>
-        <spring-framework.version>6.2.19</spring-framework.version>
-        <jackson-bom.version>2.21.7</jackson-bom.version>
-        <micrometer.version>1.15.12</micrometer.version>
+        <tomcat.version>11.0.26</tomcat.version>
+        <spring-framework.version>7.0.9</spring-framework.version>
+        <jackson-2-bom.version>2.21.7</jackson-2-bom.version>
+        <jackson-bom.version>3.1.7</jackson-bom.version>
     </properties>
 
     <dependencies>
 
         <dependency>
             <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-web</artifactId>
+            <artifactId>spring-boot-starter-webmvc</artifactId>
         </dependency>
 
         <dependency>
@@ -50,7 +50,7 @@
 
         <dependency>
             <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-test</artifactId>
+            <artifactId>spring-boot-starter-webmvc-test</artifactId>
             <scope>test</scope>
         </dependency>
     <!-- Metadata CSV generation and parsing -->

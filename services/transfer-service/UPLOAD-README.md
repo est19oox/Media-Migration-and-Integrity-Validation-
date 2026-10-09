@@ -2,7 +2,7 @@
 
 POST /api/v1/transfers accepts multipart/form-data with one part named file. Users send actual local bytes; no EC2 sourcePath is required. Existing JSON path migration remains available with Content-Type application/json.
 
-Start the deployed service and open http://EC2_PUBLIC_IP:8081/upload.html for the same-origin upload form. A temporary inbound rule from your IP is needed for direct public access. On EC2 the same page is served at port 8081. For a local Spring Boot run, open http://localhost:8081/upload.html.
+For deployed browser access, run bash scripts/cd/open-gateway-tunnel.sh <instance-id> and open http://localhost:8080/upload.html while the tunnel is running. Requests go through API Gateway. See docs/ci-cd/gateway-access.md for PowerShell instructions. Deployed host ports bind to loopback and EC2 has no public inbound rules. For a local Spring Boot run, open http://localhost:8081/upload.html.
 
 Postman: POST /api/v1/transfers -> Body -> form-data -> file (type File) -> choose your file. Do not set Content-Type manually. Example from your own terminal:
 
@@ -20,7 +20,7 @@ Enable later:
 3. Uncomment spring.cloud.openfeign and eureka configuration in application.yml; set EUREKA_DEFAULT_ZONE to a registry reachable from the deployed container. The registry must actually run and Integrity must register as integrity-service. Registry client code does not create a registry server.
 4. Inject IntegrityValidationGateway into TransferService and call validate(response) after S3 upload. The gateway includes the full Feign call. Agree on API authentication, durable validation status and retries first; a timeout must not trigger a duplicate upload or be reported as successful validation. requestId must be persisted/reused across retries.
 
-Build using the project's existing Java 25 and Maven: mvn -B clean verify in services/transfer-service. Dependencies, Java version and Docker base are preserved from the uploaded project. Java 25 and Maven were located during verification, but the Spring Boot 3.5.14 parent was unavailable in the local cache and dependency downloads were blocked; full Maven/JUnit execution could not complete.
+Build using the project's existing Java 25 and Maven: mvn -B clean verify in services/transfer-service. The service uses Spring Boot 4.1.1, Spring Framework 7.0.9 and Spring Cloud 2025.1.3. The production Java version remains 25.
 
 ## View or download uploaded files
 
@@ -45,3 +45,5 @@ Single byte ranges support MP4 seeking: closed, open-ended and suffix forms retu
 `fileId` is URL-safe Base64 of the S3 key. It is reversible and does not expire; it is NOT an access credential. There is no ownership enforcement or file-list database in this version. Anyone able to reach this unauthenticated test service and construct an ID can request objects in its configured bucket. Add User Access authorization and ownership checks before shared or public use. Keep this deployment restricted to the test environment. Existing legacy transfer responses also include fileId, so migrated objects can be downloaded.
 
 The existing Terraform policy already grants GetObject; no IAM or Terraform change is needed. Do not make the bucket public. Integrity/Feign/Eureka code remains fully commented out. Metadata and presigned URLs are not used.
+
+Office formats PPT, PPTX, DOC and DOCX are supported for single and folder uploads and server-side transfers. Office files download for viewing. Folder uploads use POST /api/v1/transfers/folder with files and relativePaths; the 500-file and 100 MiB total limits remain in effect.
