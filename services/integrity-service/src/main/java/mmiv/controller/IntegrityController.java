@@ -48,6 +48,12 @@ public class IntegrityController {
     public ResponseEntity<ValidationResponse> validate(
             @RequestBody ValidationRequest request) throws IOException {
 
+        if (request.bucket() == null || request.bucket().isBlank()
+                || request.objectKey() == null || request.objectKey().isBlank()
+                || request.sourceChecksum() == null || !request.sourceChecksum().matches("(?i)[0-9a-f]{64}")
+                || (request.transferId() != null && (request.transferId().isBlank() || request.transferId().length() > 128))) {
+            return ResponseEntity.badRequest().build();
+        }
         ValidationResponse response =
                 integrityValidationService.validate(
                         request.bucket(),
@@ -55,6 +61,8 @@ public class IntegrityController {
                         request.sourceChecksum()
                 );
 
-        return ResponseEntity.ok(response);
+        return ResponseEntity.ok(new ValidationResponse(response.bucket(), response.objectKey(),
+                response.algorithm(), response.sourceChecksum(), response.destinationChecksum(), response.valid(),
+                request.transferId(), response.valid() ? "PASSED" : "FAILED"));
     }
 }

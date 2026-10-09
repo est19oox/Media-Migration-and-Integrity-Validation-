@@ -22,6 +22,20 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 class FolderUploadTest {
+    private mmiv.transfer.service.S3ObjectCleanup cleanup;
+    private mmiv.transfer.service.S3ObjectCleanup passingCleanup() {
+        cleanup = mock(mmiv.transfer.service.S3ObjectCleanup.class);
+        when(cleanup.delete(anyString(), anyString(), nullable(mmiv.transfer.dto.S3ObjectReference.class)))
+                .thenReturn(new mmiv.transfer.service.S3ObjectCleanup.Result("DELETED", "Uploaded file deleted"));
+        return cleanup;
+    }
+    private mmiv.transfer.integration.IntegrityValidationGateway gateway;
+    private mmiv.transfer.integration.IntegrityValidationGateway passingIntegrity() {
+        gateway = mock(mmiv.transfer.integration.IntegrityValidationGateway.class);
+        when(gateway.validate(anyString(), anyString(), anyString(), anyString())).thenReturn(
+                new mmiv.transfer.integration.IntegrityValidationGateway.Outcome("PASSED", true, "Verified"));
+        return gateway;
+    }
     S3Client s3;
     S3TransferStrategy strategy;
     FolderUploadService folders;
@@ -33,7 +47,7 @@ class FolderUploadTest {
         s3 = mock(S3Client.class);
         var validator = new TransferRequestValidator("/unused");
         strategy = spy(new S3TransferStrategy(s3, "test-bucket", validator));
-        var transfers = new TransferService(validator, new TransferStrategyFactory(List.of(strategy)));
+        var transfers = new TransferService(validator, new TransferStrategyFactory(List.of(strategy)), passingIntegrity(), passingCleanup());
         folders = new FolderUploadService(transfers, validator);
         mvc = MockMvcBuilders.standaloneSetup(new FolderUploadController(folders))
                 .setControllerAdvice(new TransferExceptionHandler()).build();
@@ -56,6 +70,19 @@ class FolderUploadTest {
         assertFalse(Files.exists(first.path()));
         assertFalse(Files.exists(second.path()));
     }
+    @Test void countsUnconfirmedValidationAsUnsuccessfulAndContinues() throws Exception {
+        when(gateway.validate(anyString(), anyString(), anyString(), anyString())).thenReturn(
+                new mmiv.transfer.integration.IntegrityValidationGateway.Outcome("UNAVAILABLE", false, "Unconfirmed"),
+                new mmiv.transfer.integration.IntegrityValidationGateway.Outcome("PASSED", true, "Verified"));
+        mvc.perform(multipart("/api/v1/transfers/folder").file(file("a.txt")).file(file("b.txt"))
+                .param("relativePaths", "album/a.txt", "album/b.txt"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.succeeded").value(1))
+                .andExpect(jsonPath("$.failed").value(1))
+                .andExpect(jsonPath("$.files[0].status").value("UNAVAILABLE"))
+                .andExpect(jsonPath("$.files[0].upload.success").value(false))
+                .andExpect(jsonPath("$.files[1].upload.success").value(true));
+    }
+
     @Test void rejectsUnsafePathsBeforeAnyS3Write() throws Exception {
         for (String path : List.of("/album/a.txt", "album/../a.txt", "album/./a.txt",
                 "album//a.txt", "C:\\album\\a.txt", "album/sub/", "album/evil:a.txt")) {
@@ -97,7 +124,7 @@ class FolderUploadTest {
                 .andExpect(jsonPath("$.failed").value(1))
                 .andExpect(jsonPath("$.files[0].status").value("FAILED"))
                 .andExpect(jsonPath("$.files[0].error").value("File transfer failed"))
-                .andExpect(jsonPath("$.files[1].status").value("UPLOADED"));
+                .andExpect(jsonPath("$.files[1].status").value("PASSED"));
         var sources = ArgumentCaptor.forClass(UploadSource.class);
         verify(strategy, times(2)).transferUploaded(sources.capture());
         for (var source : sources.getAllValues()) assertFalse(Files.exists(source.path()));

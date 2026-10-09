@@ -59,8 +59,9 @@ public class FolderUploadService {
             String path = relativePaths.get(i);
             try {
                 var uploaded = transfers.uploadToKey(files.get(i), names.get(i), prefix + path);
-                results.add(new FileResult(path, "UPLOADED", uploaded, null));
-                succeeded++;
+                results.add(new FileResult(path, uploaded.validationResult(), uploaded,
+                        uploaded.success() ? null : uploaded.message()));
+                if (uploaded.success()) succeeded++;
             } catch (IllegalStateException | IllegalArgumentException e) {
                 results.add(new FileResult(path, "FAILED", null, "File transfer failed"));
             }

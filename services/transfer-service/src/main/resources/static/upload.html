@@ -45,11 +45,11 @@ document.querySelector('#uploadForm').addEventListener('submit', async event => 
     const text = await response.text();
     let data; try { data = JSON.parse(text); } catch { throw new Error('服务器未返回有效 JSON，HTTP ' + response.status); }
     if (!response.ok) throw new Error(data.error || '上传失败，HTTP ' + response.status);
-    result.textContent = '上传成功（尚未调用 Integrity Service）\n' + JSON.stringify(data, null, 2);
+    result.textContent = (data.success ? '传输成功，完整性验证通过' : data.cleanupStatus === 'DELETED' ? '传输未通过验证，已删除上传文件' : '传输未通过验证，自动删除未确认，请手动处理') + '\n' + JSON.stringify(data, null, 2);
     const id = encodeURIComponent(data.fileId);
     document.querySelector('#preview').href = '/api/v1/files/' + id + '/content';
     document.querySelector('#download').href = '/api/v1/files/' + id + '/download';
-    document.querySelector('#links').hidden = false;
+    document.querySelector('#links').hidden = !data.success;
   } catch (error) { result.textContent = error.message; }
   finally { button.disabled = false; }
 });
@@ -74,7 +74,7 @@ document.querySelector('#folderForm').addEventListener('submit', async event => 
     const response = await fetch('/api/v1/transfers/folder', {method: 'POST', body});
     const data = await response.json();
     if (!response.ok) throw new Error(data.error || '上传失败，HTTP ' + response.status);
-    result.textContent = '成功：' + data.succeeded + '，失败：' + data.failed + '\n' + JSON.stringify(data, null, 2);
+    result.textContent = '完整性验证通过：' + data.succeeded + '，失败或未确认：' + data.failed + '\n' + JSON.stringify(data, null, 2);
   } catch (error) { result.textContent = error.message; }
   finally { button.disabled = false; }
 });
