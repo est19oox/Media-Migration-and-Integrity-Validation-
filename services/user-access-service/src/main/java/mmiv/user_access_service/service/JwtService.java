@@ -4,6 +4,7 @@ import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 import mmiv.user_access_service.model.User;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.oauth2.jose.jws.SignatureAlgorithm;
 import org.springframework.security.oauth2.jwt.JwsHeader;
 import org.springframework.security.oauth2.jwt.JwtClaimsSet;
@@ -15,9 +16,16 @@ import org.springframework.stereotype.Service;
 public class JwtService {
 
   private final JwtEncoder encoder;
+  private final String issuer;
 
-  public JwtService(JwtEncoder encoder) {
+  public JwtService(JwtEncoder encoder, @Value("${jwt.issuer}") String issuer) {
+
+    if (issuer == null || issuer.isBlank()) {
+      throw new IllegalArgumentException("JWT issuer must not be blank");
+    }
+
     this.encoder = encoder;
+    this.issuer = issuer;
   }
 
   public String generateToken(User user) {
@@ -31,7 +39,7 @@ public class JwtService {
 
     JwtClaimsSet claims =
         JwtClaimsSet.builder()
-            .issuer("https://auth.mmiv.example")
+            .issuer(issuer)
             .issuedAt(now)
             .expiresAt(now.plus(30, ChronoUnit.MINUTES))
             .subject(user.getUserId())

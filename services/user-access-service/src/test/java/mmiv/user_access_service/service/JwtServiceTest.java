@@ -54,7 +54,7 @@ class JwtServiceTest {
             .signatureAlgorithm(SignatureAlgorithm.RS256)
             .build();
 
-    jwtService = new JwtService(encoder);
+    jwtService = new JwtService(encoder, "https://auth.mmiv.example");
   }
 
   @Test
@@ -158,5 +158,20 @@ class JwtServiceTest {
     KeyPairGenerator generator = KeyPairGenerator.getInstance("RSA");
     generator.initialize(2048);
     return generator.generateKeyPair();
+  }
+
+  @Test
+  void shouldUseConfiguredIssuer() {
+    String configuredIssuer = "https://auth-test.mmiv.example";
+
+    JwtService service = new JwtService(encoder, configuredIssuer);
+
+    User user = new User("U001", "alice", "OPERATOR", true, Set.of(Permission.READ));
+
+    String token = service.generateToken(user);
+
+    Jwt jwt = decoder.decode(token);
+
+    assertEquals(configuredIssuer, jwt.getIssuer().toString());
   }
 }

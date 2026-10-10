@@ -33,11 +33,11 @@ class AccessControllerTest {
                 .contentType("application/json")
                 .content(
                     """
-                                {
-                                  "userId": "U001",
-                                  "action": "WRITE"
-                                }
-                                """))
+                        {
+                          "userId": "U001",
+                          "action": "WRITE"
+                        }
+                        """))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.authorised").value(true))
         .andExpect(jsonPath("$.reason").value("Access granted"));
@@ -55,11 +55,11 @@ class AccessControllerTest {
                 .contentType("application/json")
                 .content(
                     """
-                                                            {
-                                                              "userId": "U002",
-                                                              "action": "WRITE"
-                                                            }
-                                                            """))
+                        {
+                          "userId": "U002",
+                          "action": "WRITE"
+                        }
+                        """))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.authorised").value(false))
         .andExpect(jsonPath("$.reason").value("Permission denied"));
@@ -74,10 +74,10 @@ class AccessControllerTest {
                 .contentType("application/json")
                 .content(
                     """
-                                                            {
-                                                              "action": "WRITE"
-                                                            }
-                                                            """))
+                        {
+                          "action": "WRITE"
+                        }
+                        """))
         .andExpect(status().isBadRequest());
   }
 
@@ -90,10 +90,10 @@ class AccessControllerTest {
                 .contentType("application/json")
                 .content(
                     """
-                                                    {
-                                                      "userId": "U001"
-                                                    }
-                                                    """))
+                        {
+                          "userId": "U001"
+                        }
+                        """))
         .andExpect(status().isBadRequest());
   }
 }

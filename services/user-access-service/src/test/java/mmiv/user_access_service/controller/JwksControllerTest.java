@@ -131,7 +131,7 @@ class JwksControllerTest {
             new com.nimbusds.jose.jwk.source.ImmutableJWKSet<>(
                 new JWKSet(
                     new RSAKey.Builder(publicKey).privateKey(privateKey).keyID(keyId).build())));
-    JwtService service = new JwtService(encoder);
+    JwtService service = new JwtService(encoder, "https://auth.mmiv.example");
     JwksController controller = new JwksController(publicKey, keyId);
     Map<?, ?> jwks = controller.jwks();
     Map<?, ?> publishedKey = (Map<?, ?>) ((List<?>) jwks.get("keys")).get(0);

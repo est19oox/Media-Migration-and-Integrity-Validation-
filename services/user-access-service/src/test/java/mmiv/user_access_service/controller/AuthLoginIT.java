@@ -124,11 +124,11 @@ class AuthLoginIT {
                     .contentType("application/json")
                     .content(
                         """
-                                {
-                                "username": "%s",
-                                "password": "correct-password"
-                                }
-                                """
+                        {
+                        "username": "%s",
+                        "password": "correct-password"
+                        }
+                        """
                             .formatted(testUsername)))
             .andExpect(status().isOk())
             .andReturn()
