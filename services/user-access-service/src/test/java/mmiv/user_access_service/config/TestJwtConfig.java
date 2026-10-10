@@ -20,45 +20,37 @@ import org.springframework.security.oauth2.jwt.NimbusJwtEncoder;
 @TestConfiguration(proxyBeanMethods = false)
 public class TestJwtConfig {
 
-    @Bean
-    KeyPair testJwtKeyPair() throws Exception {
-        KeyPairGenerator generator = KeyPairGenerator.getInstance("RSA");
-        generator.initialize(2048);
-        return generator.generateKeyPair();
-    }
+  @Bean
+  KeyPair testJwtKeyPair() throws Exception {
+    KeyPairGenerator generator = KeyPairGenerator.getInstance("RSA");
+    generator.initialize(2048);
+    return generator.generateKeyPair();
+  }
 
-    @Bean
-    RSAPrivateKey rsaPrivateKey(KeyPair testJwtKeyPair) {
-        return (RSAPrivateKey) testJwtKeyPair.getPrivate();
-    }
+  @Bean
+  RSAPrivateKey rsaPrivateKey(KeyPair testJwtKeyPair) {
+    return (RSAPrivateKey) testJwtKeyPair.getPrivate();
+  }
 
-    @Bean
-    RSAPublicKey rsaPublicKey(KeyPair testJwtKeyPair) {
-        return (RSAPublicKey) testJwtKeyPair.getPublic();
-    }
+  @Bean
+  RSAPublicKey rsaPublicKey(KeyPair testJwtKeyPair) {
+    return (RSAPublicKey) testJwtKeyPair.getPublic();
+  }
 
-    @Bean
-    JwtEncoder jwtEncoder(
-            RSAPrivateKey privateKey,
-            RSAPublicKey publicKey,
-            @Value("${jwt.key-id}") String keyId) {
-        RSAKey rsaKey = new RSAKey.Builder(publicKey)
-                .privateKey(privateKey)
-                .keyID(keyId)
-                .build();
-        return new NimbusJwtEncoder(
-                new ImmutableJWKSet<>(new JWKSet(rsaKey)));
-    }
+  @Bean
+  JwtEncoder jwtEncoder(
+      RSAPrivateKey privateKey, RSAPublicKey publicKey, @Value("${jwt.key-id}") String keyId) {
+    RSAKey rsaKey = new RSAKey.Builder(publicKey).privateKey(privateKey).keyID(keyId).build();
+    return new NimbusJwtEncoder(new ImmutableJWKSet<>(new JWKSet(rsaKey)));
+  }
 
-    @Bean
-    JwtDecoder jwtDecoder(
-            RSAPublicKey publicKey,
-            @Value("${jwt.issuer}") String issuer) {
-        NimbusJwtDecoder decoder = NimbusJwtDecoder.withPublicKey(publicKey)
-                .signatureAlgorithm(SignatureAlgorithm.RS256)
-                .build();
-        decoder.setJwtValidator(
-                JwtValidators.createDefaultWithIssuer(issuer));
-        return decoder;
-    }
+  @Bean
+  JwtDecoder jwtDecoder(RSAPublicKey publicKey, @Value("${jwt.issuer}") String issuer) {
+    NimbusJwtDecoder decoder =
+        NimbusJwtDecoder.withPublicKey(publicKey)
+            .signatureAlgorithm(SignatureAlgorithm.RS256)
+            .build();
+    decoder.setJwtValidator(JwtValidators.createDefaultWithIssuer(issuer));
+    return decoder;
+  }
 }

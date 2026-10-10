@@ -16,93 +16,95 @@ import org.springframework.transaction.annotation.Transactional;
 @Profile("!test")
 public class OracleUserRepository implements UserRepository {
 
-    private final JdbcTemplate jdbcTemplate;
+  private final JdbcTemplate jdbcTemplate;
 
-    public OracleUserRepository(JdbcTemplate jdbcTemplate) {
-        this.jdbcTemplate = jdbcTemplate;
-    }
+  public OracleUserRepository(JdbcTemplate jdbcTemplate) {
+    this.jdbcTemplate = jdbcTemplate;
+  }
 
-    @Override
-    public Optional<User> findById(String userId) {
-        return findOne(
-                """
+  @Override
+  public Optional<User> findById(String userId) {
+    return findOne(
+        """
                 SELECT user_id, username, role, active, password_hash
                 FROM app_users
                 WHERE user_id = ?
                 """,
-                userId);
+        userId);
+  }
+
+  @Override
+  public Optional<User> findByUsername(String username) {
+    if (username == null || username.isBlank()) {
+      return Optional.empty();
     }
 
-    @Override
-    public Optional<User> findByUsername(String username) {
-        if (username == null || username.isBlank()) {
-            return Optional.empty();
-        }
-
-        return findOne(
-                """
+    return findOne(
+        """
                 SELECT user_id, username, role, active, password_hash
                 FROM app_users
                 WHERE username = ?
                 """,
-                username);
-    }
+        username);
+  }
 
-    private Optional<User> findOne(String sql, String value) {
-        return jdbcTemplate.query(
-                        sql,
-                        (rs, rowNum) -> {
-                            String userId = rs.getString("user_id");
-                            return new User(
-                                    userId,
-                                    loadDestinationAccesses(userId),
-                                    rs.getString("username"),
-                                    rs.getString("role"),
-                                    rs.getInt("active") == 1,
-                                    loadGlobalPermissions(userId),
-                                    rs.getString("password_hash"));
-                        },
-                        value)
-                .stream()
-                .findFirst();
-    }
+  private Optional<User> findOne(String sql, String value) {
+    return jdbcTemplate
+        .query(
+            sql,
+            (rs, rowNum) -> {
+              String userId = rs.getString("user_id");
+              return new User(
+                  userId,
+                  loadDestinationAccesses(userId),
+                  rs.getString("username"),
+                  rs.getString("role"),
+                  rs.getInt("active") == 1,
+                  loadGlobalPermissions(userId),
+                  rs.getString("password_hash"));
+            },
+            value)
+        .stream()
+        .findFirst();
+  }
 
-    private Set<Permission> loadGlobalPermissions(String userId) {
-        List<String> values = jdbcTemplate.queryForList(
-                """
+  private Set<Permission> loadGlobalPermissions(String userId) {
+    List<String> values =
+        jdbcTemplate.queryForList(
+            """
                 SELECT permission
                 FROM user_permissions
                 WHERE user_id = ?
                 """,
-                String.class,
-                userId);
+            String.class,
+            userId);
 
-        Set<Permission> permissions = new HashSet<>();
-        for (String value : values) {
-            permissions.add(Permission.valueOf(value));
-        }
-        return permissions;
+    Set<Permission> permissions = new HashSet<>();
+    for (String value : values) {
+      permissions.add(Permission.valueOf(value));
     }
+    return permissions;
+  }
 
-    private List<DestinationAccess> loadDestinationAccesses(String userId) {
-        return jdbcTemplate.query(
-                """
+  private List<DestinationAccess> loadDestinationAccesses(String userId) {
+    return jdbcTemplate.query(
+        """
                 SELECT destination, permission
                 FROM user_destination_access
                 WHERE user_id = ?
                 ORDER BY destination
                 """,
-                (rs, rowNum) -> new DestinationAccess(
-                        rs.getString("destination"),
-                        Permission.valueOf(rs.getString("permission"))),
-                userId);
-    }
+        (rs, rowNum) ->
+            new DestinationAccess(
+                rs.getString("destination"), Permission.valueOf(rs.getString("permission"))),
+        userId);
+  }
 
-    @Override
-    @Transactional
-    public void save(User user) {
-        jdbcTemplate.update(
-                """
+  @Override
+  @Transactional
+  public void save(User user) {
+    jdbcTemplate.update(
+        """
                 MERGE INTO app_users target
                 USING (
                     SELECT ? AS user_id,
@@ -126,35 +128,30 @@ public class OracleUserRepository implements UserRepository {
                     source.active, source.password_hash
                 )
                 """,
-                user.getUserId(),
-                user.getUsername(),
-                user.getRole(),
-                user.isActive() ? 1 : 0,
-                user.getPasswordHash());
+        user.getUserId(),
+        user.getUsername(),
+        user.getRole(),
+        user.isActive() ? 1 : 0,
+        user.getPasswordHash());
 
-        jdbcTemplate.update(
-                "DELETE FROM user_permissions WHERE user_id = ?",
-                user.getUserId());
-        for (Permission permission : user.getPermissions()) {
-            jdbcTemplate.update(
-                    """
+    jdbcTemplate.update("DELETE FROM user_permissions WHERE user_id = ?", user.getUserId());
+    for (Permission permission : user.getPermissions()) {
+      jdbcTemplate.update(
+          """
                     INSERT INTO user_permissions (user_id, permission)
                     VALUES (?, ?)
                     """,
-                    user.getUserId(),
-                    permission.name());
-        }
+          user.getUserId(),
+          permission.name());
     }
+  }
 
-    @Override
-    @Transactional
-    public void grantDestinationAccess(
-            String userId,
-            String destination,
-            Permission permission) {
-        validateDestinationAccessArguments(userId, destination, permission);
-        jdbcTemplate.update(
-                """
+  @Override
+  @Transactional
+  public void grantDestinationAccess(String userId, String destination, Permission permission) {
+    validateDestinationAccessArguments(userId, destination, permission);
+    jdbcTemplate.update(
+        """
                 MERGE INTO user_destination_access target
                 USING (
                     SELECT ? AS user_id, ? AS destination, ? AS permission
@@ -172,37 +169,34 @@ public class OracleUserRepository implements UserRepository {
                         source.user_id, source.destination, source.permission
                     )
                 """,
-                userId,
-                destination,
-                permission.name());
-    }
+        userId,
+        destination,
+        permission.name());
+  }
 
-    @Override
-    @Transactional
-    public void revokeDestinationAccess(String userId, String destination) {
-        if (userId == null || userId.isBlank()
-                || destination == null || destination.isBlank()) {
-            throw new IllegalArgumentException(
-                    "User ID and destination are required");
-        }
-        jdbcTemplate.update(
-                """
+  @Override
+  @Transactional
+  public void revokeDestinationAccess(String userId, String destination) {
+    if (userId == null || userId.isBlank() || destination == null || destination.isBlank()) {
+      throw new IllegalArgumentException("User ID and destination are required");
+    }
+    jdbcTemplate.update(
+        """
                 DELETE FROM user_destination_access
                 WHERE user_id = ? AND destination = ?
                 """,
-                userId,
-                destination);
-    }
+        userId,
+        destination);
+  }
 
-    private static void validateDestinationAccessArguments(
-            String userId,
-            String destination,
-            Permission permission) {
-        if (userId == null || userId.isBlank()
-                || destination == null || destination.isBlank()
-                || permission == null) {
-            throw new IllegalArgumentException(
-                    "User ID, destination, and permission are required");
-        }
+  private static void validateDestinationAccessArguments(
+      String userId, String destination, Permission permission) {
+    if (userId == null
+        || userId.isBlank()
+        || destination == null
+        || destination.isBlank()
+        || permission == null) {
+      throw new IllegalArgumentException("User ID, destination, and permission are required");
     }
+  }
 }

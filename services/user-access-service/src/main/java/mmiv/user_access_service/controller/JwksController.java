@@ -14,31 +14,28 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 public class JwksController {
 
-    private final RSAPublicKey publicKey;
-    private final String keyId;
+  private final RSAPublicKey publicKey;
+  private final String keyId;
 
-    public JwksController(
-            RSAPublicKey publicKey,
-            @Value("${jwt.key-id}") String keyId) {
-        if (publicKey == null) {
-            throw new IllegalArgumentException("JWT public key must not be null");
-        }
-        if (keyId == null || keyId.isBlank()) {
-            throw new IllegalArgumentException("JWT key ID must not be blank");
-        }
-        this.publicKey = publicKey;
-        this.keyId = keyId;
+  public JwksController(RSAPublicKey publicKey, @Value("${jwt.key-id}") String keyId) {
+    if (publicKey == null) {
+      throw new IllegalArgumentException("JWT public key must not be null");
     }
+    if (keyId == null || keyId.isBlank()) {
+      throw new IllegalArgumentException("JWT key ID must not be blank");
+    }
+    this.publicKey = publicKey;
+    this.keyId = keyId;
+  }
 
-    @GetMapping(
-            value = "/.well-known/jwks.json",
-            produces = MediaType.APPLICATION_JSON_VALUE)
-    public Map<String, Object> jwks() {
-        RSAKey rsaKey = new RSAKey.Builder(publicKey)
-                .keyID(keyId)
-                .keyUse(KeyUse.SIGNATURE)
-                .algorithm(JWSAlgorithm.RS256)
-                .build();
-        return new JWKSet(rsaKey).toJSONObject();
-    }
+  @GetMapping(value = "/.well-known/jwks.json", produces = MediaType.APPLICATION_JSON_VALUE)
+  public Map<String, Object> jwks() {
+    RSAKey rsaKey =
+        new RSAKey.Builder(publicKey)
+            .keyID(keyId)
+            .keyUse(KeyUse.SIGNATURE)
+            .algorithm(JWSAlgorithm.RS256)
+            .build();
+    return new JWKSet(rsaKey).toJSONObject();
+  }
 }
