@@ -103,7 +103,7 @@ if [[ "$READY" != true ]]; then
   exit 1
 fi
 echo "Deployed health endpoint reachable: $READY_URL"
-echo "ZAP scan starts at: $TARGET_URL"
+echo "ZAP target configured: $TARGET_URL"
 
 echo 'Running functional endpoint tests through the SSM tunnel'
 python3 scripts/cd/test-endpoints.py \
@@ -112,6 +112,7 @@ python3 scripts/cd/test-endpoints.py \
   --report "$REPORT_DIR/endpoint-tests.json"
 
 echo '[3/3] Running ZAP on GitHub runner; scanner output streams below'
+echo "ZAP scan starts at: $TARGET_URL"
 SCAN_ARGS=(zap-baseline.py -t "$TARGET_URL" -m 1 -T 5 -d -l WARN -I)
 SCAN_TIMEOUT=600s
 if [[ "$SCAN_MODE" == api ]]; then

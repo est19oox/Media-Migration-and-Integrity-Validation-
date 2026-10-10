@@ -31,7 +31,7 @@ docker compose -f infrastructure/service-registry/compose.yml up --build -d
 python3 infrastructure/service-registry/verify-registration.py
 ```
 
-The verification script waits for all six clients to appear UP. Open
+The verification script waits for Gateway and the four default backend clients to appear UP. Discovery is optional; add `--include-discovery` only when its `discovery` Compose profile and Oracle/media settings are enabled. Open
 http://localhost:8761/ to inspect Eureka; http://localhost:8080/upload.html
 uses Gateway. Registration is asynchronous. Health alone does not prove that
 all clients have registered.

@@ -31,6 +31,9 @@ def zap_started(zap, target):
     if message.get('responseHeader', '').splitlines()[0].split()[1] != '200':
         raise RuntimeError('ZAP upload seed failed; see upload-seed.json')
     response = json.loads(message['responseBody'])
+    if (response.get('success') is not True or response.get('validationResult') != 'PASSED'
+            or response.get('cleanupStatus') != 'NOT_REQUIRED'):
+        raise RuntimeError('ZAP upload seed integrity was not confirmed; see upload-seed.json')
     if response.get('sha256') != hashlib.sha256(content.encode()).hexdigest():
         raise RuntimeError('ZAP upload seed checksum mismatch')
     file_id = response.get('fileId')

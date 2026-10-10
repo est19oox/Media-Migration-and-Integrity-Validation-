@@ -1,43 +1,29 @@
-# =========================
-# Maven / Java
-# =========================
+# Java / Maven
 target/
 *.class
 
-# =========================
-# Terraform
-# =========================
-**/.terraform/*
-*.tfstate
-*.tfstate.*
-
-# =========================
-# IDE
-# =========================
-.idea/
-*.iml
-.vscode/
-
-# =========================
-# OS
-# =========================
-.DS_Store
-Thumbs.db
-.ci/
-jenkins/.env
-jenkins_home/
+# Terraform generated and local files
 **/.terraform/
-*.tfstate
-*.tfstate.*
-crash.log
-
-
-# Terraform local/environment files
-**/.terraform/*
 *.tfstate
 *.tfstate.*
 *.tfvars
 *.tfplan
-# Saved plans must always be regenerated after configuration/state changes.
 tfplan
 tfplan.*
+crash.log
+
+# IDE and operating system
+.idea/
+*.iml
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Python caches
+__pycache__/
+*.py[cod]
+
+# Local runtime state and reports
+.ci/
+jenkins/.env
+jenkins_home/

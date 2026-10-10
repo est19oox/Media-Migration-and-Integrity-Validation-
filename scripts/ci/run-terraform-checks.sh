@@ -15,7 +15,7 @@ fi
 require_command terraform
 terraform -chdir="$ROOT/infrastructure" fmt -check -recursive
 
-for terraform_root in "$ROOT/infrastructure/bootstrap" "$ROOT/infrastructure/terraform"; do
+for terraform_root in "$ROOT/infrastructure/bootstrap" "$ROOT/infrastructure/terraform" "$ROOT/infrastructure/terraform/environments/dev"; do
     [ -d "$terraform_root" ] || continue
     terraform -chdir="$terraform_root" init -backend=false -input=false -no-color
     terraform -chdir="$terraform_root" validate -no-color

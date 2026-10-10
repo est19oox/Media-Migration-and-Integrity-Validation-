@@ -39,11 +39,26 @@ PY
 COMMAND_ID=$(aws ssm send-command --region "$REGION" \
   --instance-ids "$INSTANCE_ID" --document-name AWS-RunShellScript \
   --parameters "$PARAMETERS" --query 'Command.CommandId' --output text)
-WAIT_STATUS=0
-aws ssm wait command-executed --region "$REGION" \
-  --command-id "$COMMAND_ID" --instance-id "$INSTANCE_ID" || WAIT_STATUS=$?
-RESULT=$(aws ssm get-command-invocation --region "$REGION" \
-  --command-id "$COMMAND_ID" --instance-id "$INSTANCE_ID" --output json)
+# The remote registration loop may take 150 seconds; do not use the shorter
+# default AWS CLI waiter and fail while the remote check is still running.
+RESULT=
+for ATTEMPT in $(seq 1 60); do
+  if RESULT=$(aws ssm get-command-invocation --region "$REGION" \
+      --command-id "$COMMAND_ID" --instance-id "$INSTANCE_ID" --output json 2>&1); then
+    STATUS=$(python3 -c 'import json,sys; print(json.load(sys.stdin)["Status"])' <<< "$RESULT")
+    case "$STATUS" in
+      Success|Failed|Cancelled|TimedOut) break ;;
+    esac
+  elif [[ "$RESULT" != *InvocationDoesNotExist* ]]; then
+    printf '%s\n' "$RESULT" >&2
+    exit 1
+  fi
+  if (( ATTEMPT == 60 )); then
+    echo 'Registration SSM command did not finish within 300 seconds' >&2
+    exit 1
+  fi
+  sleep 5
+done
 printf '%s' "$RESULT" | python3 -c '
 import json, sys
 result = json.load(sys.stdin)
@@ -51,4 +66,3 @@ print(result.get("StandardOutputContent", ""))
 print(result.get("StandardErrorContent", ""), file=sys.stderr)
 sys.exit(0 if result.get("Status") == "Success" and result.get("ResponseCode") == 0 else 1)
 '
-exit "$WAIT_STATUS"

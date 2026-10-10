@@ -90,7 +90,7 @@ resource "aws_ecr_repository" "mmiv" {
   }
 }
 
-# Removes old ECR images and keeps only the 5 most recent tagged images.
+# Removes untagged images after one day and keeps 20 tagged images per service.
 resource "aws_ecr_lifecycle_policy" "mmiv" {
   repository = aws_ecr_repository.mmiv.name
   policy = jsonencode({

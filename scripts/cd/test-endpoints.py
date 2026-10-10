@@ -32,9 +32,12 @@ def expand(value, variables):
 def field(body, dotted_name):
     value = body
     for part in dotted_name.split("."):
-        if not isinstance(value, dict) or part not in value:
+        if isinstance(value, dict) and part in value:
+            value = value[part]
+        elif isinstance(value, list) and part.isdecimal() and int(part) < len(value):
+            value = value[int(part)]
+        else:
             raise ValueError(f"Missing JSON field: {dotted_name}")
-        value = value[part]
     return value
 
 
@@ -86,6 +89,22 @@ def run_case(case, base_url, token):
         response_headers = error.headers
     except (URLError, TimeoutError, OSError) as error:
         raise ValueError(f"HTTP request failed: {type(error).__name__}") from error
+    # Retain only configured diagnostic fields, even when an assertion fails.
+    # Never record arbitrary response bodies or request authentication headers.
+    case["_http_status"] = status
+    body = None
+    if any(key.startswith("json_") for key in case) or case.get("save_fields") or case.get("report_fields"):
+        try:
+            body = json.loads(content)
+        except ValueError:
+            pass
+    reported = {}
+    for name in case.get("report_fields", []):
+        try:
+            reported[name] = field(body, name)
+        except ValueError:
+            continue
+    case["_reported_fields"] = reported
     if status != case["status"]:
         raise ValueError(f"Expected HTTP {case['status']}, received {status}")
     for name, expected in case.get("header_equals", {}).items():
@@ -95,10 +114,8 @@ def run_case(case, base_url, token):
         raise ValueError("Response bytes do not match the uploaded fixture")
     if not any(key.startswith("json_") for key in case) and not case.get("save_fields") and not case.get("report_fields"):
         return status
-    try:
-        body = json.loads(content)
-    except ValueError as error:
-        raise ValueError("Response is not valid JSON") from error
+    if body is None:
+        raise ValueError("Response is not valid JSON")
     if case.get("json_object") and not isinstance(body, dict):
         raise ValueError("Expected a JSON object")
     for name in case.get("json_required", []):
@@ -107,13 +124,13 @@ def run_case(case, base_url, token):
         if not field(body, name):
             raise ValueError(f"JSON field is empty: {name}")
     for name, expected in case.get("json_equals", {}).items():
-        if field(body, name) != expected:
-            raise ValueError(f"Unexpected value for JSON field: {name}")
+        actual = field(body, name)
+        if actual != expected:
+            raise ValueError(f"Unexpected value for JSON field: {name}; expected {expected!r}, received {actual!r}")
     for name, minimum in case.get("json_min", {}).items():
         value = field(body, name)
         if not isinstance(value, (int, float)) or value < minimum:
             raise ValueError(f"JSON field below minimum: {name}")
-    case["_reported_fields"] = {name: field(body, name) for name in case.get("report_fields", [])}
     case["_saved_vars"] = {name: str(field(body, dotted)) for name, dotted in case.get("save_fields", {}).items()}
     return status
 
@@ -150,18 +167,21 @@ def main():
         if missing:
             result.update(status="SKIP", detail="Set " + ", ".join(missing))
         else:
+            case = {}
             try:
                 case = expand(original, variables)
                 result["path"] = case["path"]
                 status = run_case(case, base_url, os.getenv("API_TEST_TOKEN", ""))
                 result.update(status="PASS", http_status=status)
-                if case.get("_reported_fields"):
-                    result["response"] = case["_reported_fields"]
                 variables.update(case.get("_saved_vars", {}))
                 if original["name"] == "successful S3 transfer":
                     result["test_object_key"] = variables["TEST_OBJECT_KEY"]
             except (ValueError, TypeError, KeyError) as error:
                 result.update(status="FAIL", detail=str(error))
+            if "_http_status" in case:
+                result["http_status"] = case["_http_status"]
+            if case.get("_reported_fields"):
+                result["response"] = case["_reported_fields"]
         result["elapsed_seconds"] = round(time.monotonic() - started, 3)
         results.append(result)
         print(f"{result['status']}: {args.service} / {result['name']} "

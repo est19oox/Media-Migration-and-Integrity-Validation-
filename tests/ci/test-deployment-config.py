@@ -50,7 +50,7 @@ class DeploymentConfigurationTest(unittest.TestCase):
     def test_every_deployed_service_has_functional_configuration(self):
         config = json.loads((ROOT / 'tests/api/endpoints.json').read_text())
         workflow = yaml.safe_load((ROOT / '.github/workflows/cicd.yml').read_text())
-        services = ['service-registry', 'api-gateway'] + [s['name'] for s in
+        services = ['service-registry', 'api-gateway', 'integrity-service'] + [s['name'] for s in
             workflow['jobs']['deploy-backends']['strategy']['matrix']['service']]
         for service in services:
             self.assertIn(service, config['services'])

@@ -1,13 +1,21 @@
 #!/usr/bin/env python3
 """Wait for gateway and backend clients to appear UP in a running Eureka registry."""
+import argparse
 import json
 import sys
 import time
 import urllib.request
 import urllib.error
 
-url = (sys.argv[1] if len(sys.argv) > 1 else "http://localhost:8761").rstrip("/") + "/eureka/apps"
-expected = {"TRANSFER-SERVICE", "INTEGRITY-SERVICE", "USER-ACCESS-SERVICE", "REPORTING-SERVICE", "DISCOVERY-SERVICE", "API-GATEWAY"}
+parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument('url', nargs='?', default='http://localhost:8761')
+parser.add_argument('--include-discovery', action='store_true',
+                    help='Require Discovery when its optional Compose profile is enabled')
+args = parser.parse_args()
+url = args.url.rstrip('/') + '/eureka/apps' 
+expected = {"TRANSFER-SERVICE", "INTEGRITY-SERVICE", "USER-ACCESS-SERVICE", "REPORTING-SERVICE", "API-GATEWAY"}
+if args.include_discovery:
+    expected.add('DISCOVERY-SERVICE')
 deadline = time.monotonic() + 180
 while time.monotonic() < deadline:
     try:
@@ -25,7 +33,7 @@ while time.monotonic() < deadline:
             if any(instance.get("status") == "UP" for instance in instances):
                 available.add(app["name"].upper())
         if expected <= available:
-            print("PASS: Gateway and all five backend services are registered UP")
+            print("PASS: All requested clients are registered UP")
             sys.exit(0)
     except (urllib.error.URLError, TimeoutError, ValueError, KeyError):
         pass

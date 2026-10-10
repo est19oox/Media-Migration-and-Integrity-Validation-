@@ -20,6 +20,11 @@ services:
         condition: service_started
     environment:
       EUREKA_DEFAULT_ZONE: http://service-registry:8761/eureka/
+      AWS_REGION: ${AWS_REGION:-ap-southeast-1}
+      MMIV_BUCKET_NAME: ${MMIV_BUCKET_NAME:-media-migration-dev-landing}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      AWS_SESSION_TOKEN: ${AWS_SESSION_TOKEN:-}
   service-registry:
     build:
       context: ../../services/service-registry
@@ -108,5 +113,10 @@ services:
         condition: service_healthy
     environment:
       EUREKA_DEFAULT_ZONE: http://service-registry:8761/eureka/
+      AWS_REGION: ${AWS_REGION:-ap-southeast-1}
+      MMIV_BUCKET_NAME: ${MMIV_BUCKET_NAME:-media-migration-dev-landing}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      AWS_SESSION_TOKEN: ${AWS_SESSION_TOKEN:-}
 networks:
   registry: null

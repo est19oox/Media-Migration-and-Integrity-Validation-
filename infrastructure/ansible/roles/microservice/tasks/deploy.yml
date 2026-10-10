@@ -1,4 +1,17 @@
 ---
+- name: Reject partial Oracle configuration instead of silently using H2
+  ansible.builtin.assert:
+    that:
+      - >-
+        (lookup('env', 'INTEGRITY_DB_URL') | length == 0 and
+         lookup('env', 'INTEGRITY_DB_USERNAME') | length == 0 and
+         lookup('env', 'INTEGRITY_DB_PASSWORD') | length == 0) or
+        (lookup('env', 'INTEGRITY_DB_URL') | length > 0 and
+         lookup('env', 'INTEGRITY_DB_PASSWORD') | length > 0)
+    fail_msg: "Oracle mode requires both INTEGRITY_DB_URL and INTEGRITY_DB_PASSWORD; otherwise leave all Oracle settings empty for H2."
+  when: microservice_name == 'integrity-service'
+  no_log: true
+
 - name: Prepare private Integrity configuration directory
   ansible.builtin.file:
     path: "{{ microservice_integrity_env_file | dirname }}"

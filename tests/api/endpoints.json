@@ -161,7 +161,10 @@
           "fileName": "local-test.txt",
           "mediaType": "text/plain",
           "sizeBytes": 23,
-          "sha256": "baaa4c7edbfd976383433c57372ea4ca07d2411e08aa9ceb33bb7c156ea193f5"
+          "sha256": "baaa4c7edbfd976383433c57372ea4ca07d2411e08aa9ceb33bb7c156ea193f5",
+          "success": true,
+          "validationResult": "PASSED",
+          "cleanupStatus": "NOT_REQUIRED"
         },
         "json_nonempty": [
           "bucket",
@@ -172,7 +175,12 @@
           "bucket",
           "key",
           "sha256",
-          "fileId"
+          "fileId",
+          "transferId",
+          "success",
+          "validationResult",
+          "cleanupStatus",
+          "message"
         ],
         "save_fields": {
           "UPLOADED_FILE_ID": "fileId"
@@ -274,7 +282,10 @@
         ],
         "json_equals": {
           "fileName": "report.doc",
-          "mediaType": "application/msword"
+          "mediaType": "application/msword",
+          "success": true,
+          "validationResult": "PASSED",
+          "cleanupStatus": "NOT_REQUIRED"
         },
         "json_nonempty": [
           "fileId",
@@ -282,7 +293,15 @@
         ],
         "save_fields": {
           "OFFICE_FILE_ID": "fileId"
-        }
+        },
+        "report_fields": [
+          "key",
+          "transferId",
+          "success",
+          "validationResult",
+          "cleanupStatus",
+          "message"
+        ]
       },
       {
         "name": "Word content download",
@@ -320,10 +339,22 @@
         ],
         "json_equals": {
           "succeeded": 2,
-          "failed": 0
+          "failed": 0,
+          "files.0.relativePath": "OfficeFolder/slides.ppt",
+          "files.1.relativePath": "OfficeFolder/docs/report.docx",
+          "files.0.status": "PASSED",
+          "files.1.status": "PASSED",
+          "files.0.upload.success": true,
+          "files.1.upload.success": true
         },
         "json_nonempty": [
           "prefix",
+          "files"
+        ],
+        "report_fields": [
+          "prefix",
+          "succeeded",
+          "failed",
           "files"
         ]
       }
@@ -526,7 +557,10 @@
           "fileName": "local-test.txt",
           "mediaType": "text/plain",
           "sizeBytes": 23,
-          "sha256": "baaa4c7edbfd976383433c57372ea4ca07d2411e08aa9ceb33bb7c156ea193f5"
+          "sha256": "baaa4c7edbfd976383433c57372ea4ca07d2411e08aa9ceb33bb7c156ea193f5",
+          "success": true,
+          "validationResult": "PASSED",
+          "cleanupStatus": "NOT_REQUIRED"
         },
         "json_nonempty": [
           "bucket",
@@ -537,7 +571,12 @@
           "bucket",
           "key",
           "sha256",
-          "fileId"
+          "fileId",
+          "transferId",
+          "success",
+          "validationResult",
+          "cleanupStatus",
+          "message"
         ],
         "save_fields": {
           "UPLOADED_FILE_ID": "fileId"
@@ -639,7 +678,10 @@
         ],
         "json_equals": {
           "fileName": "report.doc",
-          "mediaType": "application/msword"
+          "mediaType": "application/msword",
+          "success": true,
+          "validationResult": "PASSED",
+          "cleanupStatus": "NOT_REQUIRED"
         },
         "json_nonempty": [
           "fileId",
@@ -647,7 +689,15 @@
         ],
         "save_fields": {
           "OFFICE_FILE_ID": "fileId"
-        }
+        },
+        "report_fields": [
+          "key",
+          "transferId",
+          "success",
+          "validationResult",
+          "cleanupStatus",
+          "message"
+        ]
       },
       {
         "name": "Word content download",
@@ -685,10 +735,22 @@
         ],
         "json_equals": {
           "succeeded": 2,
-          "failed": 0
+          "failed": 0,
+          "files.0.relativePath": "OfficeFolder/slides.ppt",
+          "files.1.relativePath": "OfficeFolder/docs/report.docx",
+          "files.0.status": "PASSED",
+          "files.1.status": "PASSED",
+          "files.0.upload.success": true,
+          "files.1.upload.success": true
         },
         "json_nonempty": [
           "prefix",
+          "files"
+        ],
+        "report_fields": [
+          "prefix",
+          "succeeded",
+          "failed",
           "files"
         ]
       }

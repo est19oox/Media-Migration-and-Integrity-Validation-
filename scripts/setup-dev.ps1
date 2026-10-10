@@ -1,4 +1,3 @@
-```powershell
 # ============================================================
 # Media Migration and Integrity Validation
 # Developer Environment Setup Script
@@ -174,4 +173,3 @@ Write-Host ""
 Write-Host "AWS credentials are intentionally NOT configured"
 Write-Host "by this script."
 Write-Host ""
-```

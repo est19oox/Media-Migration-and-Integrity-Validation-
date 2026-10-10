@@ -67,6 +67,12 @@ jobs:
       - name: Validate repository
         run: bash scripts/ci/validate-repository.sh .
 
+      - name: Check CD dependency order and upload page
+        run: |
+          python3 -m pip install PyYAML
+          python3 tests/ci/test-cd-contract.py
+          node --test tests/ci/test-upload-page.cjs
+
       - name: Build and test services
         run: bash scripts/ci/run-tests.sh .
 

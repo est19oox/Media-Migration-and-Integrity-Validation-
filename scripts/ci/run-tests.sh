@@ -16,6 +16,12 @@ if [ -d /opt/jdk-25 ]; then
     export PATH
 fi
 
+# This is part of the endpoint evidence contract used by CD.
+require_command python3
+if [ -f "$ROOT/tests/ci/test-endpoint-runner.py" ]; then
+    python3 "$ROOT/tests/ci/test-endpoint-runner.py"
+fi
+
 found_service=false
 
 validate_surefire_reports() {

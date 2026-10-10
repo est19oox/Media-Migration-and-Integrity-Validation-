@@ -157,6 +157,12 @@ jobs:
       - name: Validate repository
         run: bash scripts/ci/validate-repository.sh .
 
+      - name: Check CD dependency order and upload page
+        run: |
+          python3 -m pip install PyYAML
+          python3 tests/ci/test-cd-contract.py
+          node --test tests/ci/test-upload-page.cjs
+
       - name: Build and test services
         run: bash scripts/ci/run-tests.sh .
 
@@ -342,11 +348,24 @@ jobs:
       service-path: services/service-registry
       service-port: '8761'
       instance-id: ${{ needs.setup-host.outputs.instance_id }}
+  deploy-integrity:
+    name: Deploy and verify Integrity before Transfer
+    needs:
+      - setup-host
+      - deploy-registry
+    uses: ./.github/workflows/deploy-service.yml
+    secrets: inherit
+    with:
+      service-name: integrity-service
+      service-path: services/integrity-service
+      service-port: '8082'
+      instance-id: ${{ needs.setup-host.outputs.instance_id }}
   deploy-backends:
     name: Deploy backend services
     needs:
       - setup-host
       - deploy-registry
+      - deploy-integrity
     strategy:
       fail-fast: false
       max-parallel: 2
@@ -355,9 +374,6 @@ jobs:
           - name: transfer-service
             path: services/transfer-service
             port: '8081'
-          - name: integrity-service
-            path: services/integrity-service
-            port: '8082'
 #          - name: user-access-service
 #            path: services/user-access-service
 #            port: '8083'
