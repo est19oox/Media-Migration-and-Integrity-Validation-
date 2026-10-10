@@ -5,7 +5,8 @@ export AWS_PAGER=""
 INSTANCE_ID="${INSTANCE_ID:?INSTANCE_ID is required}"
 REGION="${AWS_REGION:-ap-southeast-1}"
 PORT="${DAST_PORT:?DAST_PORT is required}"
-LOCAL_PORT="${DAST_LOCAL_PORT:-18081}"
+# Zero asks the operating system for a free port for this scan.
+LOCAL_PORT="${DAST_LOCAL_PORT:-0}"
 PATH_SUFFIX="${DAST_PATH:-/}"
 READY_PATH="${DAST_READY_PATH:-/actuator/health}"
 SCAN_MODE="${DAST_SCAN_MODE:-baseline}"
@@ -15,11 +16,14 @@ OPENAPI_FILE="${DAST_OPENAPI_FILE:-tests/api/${SERVICE_NAME%-service}-openapi.js
   echo '::error::DAST_SCAN_MODE must be baseline or api.'; exit 1;
 }
 ZAP_IMAGE="${ZAP_IMAGE:-ghcr.io/zaproxy/zaproxy@sha256:781a2bdaea47324e7bab583e2263f21d257b0aee61ed51521a5be45f5f5081ef}"
-for VALUE in "$PORT" "$LOCAL_PORT"; do
+for VALUE in "$PORT"; do
   [[ "$VALUE" =~ ^[0-9]+$ ]] && ((10#$VALUE >= 1 && 10#$VALUE <= 65535)) || {
     echo '::error::DAST ports must be between 1 and 65535.'; exit 1;
   }
 done
+[[ "$LOCAL_PORT" =~ ^[0-9]+$ ]] && ((10#$LOCAL_PORT <= 65535)) || {
+  echo '::error::DAST_LOCAL_PORT must be between 0 and 65535 (0 selects a free port).'; exit 1;
+}
 [[ "$PATH_SUFFIX" == /* && "$READY_PATH" == /* ]] || { echo '::error::DAST_PATH must start with /.'; exit 1; }
 if [[ "${SCANNER_TOOLS_PREPARED:-false}" != true ]]; then
   bash scripts/cd/prepare-scanner-tools.sh
@@ -51,6 +55,12 @@ cleanup() {
   fi
   if [[ -n "$TUNNEL_PID" ]]; then
     kill -TERM -- "-$TUNNEL_PID" 2>/dev/null
+    # The plugin is a child of aws; wait for the entire owned process group.
+    for _ in $(seq 1 20); do
+      kill -0 -- "-$TUNNEL_PID" 2>/dev/null || break
+      sleep 0.1
+    done
+    kill -KILL -- "-$TUNNEL_PID" 2>/dev/null
     wait "$TUNNEL_PID" 2>/dev/null
   fi
   rm -rf "$TEMP_DIR"
@@ -61,7 +71,6 @@ trap 'exit 130' INT
 trap 'exit 143' TERM HUP
 
 echo "DAST target: EC2 $INSTANCE_ID port $PORT$PATH_SUFFIX"
-echo "Scanner location: GitHub runner; tunnel endpoint: 127.0.0.1:$LOCAL_PORT"
 echo '[1/3] Checking SSM connectivity and prepared ZAP image'
 CONNECTION=$(aws_ssm get-connection-status --target "$INSTANCE_ID" --query Status --output text)
 [[ "${CONNECTION,,}" == connected ]] || { echo "::error::SSM target is not connected: $CONNECTION"; exit 1; }
@@ -71,12 +80,20 @@ if [[ "${SCANNER_TOOLS_PREPARED:-false}" == true ]]; then
   }
 fi
 
-# Fail rather than accidentally scan a pre-existing listener on the local port.
-python3 - "$LOCAL_PORT" <<'PY'
+# Do not reuse a fixed port across scans or kill an unrelated listener.
+LOCAL_PORT=$(python3 - "$LOCAL_PORT" <<'PY'
 import socket, sys
 with socket.socket() as s:
-    s.bind(('127.0.0.1', int(sys.argv[1])))
+    try:
+        s.bind(('127.0.0.1', int(sys.argv[1])))
+    except OSError as exc:
+        print(f'::error::Cannot bind runner tunnel port {sys.argv[1]}: {exc}. '
+              'Unset DAST_LOCAL_PORT or set it to 0 for automatic selection.', file=sys.stderr)
+        raise SystemExit(1)
+    print(s.getsockname()[1])
 PY
+)
+echo "Scanner location: GitHub runner; tunnel endpoint: 127.0.0.1:$LOCAL_PORT"
 PARAMETERS=$(python3 - "$PORT" "$LOCAL_PORT" <<'PY'
 import json, sys
 print(json.dumps({'portNumber': [sys.argv[1]], 'localPortNumber': [sys.argv[2]]}))
@@ -91,13 +108,17 @@ TUNNEL_PID=$!
 TARGET_URL="http://127.0.0.1:$LOCAL_PORT$PATH_SUFFIX"
 READY_URL="http://127.0.0.1:$LOCAL_PORT$READY_PATH"
 READY=false
+: > "$TEMP_DIR/curl-error.txt"
 for ATTEMPT in $(seq 1 30); do
   if ! kill -0 "$TUNNEL_PID" 2>/dev/null; then
     cat "$REPORT_DIR/tunnel.log"
     echo '::error::SSM tunnel exited. Check StartSession document permissions and the Session Manager plugin.'
     exit 1
   fi
-  if curl --fail --silent --show-error --max-time 3 "$READY_URL" \
+  # Port selection releases its socket before the plugin starts. Require the
+  # plugin's bind acknowledgement so a competing listener cannot pass readiness.
+  if grep -Fq "Port $LOCAL_PORT opened for sessionId" "$REPORT_DIR/tunnel.log" && \
+    curl --fail --silent --show-error --max-time 3 "$READY_URL" \
     > "$REPORT_DIR/endpoint-response.txt" 2> "$TEMP_DIR/curl-error.txt"; then
     READY=true; break
   fi

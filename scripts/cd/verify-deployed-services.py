@@ -6,50 +6,36 @@ import os
 from pathlib import Path
 import subprocess
 import sys
-import yaml
 from importlib.util import module_from_spec, spec_from_file_location
 
 ROOT = Path(__file__).resolve().parents[2]
-spec = spec_from_file_location('docker_ssm', Path(__file__).with_name('docker-service-ssm.py'))
+spec = spec_from_file_location('docker_ssm', Path(__file__).with_name('docker-stack-ssm.py'))
 docker_ssm = module_from_spec(spec)
 spec.loader.exec_module(docker_ssm)
 
 
 def expected_services():
-    jobs = yaml.safe_load((ROOT / '.github/workflows/cicd.yml').read_text())['jobs']
-    return {'service-registry', 'api-gateway'} | {
-        service['name'] for service in jobs['deploy-backends']['strategy']['matrix']['service']}
+    return docker_ssm.expected_services()
 
 
 def states(directory, instance, commit):
-    result = []
-    for file in sorted(directory.glob('*.json')):
-        state = docker_ssm.validate(json.loads(file.read_text()), instance, commit)
-        if file.stem != state['SERVICE_NAME']:
-            raise ValueError('Unexpected deployment state filename')
-        for key in ('DEPLOYMENT_CHANGED', 'ROLLBACK_AVAILABLE', 'ROLLED_BACK'):
-            if not isinstance(state.get(key), bool):
-                raise ValueError('Missing deployment lifecycle flag: ' + key)
-        result.append(state)
-    if not result:
-        raise ValueError('No deployment states were downloaded')
-    return result
+    return docker_ssm.validate(json.loads((directory / 'release.json').read_text()), instance, commit)
 
 
 def verify(deployments, report_root):
-    names = {state['SERVICE_NAME'] for state in deployments if not state['ROLLED_BACK']}
-    if names != expected_services():
-        raise ValueError('Deployment barrier incomplete; required=' + str(sorted(expected_services()))
-                         + ', available=' + str(sorted(names)))
+    if (deployments.get('READY') is not True or deployments.get('ROLLED_BACK') is not False
+            or deployments.get('COMMAND_STATUS') != 'Success'
+            or deployments.get('COMMAND_RESPONSE_CODE', 0) != 0
+            or set(deployments['services']) != expected_services()):
+        raise ValueError('Complete release readiness barrier failed; no scans started')
     results = []
     # Run scans sequentially. Rollback starts only after all scans finish.
-    for state in sorted(deployments, key=lambda s: (
-            s['SERVICE_NAME'] == 'api-gateway', int(s['SERVICE_PORT']))):
-        name = state['SERVICE_NAME']
+    for name, item in sorted(deployments['services'].items(), key=lambda pair: (
+            pair[0] == 'api-gateway', int(pair[1]['port']))):
         directory = report_root / name
         directory.mkdir(parents=True, exist_ok=True)
-        env = {**os.environ, 'INSTANCE_ID': state['INSTANCE_ID'],
-               'DAST_SERVICE_NAME': name, 'DAST_PORT': state['SERVICE_PORT'],
+        env = {**os.environ, 'INSTANCE_ID': deployments['INSTANCE_ID'],
+               'DAST_SERVICE_NAME': name, 'DAST_PORT': item['port'],
                'DAST_REPORT_DIR': str(directory.resolve()),
                'DAST_SCAN_MODE': 'api' if name == 'transfer-service' else 'baseline',
                'DAST_PATH': '/' if name == 'service-registry' else '/upload.html' if name == 'api-gateway' else '/actuator/health',
@@ -68,27 +54,18 @@ def verify(deployments, report_root):
 
 
 def rollback(deployments, directory, report_root):
-    results = []
-    # Gateway restores first; the registry stays available until backends restore.
-    order = {'api-gateway': 0, 'service-registry': 2}
-    for state in sorted(deployments, key=lambda s: (order.get(s['SERVICE_NAME'], 1), -int(s['SERVICE_PORT']))):
-        name = state['SERVICE_NAME']
-        if state['ROLLED_BACK'] or not state['DEPLOYMENT_CHANGED']:
-            status = 'UNCHANGED_OR_ALREADY_RESTORED'
-        elif not state['ROLLBACK_AVAILABLE']:
-            status = 'NO_PREVIOUS_DEPLOYMENT'
-        else:
-            try:
-                restored = docker_ssm.lifecycle('rollback', state)
-                (directory / (name + '.json')).write_text(json.dumps(restored, indent=2) + '\n')
-                status = 'RESTORED'
-            except Exception as error:
-                print('Rollback failed for ' + name + ': ' + str(error), file=sys.stderr)
-                status = 'RESTORE_FAILED'
-        print(name + ': ' + status, flush=True)
-        results.append({'service': name, 'status': status})
-    (report_root / 'rollback-summary.json').write_text(json.dumps(results, indent=2) + '\n')
-    return int(any(result['status'] == 'RESTORE_FAILED' for result in results))
+    if deployments.get('ROLLED_BACK'):
+        result = deployments
+        code = 0
+    elif 'changes' in deployments and not any(c['changed'] for c in deployments['changes'].values()):
+        result = {**deployments, 'recovery': {'release': 'UNCHANGED'}}
+        code = 0
+    else:
+        result = docker_ssm.lifecycle('rollback', deployments)
+        (directory / 'release.json').write_text(json.dumps(result, indent=2) + '\n')
+        code = int(result.get('COMMAND_STATUS') != 'Success' or bool(result.get('recovery_error')))
+    (report_root / 'rollback-summary.json').write_text(json.dumps(result, indent=2) + '\n')
+    return code
 
 
 def main():

@@ -1,0 +1,145 @@
+name: Build and scan one MMIV image
+'on':
+  workflow_call:
+    inputs:
+      service-name:
+        required: true
+        type: string
+      service-path:
+        required: true
+        type: string
+      service-port:
+        required: true
+        type: string
+permissions:
+  contents: read
+  id-token: write
+env:
+  AWS_REGION: ap-southeast-1
+  ECR_REPOSITORY: mmiv
+  MMIV_BUCKET_NAME: media-migration-dev-landing
+jobs:
+  build:
+    name: ${{ inputs.service-name }}
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v5
+    - name: Install Trivy
+      env:
+        TRIVY_VERSION: 0.74.0
+        TRIVY_SHA256: cf1e32ec8d4d8823e023096a28cadb14f5b5123ce03f201fb633c5b76aa712dd
+      run: |
+        PACKAGE="trivy_${TRIVY_VERSION}_Linux-64bit.deb"
+        curl -fsSLo "/tmp/${PACKAGE}" \
+          "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/${PACKAGE}"
+        echo "${TRIVY_SHA256}  /tmp/${PACKAGE}" | sha256sum --check --strict
+        sudo apt-get install --yes "/tmp/${PACKAGE}"
+    - name: Set up JDK 25
+      uses: actions/setup-java@v5
+      with:
+        java-version: '25'
+        distribution: temurin
+        cache: maven
+    - name: Build and test
+      working-directory: ${{ inputs.service-path }}
+      run: mvn -B clean verify
+    - name: Verify Docker build JAR
+      working-directory: ${{ inputs.service-path }}
+      env:
+        SERVICE_NAME: ${{ inputs.service-name }}
+      run: |
+        set -euo pipefail
+        JAR="target/${SERVICE_NAME}.jar"
+        if [ ! -s "$JAR" ]; then
+          echo "::error::Expected Maven output is missing or empty: $JAR"
+          exit 1
+        fi
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v6.3.0
+      with:
+        role-to-assume: arn:aws:iam::275069781906:role/GitHubActions-MMIV-App
+        aws-region: ${{ env.AWS_REGION }}
+    - name: Verify AWS connection
+      run: aws sts get-caller-identity
+    - name: Login to Amazon ECR
+      id: ecr
+      uses: aws-actions/amazon-ecr-login@v2
+    - name: Build or reuse immutable Docker image
+      id: image
+      env:
+        ECR_REGISTRY: ${{ steps.ecr.outputs.registry }}
+        IMAGE_TAG: ${{ inputs.service-name }}-${{ github.sha }}
+      run: |
+        set -euo pipefail
+
+        IMAGE="$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
+
+        EXISTING=$(aws ecr batch-get-image --repository-name "$ECR_REPOSITORY" \
+          --image-ids "imageTag=$IMAGE_TAG" \
+          --query '{images:images[].imageId,failures:failures[].failureCode}' --output json)
+        IMAGE_EXISTS=$(python3 -c '
+        import json, sys
+        result = json.load(sys.stdin)
+        if result["images"] and not result["failures"]:
+            print("true")
+        elif not result["images"] and result["failures"] == ["ImageNotFound"]:
+            print("false")
+        else:
+            sys.exit("Unexpected ECR response; refusing to overwrite an image")
+        ' <<< "$EXISTING")
+        if [ "$IMAGE_EXISTS" = true ]; then
+          docker pull "$IMAGE"
+        else
+          docker build \
+            -f "${{ inputs.service-path }}/Dockerfile" \
+            -t "$IMAGE" \
+            "${{ inputs.service-path }}"
+        fi
+
+        mkdir -p .ci
+        printf '%s\n' "$IMAGE" > .ci/image-ref
+
+        echo "IMAGE=$IMAGE" >> "$GITHUB_ENV"
+        echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
+        echo "registry=$ECR_REGISTRY" >> "$GITHUB_OUTPUT"
+        echo "image_exists=$IMAGE_EXISTS" >> "$GITHUB_OUTPUT"
+    - name: Scan Docker image
+      run: bash scripts/ci/scan-image.sh .
+    - name: Push Docker image
+      if: steps.image.outputs.image_exists != 'true'
+      run: docker push "$IMAGE"
+    - name: Record immutable image
+      env:
+        SERVICE_NAME: ${{ inputs.service-name }}
+        SERVICE_PORT: ${{ inputs.service-port }}
+        SERVICE_IMAGE: ${{ steps.image.outputs.image }}
+        ECR_REGISTRY: ${{ steps.image.outputs.registry }}
+      run: |-
+        python3 - <<'PY_IMAGE'
+        import json, os
+        from pathlib import Path
+        path = Path('.ci/images') / (os.environ['SERVICE_NAME'] + '.json')
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps({key: os.environ[key] for key in
+            ('SERVICE_NAME', 'SERVICE_PORT', 'SERVICE_IMAGE', 'ECR_REGISTRY', 'GITHUB_SHA')}) + '\n')
+        PY_IMAGE
+    - name: Upload image manifest
+      uses: actions/upload-artifact@v6
+      with:
+        name: release-image-${{ inputs.service-name }}-${{ github.sha }}
+        path: .ci/images/${{ inputs.service-name }}.json
+        include-hidden-files: true
+        if-no-files-found: error
+        overwrite: true
+    - name: Upload image evidence
+      if: ${{ always() }}
+      uses: actions/upload-artifact@v6
+      with:
+        name: image-evidence-${{ inputs.service-name }}-${{ github.sha }}
+        path: |-
+          .ci/reports/**
+          .ci/image-ref
+        include-hidden-files: true
+        if-no-files-found: warn
+        overwrite: true

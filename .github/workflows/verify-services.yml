@@ -32,9 +32,8 @@ jobs:
     - name: Download deployment state
       uses: actions/download-artifact@v6
       with:
-        pattern: deployment-state-*-${{ github.sha }}
+        name: release-state-${{ github.sha }}
         path: .ci/deployments
-        merge-multiple: true
     - name: Prepare scanner tools once
       if: ${{ inputs.deployment-ready }}
       run: |
@@ -54,7 +53,7 @@ jobs:
         python3 scripts/cd/verify-deployed-services.py verify --instance-id "$INSTANCE_ID" --commit "$GITHUB_SHA"
     - name: Roll back changed deployments after verification or rollout failure
       if: ${{ failure() }}
-      timeout-minutes: 150
+      timeout-minutes: 100
       env:
         INSTANCE_ID: ${{ inputs.instance-id }}
       run: python3 scripts/cd/verify-deployed-services.py rollback --instance-id "$INSTANCE_ID" --commit "$GITHUB_SHA"

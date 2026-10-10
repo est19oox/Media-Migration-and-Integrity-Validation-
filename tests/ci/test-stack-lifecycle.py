@@ -1,0 +1,384 @@
+#!/usr/bin/env python3
+"""Simulate one Compose stack, release recovery and SSM result polling."""
+import importlib.util
+import io
+import json
+import os
+from pathlib import Path
+import subprocess
+import tempfile
+import unittest
+import yaml
+from types import SimpleNamespace
+from urllib.error import HTTPError
+from unittest.mock import patch
+
+ROOT = Path(__file__).resolve().parents[2]
+def module(name, filename):
+    spec = importlib.util.spec_from_file_location(name, ROOT / 'scripts/cd' / filename)
+    result = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(result)
+    return result
+remote = module('stack_remote', 'docker-stack-remote.py')
+verification = module('verification', 'verify-deployed-services.py')
+ssm = verification.docker_ssm
+
+class StackLifecycleTest(unittest.TestCase):
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temporary.cleanup)
+        self.root = Path(self.temporary.name)
+        self.containers, self.configs, self.images, self.calls = {}, {}, set(), []
+        self.generation = 0
+        self.state = {'INSTANCE_ID': 'i-test', 'GITHUB_SHA': 'first', 'RELEASE_ID': 'first-1',
+                      'ECR_REGISTRY': 'registry', 'AWS_REGION': 'ap-southeast-1',
+                      'MMIV_BUCKET_NAME': 'test', 'ORACLE_CONFIG_STAGED': False,
+                      'services': {n: {'image': 'registry/mmiv:' + n + '-first', 'port': p}
+                                   for n, p in ssm.PORTS.items() if n in
+                                   ('service-registry', 'transfer-service', 'integrity-service', 'api-gateway')}}
+        self.addCleanup(patch.stopall)
+        patch.object(remote, 'Path', side_effect=lambda path: self.root / str(path).lstrip('/')).start()
+        patch.object(remote, 'command', side_effect=self.command).start()
+        patch.object(remote, 'healthy').start()
+        patch.object(remote, 'registered').start()
+        patch.object(remote.subprocess, 'run', return_value=SimpleNamespace(returncode=0)).start()
+
+    def command(self, *args, check=True, timeout=120):
+        self.calls.append(args)
+        result = subprocess.CompletedProcess(args, 0, '', '')
+        if args[:2] == ('docker', 'inspect'):
+            if args[2] in self.containers:
+                result.stdout = json.dumps([self.containers[args[2]]])
+            else:
+                result.returncode, result.stderr = 1, 'No such object'
+        elif args[:3] == ('docker', 'image', 'inspect'):
+            result.returncode = int(args[3] not in self.images)
+        elif args[:2] == ('docker', 'pull'):
+            self.images.add(args[2])
+        elif args[:2] == ('docker', 'rm'):
+            self.containers.pop(args[-1], None)
+            self.configs.pop(args[-1], None)
+        elif args[:3] == ('aws', 'ecr', 'get-login-password'):
+            result.stdout = 'private-password'
+        elif args[:2] == ('docker', 'compose'):
+            config = json.loads(Path(args[args.index('-f') + 1]).read_text())
+            if 'config' in args:
+                result.stdout = json.dumps(config)
+            else:
+                names = [name for name in args[args.index('up') + 1:] if name in config['services']]
+                for name in names:
+                    service = config['services'][name]
+                    if service != self.configs.get(name) or '--force-recreate' in args or name not in self.containers:
+                        self.generation += 1
+                        self.configs[name] = service
+                        self.containers[name] = {'Id': str(self.generation),
+                            'Config': {'Image': service['image'], 'Labels': {'com.docker.compose.project': 'mmiv-stack'}},
+                            'NetworkSettings': {'Networks': {'mmiv-backend': {'IPAddress': '172.20.0.' + str(self.generation)}}}}
+        if check and result.returncode:
+            raise subprocess.CalledProcessError(result.returncode, args)
+        return result
+
+    def update(self, names=None, release='second-1'):
+        self.state['RELEASE_ID'] = release
+        for name in names or self.state['services']:
+            self.state['services'][name]['image'] = 'registry/mmiv:' + name + '-second'
+
+    def test_registry_first_backends_together_gateway_last(self):
+        result = remote.run('deploy', dict(self.state))
+        self.assertTrue(result['READY'])
+        launches = [c for c in self.calls if c[:2] == ('docker', 'compose') and 'up' in c]
+        groups = [[n for n in c if n in self.state['services']] for c in launches]
+        self.assertEqual(groups, [['service-registry'], ['integrity-service', 'transfer-service'], ['api-gateway']])
+        self.assertTrue(all(c[c.index('-p') + 1] == 'mmiv-stack' for c in launches))
+        self.assertEqual(sum(c[:3] == ('aws', 'ecr', 'get-login-password') for c in self.calls), 1)
+
+    def test_repeat_preserves_container_ids_and_original_snapshot(self):
+        remote.run('deploy', dict(self.state))
+        identities = {n: c['Id'] for n, c in self.containers.items()}
+        snapshot = self.root / 'opt/mmiv/stack/releases/first-1/rollback.json'
+        original = snapshot.read_text()
+        remote.run('deploy', dict(self.state))
+        self.assertEqual(snapshot.read_text(), original)
+        self.state['RELEASE_ID'] = 'first-2'
+        repeated = remote.run('deploy', dict(self.state))
+        self.assertFalse(any(change['changed'] for change in repeated['changes'].values()))
+        self.assertEqual(identities, {n: c['Id'] for n, c in self.containers.items()})
+
+    def test_partial_update_and_rollback_keep_unchanged_containers(self):
+        remote.run('deploy', dict(self.state))
+        identities = {n: c['Id'] for n, c in self.containers.items()}
+        self.update(['transfer-service'])
+        result = remote.run('deploy', dict(self.state))
+        self.assertEqual([n for n, c in result['changes'].items() if c['changed']], ['transfer-service'])
+        restored = remote.run('rollback', result)
+        self.assertTrue(restored['ROLLED_BACK'])
+        self.assertEqual(self.containers['transfer-service']['Config']['Image'], 'registry/mmiv:transfer-service-first')
+        for name in identities.keys() - {'transfer-service'}:
+            self.assertEqual(self.containers[name]['Id'], identities[name])
+
+    def test_backend_failure_restores_release_before_gateway_update(self):
+        remote.run('deploy', dict(self.state))
+        gateway_id = self.containers['api-gateway']['Id']
+        self.update()
+        def health(port):
+            if port == '8082' and self.containers['integrity-service']['Config']['Image'].endswith('-second'):
+                raise RuntimeError('unhealthy')
+        with patch.object(remote, 'healthy', side_effect=health):
+            result = remote.run('deploy', dict(self.state))
+        self.assertFalse(result['READY'])
+        self.assertTrue(result['ROLLED_BACK'])
+        self.assertEqual(self.containers['api-gateway']['Id'], gateway_id)
+        self.assertTrue(all(c['Config']['Image'].endswith('-first') for c in self.containers.values()))
+
+    def test_first_failed_release_removes_new_containers(self):
+        with patch.object(remote, 'registered', side_effect=RuntimeError('not registered')):
+            result = remote.run('deploy', dict(self.state))
+        self.assertTrue(result['ROLLED_BACK'])
+        self.assertFalse(self.containers)
+        self.assertTrue(all(value == 'REMOVED_NEW_SERVICE' for value in result['recovery'].values()))
+
+    def test_gateway_failure_restores_all_changed_images(self):
+        remote.run('deploy', dict(self.state))
+        self.update()
+        def register(name, *args):
+            if name == 'api-gateway' and self.containers[name]['Config']['Image'].endswith('-second'):
+                raise RuntimeError('routes not ready')
+        with patch.object(remote, 'registered', side_effect=register):
+            result = remote.run('deploy', dict(self.state))
+        self.assertTrue(result['ROLLED_BACK'])
+        self.assertTrue(all(c['Config']['Image'].endswith('-first') for c in self.containers.values()))
+        self.assertEqual(list(result['recovery'])[0], 'api-gateway')
+
+    def test_oracle_env_update_recreates_only_integrity_and_restores_secret(self):
+        staged = self.root / ('etc/mmiv/next-integrity-' + self.state['RELEASE_ID'] + '.env')
+        staged.parent.mkdir(parents=True)
+        staged.write_text('SECRET=first\n')
+        self.state['ORACLE_CONFIG_STAGED'] = True
+        remote.run('deploy', dict(self.state))
+        identities = {n: c['Id'] for n, c in self.containers.items()}
+        self.state['RELEASE_ID'] = 'first-env-2'
+        staged = self.root / 'etc/mmiv/next-integrity-first-env-2.env'
+        staged.write_text('SECRET=second\n')
+        result = remote.run('deploy', dict(self.state))
+        self.assertNotEqual(self.containers['integrity-service']['Id'], identities['integrity-service'])
+        for name in identities.keys() - {'integrity-service'}:
+            self.assertEqual(self.containers[name]['Id'], identities[name])
+        self.assertFalse(staged.exists())
+        remote.run('rollback', result)
+        self.assertEqual((self.root / 'etc/mmiv/integrity.env').read_text(), 'SECRET=first\n')
+
+    def test_pull_failure_changes_no_runtime_and_cleans_staged_secret(self):
+        remote.run('deploy', dict(self.state))
+        identities = {n: c['Id'] for n, c in self.containers.items()}
+        self.update()
+        staged = self.root / ('etc/mmiv/next-integrity-' + self.state['RELEASE_ID'] + '.env')
+        staged.write_text('SECRET=private\n')
+        original = self.command
+        def fail(*args, **kwargs):
+            if args[:2] == ('docker', 'pull'):
+                raise subprocess.CalledProcessError(1, args)
+            return original(*args, **kwargs)
+        with patch.object(remote, 'command', side_effect=fail):
+            with self.assertRaises(subprocess.CalledProcessError):
+                remote.run('deploy', dict(self.state))
+        self.assertEqual(identities, {n: c['Id'] for n, c in self.containers.items()})
+        self.assertFalse(staged.exists())
+
+    def test_failed_recovery_can_resume_from_the_release_journal(self):
+        remote.run('deploy', dict(self.state))
+        self.update()
+        def health(port):
+            if port == '8080':
+                raise RuntimeError('temporarily unavailable')
+        with patch.object(remote, 'healthy', side_effect=health):
+            failed = remote.run('deploy', dict(self.state))
+        self.assertFalse(failed['READY'])
+        self.assertIn('recovery_error', failed)
+        recovered = remote.run('rollback', failed)
+        self.assertTrue(recovered['ROLLED_BACK'])
+        self.assertNotIn('recovery_error', recovered)
+        self.assertTrue(all(c['Config']['Image'].endswith('-first') for c in self.containers.values()))
+
+    def test_next_release_recovers_interrupted_update_before_capturing_baseline(self):
+        remote.run('deploy', dict(self.state))
+        self.update()
+        remote.run('deploy', dict(self.state))
+        current_path = self.root / 'opt/mmiv/stack/current-release.json'
+        current = json.loads(current_path.read_text())
+        current['READY'] = False
+        current_path.write_text(json.dumps(current))
+        self.state['RELEASE_ID'] = 'third-1'
+        def health(port):
+            if port == '8082' and self.containers['integrity-service']['Config']['Image'].endswith('-second'):
+                raise RuntimeError('unhealthy')
+        with patch.object(remote, 'healthy', side_effect=health):
+            result = remote.run('deploy', dict(self.state))
+        self.assertTrue(result['ROLLED_BACK'])
+        self.assertTrue(all(c['Config']['Image'].endswith('-first') for c in self.containers.values()))
+
+    def test_migrates_earlier_service_projects(self):
+        remote.run('deploy', dict(self.state))
+        self.state['RELEASE_ID'] = 'migration-1'
+        for name, container in self.containers.items():
+            container['Config']['Labels']['com.docker.compose.project'] = 'mmiv-' + name
+        result = remote.run('deploy', dict(self.state))
+        self.assertTrue(result['READY'])
+        self.assertTrue(all(c['Config']['Labels']['com.docker.compose.project'] == 'mmiv-stack'
+                            for c in self.containers.values()))
+
+    def test_rejects_foreign_compose_owner(self):
+        remote.run('deploy', dict(self.state))
+        self.state['RELEASE_ID'] = 'foreign-1'
+        self.containers['transfer-service']['Config']['Labels']['com.docker.compose.project'] = 'other'
+        with self.assertRaises(RuntimeError):
+            remote.run('deploy', dict(self.state))
+
+    def test_stale_rollback_cannot_replace_newer_release(self):
+        old = remote.run('deploy', dict(self.state))
+        self.update()
+        remote.run('deploy', dict(self.state))
+        with self.assertRaises(RuntimeError):
+            remote.run('rollback', old)
+        self.assertTrue(all(c['Config']['Image'].endswith('-second') for c in self.containers.values()))
+
+class RemoteReadinessTest(unittest.TestCase):
+    def test_gateway_retries_routes_until_transfer_is_discovered(self):
+        calls = []
+        attempts = 0
+        def response(request, **kwargs):
+            nonlocal attempts
+            url = request.full_url if hasattr(request, 'full_url') else request
+            calls.append(url)
+            if '/eureka/apps/' in url:
+                attempts += 1
+                return io.BytesIO(json.dumps({'application': {'instance': {'status': 'UP'}}}).encode())
+            if attempts == 1:
+                raise HTTPError(url, 503, 'not discovered', {}, None)
+            if url.endswith('/content'):
+                raise HTTPError(url, 400, 'invalid id', {}, None)
+            result = io.BytesIO(b'page')
+            result.status = 200
+            return result
+        with patch.object(remote, 'urlopen', side_effect=response), patch.object(remote.time, 'sleep') as sleep:
+            remote.registered('api-gateway')
+            self.assertEqual(attempts, 2)
+            sleep.assert_called_once_with(5)
+        self.assertTrue(any('/files.html' in url for url in calls))
+        self.assertTrue(any('/content' in url for url in calls))
+
+    def test_backend_not_up_fails_after_retries(self):
+        with patch.object(remote, 'urlopen', side_effect=lambda *a, **k: io.BytesIO(
+                b'{"application":{"instance":[{"status":"DOWN"}]}}')), \
+                patch.object(remote.time, 'sleep') as sleep:
+            with self.assertRaises(RuntimeError):
+                remote.registered('transfer-service')
+            self.assertEqual(sleep.call_count, 29)
+
+
+    def test_stale_up_entry_does_not_satisfy_current_container_readiness(self):
+        response = {'application': {'instance': [
+            {'status': 'UP', 'ipAddr': '172.20.0.2', 'port': {'$': 8081}},
+            {'status': 'DOWN', 'ipAddr': '172.20.0.3', 'port': {'$': 8081}}]}}
+        with patch.object(remote, 'urlopen', side_effect=lambda *a, **k: io.BytesIO(json.dumps(response).encode())), \
+                patch.object(remote.time, 'sleep'):
+            with self.assertRaises(RuntimeError):
+                remote.registered('transfer-service', '172.20.0.3', '8081')
+        response['application']['instance'][1]['status'] = 'UP'
+        with patch.object(remote, 'urlopen', side_effect=lambda *a, **k: io.BytesIO(json.dumps(response).encode())):
+            remote.registered('transfer-service', '172.20.0.3', '8081')
+
+
+
+class RunnerAndBarrierTest(unittest.TestCase):
+    def state(self):
+        return {'INSTANCE_ID': 'i-test', 'GITHUB_SHA': 'commit', 'RELEASE_ID': 'commit-1',
+                'ECR_REGISTRY': 'registry', 'READY': True, 'ROLLED_BACK': False, 'COMMAND_STATUS': 'Success',
+                'services': {n: {'image': 'registry/mmiv:' + n + '-commit', 'port': ssm.PORTS[n]}
+                             for n in ssm.expected_services()}}
+
+    def test_incomplete_or_failed_release_starts_no_scans(self):
+        for mode in ('missing', 'failed', 'restored'):
+            state = self.state()
+            if mode == 'missing': state['services'].pop('api-gateway')
+            if mode == 'failed': state['READY'] = False
+            if mode == 'restored': state['ROLLED_BACK'] = True
+            with patch.object(verification.subprocess, 'Popen') as scan:
+                with self.assertRaises(ValueError): verification.verify(state, Path('/unused'))
+                scan.assert_not_called()
+
+    def test_failed_scan_continues_other_scans_and_gateway_is_last(self):
+        names = []
+        def launch(*args, **kwargs):
+            names.append(kwargs['env']['DAST_SERVICE_NAME'])
+            return SimpleNamespace(stdout=['scanner output\n'], wait=lambda: int(len(names) == 1))
+        with tempfile.TemporaryDirectory() as directory, \
+                patch.object(verification.subprocess, 'Popen', side_effect=launch), \
+                patch.object(ssm, 'lifecycle') as restore:
+            self.assertEqual(verification.verify(self.state(), Path(directory)), 1)
+            self.assertEqual(names[-1], 'api-gateway')
+            self.assertEqual(set(names), ssm.expected_services())
+            restore.assert_not_called()
+
+    def test_rollback_uses_one_ssm_command_and_skips_already_restored(self):
+        state = self.state()
+        with tempfile.TemporaryDirectory() as directory, patch.object(ssm, 'lifecycle',
+                return_value={**state, 'ROLLED_BACK': True}) as lifecycle:
+            path = Path(directory)
+            self.assertEqual(verification.rollback(state, path, path), 0)
+            lifecycle.assert_called_once_with('rollback', state)
+            lifecycle.reset_mock()
+            state['ROLLED_BACK'] = True
+            self.assertEqual(verification.rollback(state, path, path), 0)
+            lifecycle.assert_not_called()
+
+    def test_unchanged_release_uses_no_rollback_command(self):
+        state = self.state()
+        state['changes'] = {name: {'changed': False} for name in state['services']}
+        with tempfile.TemporaryDirectory() as directory, patch.object(ssm, 'lifecycle') as lifecycle:
+            self.assertEqual(verification.rollback(state, Path(directory), Path(directory)), 0)
+            lifecycle.assert_not_called()
+
+    def test_build_workflow_image_records_feed_release_preparation(self):
+        workflow = yaml.safe_load((ROOT / '.github/workflows/build-service.yml').read_text())
+        record = next(step for step in workflow['jobs']['build']['steps']
+                      if step['name'] == 'Record immutable image')['run']
+        with tempfile.TemporaryDirectory() as directory:
+            for name, item in self.state()['services'].items():
+                result = subprocess.run(['bash', '-c', record], cwd=directory,
+                    env={**os.environ, 'SERVICE_NAME': name, 'SERVICE_PORT': item['port'],
+                         'SERVICE_IMAGE': item['image'], 'ECR_REGISTRY': 'registry', 'GITHUB_SHA': 'commit'},
+                    capture_output=True, text=True)
+                self.assertEqual(result.returncode, 0, result.stderr)
+            state = ssm.prepare(Path(directory) / '.ci/images', 'i-test', 'commit', 'commit-1')
+            self.assertEqual(set(state['services']), ssm.expected_services())
+
+    def test_image_manifest_barrier_rejects_missing_or_stale_images(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory)
+            for name, item in self.state()['services'].items():
+                (path / (name + '.json')).write_text(json.dumps({'SERVICE_NAME': name, 'SERVICE_PORT': item['port'],
+                    'SERVICE_IMAGE': item['image'], 'GITHUB_SHA': 'commit', 'ECR_REGISTRY': 'registry'}))
+            self.assertEqual(set(ssm.prepare(path, 'i-test', 'commit', 'commit-1')['services']), ssm.expected_services())
+            (path / 'api-gateway.json').unlink()
+            with self.assertRaises(ValueError): ssm.prepare(path, 'i-test', 'commit', 'commit-1')
+
+    def test_ssm_eventual_visibility_and_failed_rollout_preserve_release_state(self):
+        state = self.state()
+        state.update(READY=False, ROLLED_BACK=True)
+        results = [subprocess.CompletedProcess([], 0, 'command-id', ''),
+                   subprocess.CompletedProcess([], 1, '', 'InvocationDoesNotExist'),
+                   subprocess.CompletedProcess([], 0, '{"Status":"InProgress"}', ''),
+                   subprocess.CompletedProcess([], 0, json.dumps({'Status': 'Failed', 'ResponseCode': 1,
+                       'StandardOutputContent': 'MMIV_RELEASE_STATE=' + json.dumps(state)}), '')]
+        with tempfile.TemporaryDirectory() as directory, patch.object(ssm, 'aws', side_effect=results), \
+                patch.object(ssm.time, 'sleep') as sleep:
+            original = ssm.Path
+            with patch.object(ssm, 'Path', side_effect=lambda value:
+                    Path(directory) / value if str(value).startswith('.ci/') else original(value)):
+                result = ssm.lifecycle('deploy', state)
+            self.assertTrue(result['ROLLED_BACK'])
+            self.assertEqual(result['COMMAND_STATUS'], 'Failed')
+            self.assertEqual([call.args[0] for call in sleep.call_args_list], [1, 1])
+
+if __name__ == '__main__':
+    unittest.main()

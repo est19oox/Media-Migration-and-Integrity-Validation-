@@ -51,7 +51,7 @@ class DeploymentConfigurationTest(unittest.TestCase):
         config = json.loads((ROOT / 'tests/api/endpoints.json').read_text())
         workflow = yaml.safe_load((ROOT / '.github/workflows/cicd.yml').read_text())
         services = ['service-registry', 'api-gateway', 'integrity-service'] + [s['name'] for s in
-            workflow['jobs']['deploy-backends']['strategy']['matrix']['service']]
+            workflow['jobs']['build-images']['strategy']['matrix']['service']]
         for service in services:
             self.assertIn(service, config['services'])
             self.assertTrue(config['common'] + config['services'][service])
@@ -111,8 +111,8 @@ if sys.argv[1:3] == ['show', '-json']:
                 self.assertEqual(result.returncode, int('delete' in actions))
 
     def test_workflow_reuses_existing_images_and_rejects_registry_errors(self):
-        workflow = yaml.safe_load((ROOT / '.github/workflows/deploy-service.yml').read_text())
-        step = next(s for s in workflow['jobs']['deploy']['steps'] if s.get('id') == 'image')
+        workflow = yaml.safe_load((ROOT / '.github/workflows/build-service.yml').read_text())
+        step = next(s for s in workflow['jobs']['build']['steps'] if s.get('id') == 'image')
         script = step['run'].replace('${{ inputs.service-path }}', 'services/transfer-service')
         with tempfile.TemporaryDirectory() as temporary:
             directory = Path(temporary)

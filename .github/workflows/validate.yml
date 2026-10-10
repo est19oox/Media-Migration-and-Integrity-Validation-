@@ -71,7 +71,7 @@ jobs:
         run: |
           python3 -m pip install PyYAML
           python3 tests/ci/test-cd-contract.py
-          python3 tests/ci/test-docker-lifecycle.py
+          python3 tests/ci/test-stack-lifecycle.py
           node --test tests/ci/test-upload-page.cjs
 
       - name: Build and test services

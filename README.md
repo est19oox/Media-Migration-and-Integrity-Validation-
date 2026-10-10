@@ -8,6 +8,8 @@ MMIV is a microservice-based system for discovering, transferring, validating, a
 
 | Service | Port | Responsibility |
 | --- | ---: | --- |
+| Service Registry | 8761 | Eureka service registration and discovery |
+| API Gateway | 8080 | Route browser and API requests to backend services |
 | Transfer | 8081 | Transfer media between storage locations |
 | Discovery | 8085 | Discover media and resources |
 | User Access | 8083 | Manage and check access permissions |
@@ -45,4 +47,4 @@ main is preserved; its CD entry is disabled pending Oracle/runtime configuration
 
 ## Current Docker deployment
 
-Terraform → idempotent host preparation → registry → enabled backend images in parallel → API Gateway last → functional tests and DAST. Docker Compose over SSM performs service rollout and rollback; Ansible is used only for host preparation and optional Oracle configuration. See [Docker CD process](docs/ci-cd/docker-deployment.md).
+Terraform and parallel image builds → idempotent host preparation → one Compose stack deployment through SSM: Registry first, backend group next, API Gateway last → functional tests and DAST. One release manifest records the image set and drives rollback. Ansible is used only for host preparation and optional Oracle configuration, sharing one CD installation. See [Docker CD process](docs/ci-cd/docker-deployment.md).

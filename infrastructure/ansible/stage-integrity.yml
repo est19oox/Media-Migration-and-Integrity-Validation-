@@ -5,6 +5,10 @@
   become: true
   gather_facts: false
   tasks:
+    - name: Require a safe release identifier
+      ansible.builtin.assert:
+        that:
+          - lookup('env', 'MMIV_RELEASE_ID') is match('^[a-zA-Z0-9-]{1,120}$')
     - name: Require complete single-line Oracle settings
       ansible.builtin.assert:
         that:
@@ -24,7 +28,7 @@
         mode: '0700'
     - name: Stage configuration without replacing the active environment
       ansible.builtin.copy:
-        dest: /etc/mmiv/next-integrity.env
+        dest: "/etc/mmiv/next-integrity-{{ lookup('env', 'MMIV_RELEASE_ID') }}.env"
         mode: '0600'
         content: |
           SPRING_PROFILES_ACTIVE=oracle

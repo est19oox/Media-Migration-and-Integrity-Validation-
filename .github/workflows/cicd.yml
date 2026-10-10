@@ -15,7 +15,7 @@ on:
       - 'tests/api/**'
       - 'tests/ci/**'
       - '.github/workflows/cicd.yml'
-      - '.github/workflows/deploy-service.yml'
+      - '.github/workflows/build-service.yml'
       - '.github/workflows/verify-services.yml'
   workflow_dispatch:
 
@@ -163,7 +163,7 @@ jobs:
         run: |
           python3 -m pip install PyYAML
           python3 tests/ci/test-cd-contract.py
-          python3 tests/ci/test-docker-lifecycle.py
+          python3 tests/ci/test-stack-lifecycle.py
           node --test tests/ci/test-upload-page.cjs
 
       - name: Build and test services
@@ -293,9 +293,13 @@ jobs:
     name: Prepare shared EC2 host
     needs:
       - terraform
+      - build-images
     runs-on: ubuntu-latest
     outputs:
       instance_id: ${{ steps.deployment.outputs.instance_id }}
+      oracle_config_staged: ${{ steps.oracle_config.outcome == 'success' }}
+    env:
+      ORACLE_CONFIG_REQUESTED: ${{ secrets.INTEGRITY_DB_URL != '' || secrets.INTEGRITY_DB_USERNAME != '' || secrets.INTEGRITY_DB_PASSWORD != '' }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
@@ -341,28 +345,27 @@ jobs:
       - name: Prepare shared EC2 host
         working-directory: infrastructure/ansible
         run: ansible-playbook -i inventory/ci.generated.ini setup-host.yml
-  deploy-registry:
-    name: Deploy registry
-    needs:
-      - setup-host
-    uses: ./.github/workflows/deploy-service.yml
-    secrets: inherit
-    with:
-      service-name: service-registry
-      service-path: services/service-registry
-      service-port: '8761'
-      instance-id: ${{ needs.setup-host.outputs.instance_id }}
-      host-ready: true
-  deploy-backends:
-    name: Deploy backend services
-    needs:
-      - setup-host
-      - deploy-registry
+      - name: Stage optional Oracle configuration
+        id: oracle_config
+        if: ${{ env.ORACLE_CONFIG_REQUESTED == 'true' }}
+        working-directory: infrastructure/ansible
+        env:
+          MMIV_RELEASE_ID: ${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          INTEGRITY_DB_URL: ${{ secrets.INTEGRITY_DB_URL }}
+          INTEGRITY_DB_USERNAME: ${{ secrets.INTEGRITY_DB_USERNAME }}
+          INTEGRITY_DB_PASSWORD: ${{ secrets.INTEGRITY_DB_PASSWORD }}
+        run: ansible-playbook -i inventory/ci.generated.ini stage-integrity.yml
+  build-images:
+    name: Build and scan release images
+    needs: [quality_gates]
     strategy:
       fail-fast: false
       max-parallel: 5
       matrix:
         service:
+          - name: service-registry
+            path: services/service-registry
+            port: '8761'
           - name: transfer-service
             path: services/transfer-service
             port: '8081'
@@ -375,41 +378,69 @@ jobs:
 #          - name: reporting-service
 #            path: services/reporting-service
 #            port: '8084'
-          # Main's Discovery Service requires Oracle credentials and DISCOVERY_ROOT.
-          # Enable deployment after providing those settings to its container.
-          # - name: discovery-service
-          #   path: services/discovery-service
-          #   port: '8085'
-    uses: ./.github/workflows/deploy-service.yml
-    secrets: inherit
+          # Configure Oracle/media settings and Eureka before enabling Discovery.
+#          - name: discovery-service
+#            path: services/discovery-service
+#            port: '8085'
+          - name: api-gateway
+            path: services/api-gateway
+            port: '8080'
+    uses: ./.github/workflows/build-service.yml
     with:
       service-name: ${{ matrix.service.name }}
       service-path: ${{ matrix.service.path }}
       service-port: ${{ matrix.service.port }}
-      instance-id: ${{ needs.setup-host.outputs.instance_id }}
-      host-ready: true
-  deploy-gateway:
-    name: Deploy API Gateway
-    needs:
-      - setup-host
-      - deploy-backends
-    uses: ./.github/workflows/deploy-service.yml
-    secrets: inherit
-    with:
-      service-name: api-gateway
-      service-path: services/api-gateway
-      service-port: '8080'
-      instance-id: ${{ needs.setup-host.outputs.instance_id }}
-      host-ready: true
+  deploy-stack:
+    name: Deploy complete Docker release
+    needs: [setup-host, build-images]
+    runs-on: ubuntu-latest
+    timeout-minutes: 100
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v6.3.0
+        with:
+          role-to-assume: arn:aws:iam::275069781906:role/GitHubActions-MMIV-App
+          aws-region: ${{ env.AWS_REGION }}
+      - name: Install workflow parser
+        run: python3 -m pip install PyYAML
+      - name: Download release images
+        uses: actions/download-artifact@v6
+        with:
+          pattern: release-image-*-${{ github.sha }}
+          path: .ci/images
+          merge-multiple: true
+      - name: Prepare and deploy release in one SSM command
+        env:
+          INSTANCE_ID: ${{ needs.setup-host.outputs.instance_id }}
+          ORACLE_CONFIG_STAGED: ${{ needs.setup-host.outputs.oracle_config_staged }}
+        run: |
+          python3 scripts/cd/docker-stack-ssm.py prepare
+          python3 scripts/cd/docker-stack-ssm.py deploy
+      - name: Upload release state
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v6
+        with:
+          name: release-state-${{ github.sha }}
+          path: .ci/deployments/release.json
+          include-hidden-files: true
+          if-no-files-found: warn
+          overwrite: true
+      - name: Upload release deployment evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v6
+        with:
+          name: release-deployment-evidence-${{ github.sha }}
+          path: .ci/reports/docker/**
+          include-hidden-files: true
+          if-no-files-found: warn
+          overwrite: true
   verify-services:
-    name: Functional tests and DAST after all deployments
-    needs:
-      - setup-host
-      - deploy-registry
-      - deploy-backends
-      - deploy-gateway
-    if: ${{ always() && !cancelled() && needs.setup-host.result == 'success' && needs.deploy-registry.result == 'success' }}
+    name: Functional tests and DAST after complete release
+    needs: [setup-host, deploy-stack]
+    if: ${{ always() && !cancelled() && needs.setup-host.result == 'success' }}
     uses: ./.github/workflows/verify-services.yml
     with:
       instance-id: ${{ needs.setup-host.outputs.instance_id }}
-      deployment-ready: ${{ needs.deploy-backends.result == 'success' && needs.deploy-gateway.result == 'success' }}
+      deployment-ready: ${{ needs.deploy-stack.result == 'success' }}

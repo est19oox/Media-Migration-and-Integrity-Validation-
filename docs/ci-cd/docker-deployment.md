@@ -1,84 +1,137 @@
-# Docker deployment and verification phases
+# Docker release deployment
 
-The service workflow deploys Docker images directly through AWS Systems Manager Run Command. It does not invoke the Ansible microservice deployment role.
+The GitHub pipeline builds all enabled images in parallel and deploys one Compose
+stack through one SSM Run Command. The Service Registry is included. Gateway deploys
+last, after backend health and Eureka registration pass.
 
-## Process
+## Pipeline
 
-1. Existing quality gates and Terraform run first. Terraform reuses the managed EC2 host.
-2. Ansible `setup-host.yml` reconciles Docker, AWS CLI, Python support, the pinned Compose plugin, media directory and shared Docker network.
-3. Registry image deploys on 8761 and must be healthy.
-4. Enabled backend images deploy in parallel on 8081–8085. Each must be healthy and registered UP in Eureka. Functional tests and DAST do not run inside these deployment jobs.
-5. API Gateway image deploys last on 8080. It must be healthy, registered, and able to route the upload page, files page and a read-only file API request to Transfer.
-6. A separate verification workflow downloads this run's deployment state, verifies that every enabled deployment is present, and then runs functional tests and DAST for all enabled services and the registry. Each service gets its own report directory. Gateway verification runs last. Scans are sequential to prevent overlapping active scans and verification rollback.
-7. After failed verification, restore changed deployments that have a previous version: Gateway first, backend services next, registry last. Unchanged deployments and services already restored locally are skipped. A failed Docker rollout restores its previous version immediately, before downstream deployment can continue. If a backend/Gateway deployment job fails, the verification workflow skips scanning and recovers the available changed deployment states instead.
+1. Existing CI/security gates pass. Terraform runs on every pipeline. Image builds
+   run in parallel with Terraform after the gates; each image is tested, scanned,
+   pushed or reused by its immutable commit tag, and recorded in an image artifact.
+2. `setup-host` waits for Terraform and all image builds. Ansible reconciles host
+   packages, Docker, the pinned Compose plugin, media storage and the shared network.
+   The same Ansible installation stages optional Oracle settings if supplied.
+3. `deploy-stack` downloads the complete image set and creates one release manifest.
+   Missing, stale, duplicate or mismatched images fail before service deployment.
+4. One SSM command downloads missing images with bounded parallelism, captures the
+   prior release, and reconciles `/opt/mmiv/stack/compose.yaml` under `mmiv-stack`:
+   - Registry starts on 8761 and must become healthy.
+   - Enabled backends start together; their health and current-container Eureka
+     registration checks run concurrently.
+   - Gateway starts on 8080 last. Its health, registration, pages and routed file
+     request must pass before the release becomes ready.
+5. Verification downloads `release-state-<commit>`, checks the complete readiness
+   barrier, prepares Session Manager and pinned ZAP once, and runs functional tests
+   and DAST. Each service has its own reports. Gateway is scanned last.
+6. Scans finish before coordinated rollback. Failed rollout recovery happens inside
+   the original deployment command. A verification failure uses one additional SSM
+   command to restore changed services from the release snapshot.
+
+Compose is invoked for each phase inside the same remote command. Explicit host-side
+checks gate later phases, including Eureka registration; container startup alone is
+not treated as readiness. `--no-deps` prevents an individual phase from starting
+Gateway early. Functional tests and ZAP remain on the GitHub verification runner.
+Separate port-forwarding sessions are retained for the different service ports.
 
 ## Enabled services
 
-Current AWS deployment enables registry 8761, Transfer 8081, Integrity 8082, and Gateway 8080. User Access 8083, Reporting 8084 and Discovery 8085 retain their commented matrix entries. The verification workflow reads the active matrix, so an enabled service automatically joins the readiness barrier and verification list.
+| Service | Host port | Deployment phase |
+| --- | ---: | --- |
+| Service Registry | 8761 | First |
+| Transfer | 8081 | Backend group |
+| Integrity | 8082 | Backend group |
+| API Gateway | 8080 | Last |
 
-Discovery currently requires Oracle/media settings and lacks Eureka integration. Configure those before enabling it. The Docker lifecycle currently supplies common AWS/Eureka/media settings and optional Integrity Oracle configuration; additional service-specific settings must be added deliberately before enabling a service that requires them. Gateway routing tests currently cover Transfer.
+User Access 8083, Reporting 8084 and Discovery 8085 retain commented entries in the
+`build-images` matrix. Enabling a configured service adds its image, rollout and
+verification requirements automatically. Discovery still needs Oracle/media settings
+and Eureka integration before it is enabled. Gateway readiness currently checks its
+Transfer routes. The additional service-specific settings must be implemented before
+enabling services that require them.
 
-## Idempotency
+## Idempotency and recovery
 
-- ECR service tags include the full commit SHA and the repository enforces immutable tags. An existing tag is pulled/reused, not overwritten. Maven tests can still run on a repeat workflow without changing runtime state.
-- EC2 pulls a missing image before touching the running service or rollback backups.
-- Each service has a separate `mmiv-<service>` Compose project, `/opt/mmiv/<service>/compose.yaml`, and a localhost port binding. Gateway alone binds to all interfaces on 8080.
-- `docker compose up -d --no-build --pull missing` reconciles the service. An unchanged image, Compose file and environment preserve the container and rollback backups. An exited container is started.
-- Image/configuration changes capture the current runtime image and prior Compose/environment files before replacing that service. A changed Integrity environment forces only Integrity to recreate; unchanged settings do not.
-- Old unmanaged containers migrate once, after the new image is available. Containers owned by another Compose project are rejected.
-- Oracle secrets are optionally staged by Ansible into a private next file. The active environment is changed by the Docker lifecycle only after it has saved rollback state. Credentials are not embedded in SSM commands or deployment-state artifacts. If all Oracle secrets are empty, Integrity uses H2.
-- These are in-place rollouts, not zero-downtime deployment. A first deployment has no previous version: its verification failure is reported as NO_PREVIOUS_DEPLOYMENT rather than pretending rollback succeeded.
+- ECR tags include the commit; existing images are scanned and reused. EC2 downloads
+  only missing images and completes all pulls before modifying service state.
+- One Compose file is generated from the release manifest. Unchanged service image,
+  configuration and environment preserve containers. An Oracle environment change
+  forces only Integrity to recreate.
+- The release ID includes commit, workflow run and attempt. A repeated command for
+  the same successful release preserves its original snapshot. An unchanged new run
+  records no changed services and does not restart containers or trigger rollback.
+- Release snapshots live under `/opt/mmiv/stack/releases/<release-id>/`. They capture
+  prior Compose configuration, runtime image versions, change flags and a private
+  copy of the prior Integrity environment. Credentials are absent from SSM command
+  parameters and downloaded artifacts.
+- Oracle staging uses `/etc/mmiv/next-integrity-<release-id>.env`, with protected
+  permissions and hidden Ansible logs. Release-specific staging prevents another
+  attempt's cleanup from deleting a newer staged file.
+- A journal records touched services before each mutation. Recovery restores only
+  changed services that were touched, preserving untouched containers. New services
+  with no prior container are removed to restore their prior absence. This also
+  cleans up a failed first deployment.
+- Recovery orders Gateway first, backends next, Registry last, then checks restored
+  health/registration and Gateway routes. It resumes recorded recovery work after
+  interruption. A subsequent release first recovers an unfinished earlier rollout;
+  it never records a partially deployed stack as the previous release.
+- A host lock prevents simultaneous stack operations. A stale release cannot roll
+  back a newer release. Workflow concurrency still serializes deployments.
+- Earlier per-service `mmiv-<service>` Compose containers migrate once to the shared
+  project, with prior configuration captured. Foreign Compose ownership is rejected.
+  Migration recreates containers and may interrupt service. These are in-place
+  deployments; no zero-downtime guarantee is made.
+- Backends and Registry bind to localhost. Gateway alone publishes on all interfaces,
+  subject to the Terraform security group. The shared external network is retained.
 
 ## Files and evidence
 
-- `.github/workflows/deploy-service.yml`: build/reuse image, scan/push it, Docker rollout, readiness, deployment-state artifact.
-- `.github/workflows/verify-services.yml`: barrier, functional tests, DAST and coordinated recovery.
-- `scripts/cd/docker-service-ssm.py`: runner-side SSM request and result polling.
-- `scripts/cd/docker-service-remote.py`: EC2-side Docker reconciliation and rollback.
-- `scripts/cd/verify-deployed-services.py`: required-service checks, scan sequencing and rollback sequencing.
-- `infrastructure/ansible/stage-integrity.yml`: optional protected Oracle configuration staging.
+- `.github/workflows/build-service.yml`: reusable build/test/scan/push and image artifact.
+- `.github/workflows/cicd.yml`: parallel image matrix, Terraform, host setup and stack rollout.
+- `.github/workflows/verify-services.yml`: readiness barrier, scanner preparation and recovery.
+- `scripts/cd/docker-stack-ssm.py`: image-set validation, release assembly and SSM polling.
+- `scripts/cd/docker-stack-remote.py`: one Compose stack, phase ordering and release recovery.
+- `scripts/cd/verify-deployed-services.py`: all-service verification and one-command recovery.
+- `infrastructure/ansible/stage-integrity.yml`: optional protected Oracle staging.
 
-Download `verification-evidence-<commit>` after the workflow. It contains per-service logs, functional results and ZAP reports beneath `.ci/reports/verification/<service>/`, plus verification and rollback summaries. Deployment artifacts retain their image reference, SSM command IDs/results and runtime state. Re-running an unchanged commit reports no runtime configuration change and skips unrelated rollback.
+Download `release-state-<commit>`, `release-deployment-evidence-<commit>` and
+`verification-evidence-<commit>` for manifests, command IDs/results, per-service logs,
+functional results and ZAP reports. Failed rollout output preserves its recovery
+status even though deployment remains failed. Interrupted commands can be recovered
+from their host journal using the same release manifest and release ID.
 
-## Validation performed
+The SSM execution limit is 3600 seconds; result polling allows an additional 50
+seconds. Polling starts quickly and backs off. Host Docker commands, image pulls,
+health and registration checks have separate bounds. Normal completion returns
+immediately; these limits do not impose fixed waits.
 
-Local regression checks cover simulated Docker rollouts, current-container registration, rollback, SSM result polling, workflow dependencies, scanner preparation, HTTP endpoint evidence and upload-page behavior. CI also retains checks for the optional manual Ansible role. Static YAML, JSON, Maven XML, Python and shell checks pass.
+## Validation and applying the update
 
-Live AWS/SSM deployment, actual Docker/Compose runtime, Terraform, Ansible and Maven execution were not available here. Their workflow gates remain in place. Deploy this new commit to validate the live integration; re-running the old commit uses the old workflows.
+Each DAST scan selects an available runner-local tunnel port automatically;
+`DAST_LOCAL_PORT=0` also requests automatic selection. Set `DAST_LOCAL_PORT` to
+a specific port only when required. An occupied explicit port produces a clear
+error without stopping the unrelated listener. Readiness requires the plugin's
+port-open acknowledgement before sending HTTP requests. Cleanup terminates the
+owned tunnel process group and forcibly stops any remaining plugin child after
+a bounded wait, so sequential scans do not depend on reusing port 18081.
 
-### SSM and scanner preparation
+Local tests exercise phase order, idempotency, partial updates, Oracle changes,
+failed rollout recovery, first-release cleanup, migration, interrupted release
+recovery, stale rollback rejection, manifest completeness, SSM eventual visibility,
+scan sequencing and scanner image reuse. Static configuration and existing shell
+runtime checks also run. Actual AWS/SSM, Docker/Compose, Ansible, Terraform, Maven
+and live ZAP execution are not available in this editing environment; run the
+workflow on the new commit to validate that integration.
 
-The main workflow checks SSM connectivity and waits for cloud-init only in
-`setup-host`. Its deployment jobs pass `host-ready: true` after that job succeeds.
-Standalone callers default to checking the host themselves. Each Docker deployment
-uses one Run Command for container health, Eureka registration and Gateway routes;
-registration failures restore a previous image when one exists. Command results
-use fast initial polling followed by a five-second interval, with an 1850-second
-overall deadline and retries for invocation visibility.
+Copy the complete updated tree into your checkout and remove the superseded files:
 
-Verification prepares Session Manager and the pinned ZAP image once on its runner.
-All service scans inherit `SCANNER_TOOLS_PREPARED=true` and inspect the local image
-instead of pulling again. An individual manual scan prepares missing tools and
-reuses the image if it already exists. Separate port-forwarding sessions remain
-necessary for the different service ports. Ansible installation counts are unchanged.
+- `.github/workflows/deploy-service.yml`
+- `scripts/cd/docker-service-remote.py`
+- `scripts/cd/docker-service-ssm.py`
+- `tests/ci/test-docker-lifecycle.py`
 
-
-## Cleanup and review fixes
-
-- Removed `scripts/cd/smoke-test-service.sh` and `scripts/cd/wait-for-registration.sh`.
-  Their checks now execute inside the Docker deployment command; they had no remaining workflow callers.
-- Removed the duplicate root `DOCKER-CD-UPDATE.md`; this document describes the current process.
-- Registration checks require the current container's network address and service port,
-  so an old UP entry cannot satisfy readiness. Health responses must be JSON objects.
-- Host Docker operations and readiness loops have time limits. SSM allows 1800 seconds
-  for deployment plus recovery, and runner polling allows 50 seconds of additional time.
-  Verification allows 180 minutes for scans and 150 minutes for recovery within a 360-minute job.
-- Temporary staged Oracle secrets are removed even when image pull or ownership checks fail.
-- Functional JSON assertions distinguish booleans from numeric values. A response of
-  `success: 1` cannot satisfy `success: true`.
-- Scan cleanup clears historical tunnel IDs before checking connectivity.
-
-For an existing checkout, remove the obsolete files above and those recorded in
-`CLEANUP-REVIEW.md`, copy the complete updated tree, review changes, and commit to the
-intended branch. Terraform and host setup still precede service deployment; Gateway
-remains last; tests and DAST still wait for the complete readiness barrier.
+Earlier cleanup removals are recorded in `CLEANUP-REVIEW.md`. The optional legacy
+Ansible deployment role remains for separate/manual deployments; use stack release
+recovery for hosts migrated to `mmiv-stack`. Neither the package nor local tests
+prove the runtime cause of the earlier Office folder-upload failure; its diagnostic
+fields and integrity assertions remain intact for the next live report.
