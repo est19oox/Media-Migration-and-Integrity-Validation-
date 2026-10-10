@@ -1,0 +1,71 @@
+name: Verify deployed MMIV services
+'on':
+  workflow_call:
+    inputs:
+      instance-id:
+        required: true
+        type: string
+      deployment-ready:
+        required: true
+        type: boolean
+permissions:
+  contents: read
+  id-token: write
+  actions: read
+env:
+  AWS_REGION: ap-southeast-1
+  MMIV_BUCKET_NAME: media-migration-dev-landing
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v5
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v6.3.0
+      with:
+        role-to-assume: arn:aws:iam::275069781906:role/GitHubActions-MMIV-App
+        aws-region: ${{ env.AWS_REGION }}
+    - name: Install workflow parser
+      run: python3 -m pip install PyYAML
+    - name: Download deployment state
+      uses: actions/download-artifact@v6
+      with:
+        pattern: deployment-state-*-${{ github.sha }}
+        path: .ci/deployments
+        merge-multiple: true
+    - name: Prepare scanner tools once
+      if: ${{ inputs.deployment-ready }}
+      run: |
+        bash scripts/cd/prepare-scanner-tools.sh
+        echo 'SCANNER_TOOLS_PREPARED=true' >> "$GITHUB_ENV"
+    - name: Verify all deployed services after Gateway
+      id: verify
+      timeout-minutes: 180
+      env:
+        INSTANCE_ID: ${{ inputs.instance-id }}
+        DEPLOYMENT_READY: ${{ inputs.deployment-ready }}
+      run: |-
+        if [ "$DEPLOYMENT_READY" != true ]; then
+          echo '::error::Deployment readiness barrier failed; skipping functional tests and DAST.'
+          exit 1
+        fi
+        python3 scripts/cd/verify-deployed-services.py verify --instance-id "$INSTANCE_ID" --commit "$GITHUB_SHA"
+    - name: Roll back changed deployments after verification or rollout failure
+      if: ${{ failure() }}
+      timeout-minutes: 150
+      env:
+        INSTANCE_ID: ${{ inputs.instance-id }}
+      run: python3 scripts/cd/verify-deployed-services.py rollback --instance-id "$INSTANCE_ID" --commit "$GITHUB_SHA"
+    - name: Upload verification and rollback evidence
+      if: ${{ always() }}
+      uses: actions/upload-artifact@v6
+      with:
+        name: verification-evidence-${{ github.sha }}
+        if-no-files-found: warn
+        include-hidden-files: true
+        path: |-
+          .ci/reports/**
+          .ci/deployments/**
+        overwrite: true

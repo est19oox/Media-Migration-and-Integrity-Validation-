@@ -21,15 +21,20 @@ for VALUE in "$PORT" "$LOCAL_PORT"; do
   }
 done
 [[ "$PATH_SUFFIX" == /* && "$READY_PATH" == /* ]] || { echo '::error::DAST_PATH must start with /.'; exit 1; }
+if [[ "${SCANNER_TOOLS_PREPARED:-false}" != true ]]; then
+  bash scripts/cd/prepare-scanner-tools.sh
+fi
 for COMMAND in aws session-manager-plugin docker curl python3 timeout setsid; do
   command -v "$COMMAND" >/dev/null || { echo "::error::Missing command: $COMMAND"; exit 1; }
 done
-REPORT_DIR="$PWD/.ci/reports/ec2-dast"
+REPORT_DIR="${DAST_REPORT_DIR:-$PWD/.ci/reports/ec2-dast}"
 mkdir -p "$REPORT_DIR"
 TEMP_DIR=$(mktemp -d)
 TUNNEL_PID=
 SCAN_PID=
 ZAP_CONTAINER="mmiv-ec2-dast-$$"
+# Never use a previous scan's session ID during cleanup of an early failure.
+: > "$REPORT_DIR/tunnel.log"
 TOTAL_STARTED=$SECONDS
 aws_ssm() {
   aws ssm "$@" --region "$REGION" --cli-connect-timeout 10 --cli-read-timeout 20
@@ -57,10 +62,14 @@ trap 'exit 143' TERM HUP
 
 echo "DAST target: EC2 $INSTANCE_ID port $PORT$PATH_SUFFIX"
 echo "Scanner location: GitHub runner; tunnel endpoint: 127.0.0.1:$LOCAL_PORT"
-echo '[1/3] Checking SSM connectivity and pulling ZAP on runner'
+echo '[1/3] Checking SSM connectivity and prepared ZAP image'
 CONNECTION=$(aws_ssm get-connection-status --target "$INSTANCE_ID" --query Status --output text)
 [[ "${CONNECTION,,}" == connected ]] || { echo "::error::SSM target is not connected: $CONNECTION"; exit 1; }
-timeout --kill-after=15s 300s docker pull "$ZAP_IMAGE"
+if [[ "${SCANNER_TOOLS_PREPARED:-false}" == true ]]; then
+  docker image inspect "$ZAP_IMAGE" >/dev/null || {
+    echo '::error::Prepared ZAP image is missing on this runner.'; exit 1;
+  }
+fi
 
 # Fail rather than accidentally scan a pre-existing listener on the local port.
 python3 - "$LOCAL_PORT" <<'PY'
@@ -74,7 +83,6 @@ print(json.dumps({'portNumber': [sys.argv[1]], 'localPortNumber': [sys.argv[2]]}
 PY
 )
 echo '[2/3] Opening SSM port-forwarding tunnel to deployed service'
-: > "$REPORT_DIR/tunnel.log"
 setsid aws ssm start-session --region "$REGION" --target "$INSTANCE_ID" \
   --document-name AWS-StartPortForwardingSession --parameters "$PARAMETERS" \
   --cli-connect-timeout 10 --cli-read-timeout 20 \

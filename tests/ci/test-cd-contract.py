@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Check workflow dependency order and execute registration waits with fake AWS."""
+"""Check workflow dependency order and scanner preparation with fake Docker."""
 import json
 import os
 from pathlib import Path
@@ -21,15 +21,27 @@ class CDContractTest(unittest.TestCase):
                     self.assertEqual(services['integrity-service']['environment'][setting],
                                      services['transfer-service']['environment'][setting])
 
-    def test_transfer_waits_for_verified_integrity_and_terraform(self):
+    def test_deployments_finish_before_tests_and_gateway_is_last(self):
         jobs = yaml.safe_load((ROOT / '.github/workflows/cicd.yml').read_text())['jobs']
-        self.assertIn('deploy-integrity', jobs['deploy-backends']['needs'])
-        self.assertEqual(jobs['deploy-integrity']['with']['service-name'], 'integrity-service')
-        self.assertIn('deploy-registry', jobs['deploy-integrity']['needs'])
-        self.assertIn('setup-host', jobs['deploy-integrity']['needs'])
+        self.assertNotIn('deploy-integrity', jobs)
+        self.assertIn('deploy-registry', jobs['deploy-backends']['needs'])
+        self.assertIn('setup-host', jobs['deploy-backends']['needs'])
         self.assertIn('terraform', jobs['setup-host']['needs'])
         self.assertEqual([s['name'] for s in jobs['deploy-backends']['strategy']['matrix']['service']],
-                         ['transfer-service'])
+                         ['transfer-service', 'integrity-service'])
+        self.assertIn('deploy-backends', jobs['deploy-gateway']['needs'])
+        self.assertIn('deploy-gateway', jobs['verify-services']['needs'])
+        self.assertIn('deploy-backends', jobs['verify-services']['needs'])
+        deploy = yaml.safe_load((ROOT / '.github/workflows/deploy-service.yml').read_text())
+        steps = deploy['jobs']['deploy']['steps']
+        self.assertFalse(any('run-dast-ssm.sh' in s.get('run', '') for s in steps))
+        self.assertTrue(any('docker-service-ssm.py deploy' in s.get('run', '') for s in steps))
+        self.assertFalse(any('playbook.yml' in s.get('run', '') for s in steps))
+        verify = yaml.safe_load((ROOT / '.github/workflows/verify-services.yml').read_text())
+        verification_steps = verify['jobs']['verify']['steps']
+        self.assertFalse(any('ansible-playbook' in s.get('run', '') for s in verification_steps))
+        self.assertTrue(any('verify-deployed-services.py verify' in s.get('run', '') for s in verification_steps))
+        self.assertTrue(any('verify-deployed-services.py rollback' in s.get('run', '') for s in verification_steps))
         for job in jobs.values():
             needs = job.get('needs', [])
             if isinstance(needs, str):
@@ -49,57 +61,43 @@ class CDContractTest(unittest.TestCase):
         for name in jobs:
             visit(name)
 
-    def run_wait(self, mode):
+    def test_prepared_host_is_reused_and_scanner_prepared_once(self):
+        jobs = yaml.safe_load((ROOT / '.github/workflows/cicd.yml').read_text())['jobs']
+        for name in ('deploy-registry', 'deploy-backends', 'deploy-gateway'):
+            self.assertIs(jobs[name]['with']['host-ready'], True)
+            self.assertIn('setup-host', jobs[name]['needs'])
+        deploy = yaml.safe_load((ROOT / '.github/workflows/deploy-service.yml').read_text())
+        steps = deploy['jobs']['deploy']['steps']
+        wait = next(s for s in steps if 'wait-for-ssm.sh' in s.get('run', ''))
+        self.assertIn('!inputs.host-ready', wait['if'])
+        self.assertFalse(any('smoke-test-service.sh' in s.get('run', '') or
+                             'wait-for-registration.sh' in s.get('run', '') for s in steps))
+        verify = yaml.safe_load((ROOT / '.github/workflows/verify-services.yml').read_text())
+        steps = verify['jobs']['verify']['steps']
+        preparation = [s for s in steps if 'prepare-scanner-tools.sh' in s.get('run', '')]
+        self.assertEqual(len(preparation), 1)
+        self.assertIn('SCANNER_TOOLS_PREPARED=true', preparation[0]['run'])
+        self.assertLess(steps.index(preparation[0]), next(i for i, s in enumerate(steps)
+                        if 'verify-deployed-services.py verify' in s.get('run', '')))
+
+    def test_scanner_preparation_reuses_local_image(self):
         with tempfile.TemporaryDirectory() as temporary:
             directory = Path(temporary)
-            aws = directory / 'aws'
-            aws.write_text('''#!/usr/bin/env python3
-import json, os, pathlib, sys
-args = sys.argv[1:]
-if args[:2] == ['ssm', 'send-command']:
-    print('command-1')
-elif args[:2] == ['ssm', 'get-command-invocation']:
-    counter = pathlib.Path(os.environ['TEST_COUNTER'])
-    n = int(counter.read_text()) + 1 if counter.exists() else 1
-    counter.write_text(str(n))
-    mode = os.environ['TEST_MODE']
-    if n == 1:
-        print('InvocationDoesNotExist', file=sys.stderr); sys.exit(1)
-    if n == 2:
-        print(json.dumps({'Status': 'InProgress'})); sys.exit(0)
-    if mode == 'denied':
-        print('AccessDeniedException', file=sys.stderr); sys.exit(1)
-    status = 'Success' if mode == 'success' else 'Failed'
-    print(json.dumps({'Status': status, 'ResponseCode': 0 if mode == 'success' else 1,
-                     'StandardOutputContent': 'registered' if mode == 'success' else '',
-                     'StandardErrorContent': '' if mode == 'success' else 'registration failed'}))
-else:
-    sys.exit('Unexpected AWS call: ' + str(args))
-''')
-            aws.chmod(0o755)
-            sleep = directory / 'sleep'
-            sleep.write_text('#!/bin/sh\nexit 0\n')
-            sleep.chmod(0o755)
-            return subprocess.run(['bash', str(ROOT / 'scripts/cd/wait-for-registration.sh')],
-                env={**os.environ, 'PATH': str(directory) + os.pathsep + os.environ['PATH'],
-                     'INSTANCE_ID': 'i-test', 'SERVICE_NAME': 'transfer-service',
-                     'TEST_MODE': mode, 'TEST_COUNTER': str(directory / 'count')},
-                capture_output=True, text=True, timeout=10)
+            for command, source in {
+                'session-manager-plugin': '#!/bin/sh\necho plugin-version\n',
+                'docker': '#!/bin/sh\nif [ "$1" = image ]; then test -f "$TEST_IMAGE"; else echo pull >> "$TEST_PULLS"; touch "$TEST_IMAGE"; fi\n'
+            }.items():
+                script = directory / command
+                script.write_text(source)
+                script.chmod(0o755)
+            env = {**os.environ, 'PATH': str(directory) + os.pathsep + os.environ['PATH'],
+                   'TEST_IMAGE': str(directory / 'image'), 'TEST_PULLS': str(directory / 'pulls')}
+            for _ in range(2):
+                result = subprocess.run(['bash', str(ROOT / 'scripts/cd/prepare-scanner-tools.sh')],
+                                        env=env, capture_output=True, text=True, timeout=10)
+                self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual((directory / 'pulls').read_text().splitlines(), ['pull'])
 
-    def test_wait_handles_eventual_invocation_and_in_progress(self):
-        result = self.run_wait('success')
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn('registered', result.stdout)
-
-    def test_wait_propagates_failed_remote_command(self):
-        result = self.run_wait('failure')
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn('registration failed', result.stderr)
-
-    def test_wait_propagates_permission_error(self):
-        result = self.run_wait('denied')
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn('AccessDeniedException', result.stderr)
 
 
 if __name__ == '__main__':

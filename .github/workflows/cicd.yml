@@ -16,6 +16,7 @@ on:
       - 'tests/ci/**'
       - '.github/workflows/cicd.yml'
       - '.github/workflows/deploy-service.yml'
+      - '.github/workflows/verify-services.yml'
   workflow_dispatch:
 
 concurrency:
@@ -25,6 +26,7 @@ concurrency:
 permissions:
   contents: read
   id-token: write
+  actions: read
 
 env:
   AWS_REGION: ap-southeast-1
@@ -161,6 +163,7 @@ jobs:
         run: |
           python3 -m pip install PyYAML
           python3 tests/ci/test-cd-contract.py
+          python3 tests/ci/test-docker-lifecycle.py
           node --test tests/ci/test-upload-page.cjs
 
       - name: Build and test services
@@ -187,6 +190,7 @@ jobs:
           ansible-playbook -i inventory/ci.ini rollback.yml --syntax-check
           # Redis playbook is temporarily disabled.
           ansible-playbook -i inventory/ci.ini setup-host.yml --syntax-check
+          ansible-playbook -i inventory/ci.ini stage-integrity.yml --syntax-check
           python ../../tests/ci/test-deployment-config.py
           python ../../tests/ci/test-compose-runtime.py
 
@@ -348,32 +352,23 @@ jobs:
       service-path: services/service-registry
       service-port: '8761'
       instance-id: ${{ needs.setup-host.outputs.instance_id }}
-  deploy-integrity:
-    name: Deploy and verify Integrity before Transfer
-    needs:
-      - setup-host
-      - deploy-registry
-    uses: ./.github/workflows/deploy-service.yml
-    secrets: inherit
-    with:
-      service-name: integrity-service
-      service-path: services/integrity-service
-      service-port: '8082'
-      instance-id: ${{ needs.setup-host.outputs.instance_id }}
+      host-ready: true
   deploy-backends:
     name: Deploy backend services
     needs:
       - setup-host
       - deploy-registry
-      - deploy-integrity
     strategy:
       fail-fast: false
-      max-parallel: 2
+      max-parallel: 5
       matrix:
         service:
           - name: transfer-service
             path: services/transfer-service
             port: '8081'
+          - name: integrity-service
+            path: services/integrity-service
+            port: '8082'
 #          - name: user-access-service
 #            path: services/user-access-service
 #            port: '8083'
@@ -392,6 +387,7 @@ jobs:
       service-path: ${{ matrix.service.path }}
       service-port: ${{ matrix.service.port }}
       instance-id: ${{ needs.setup-host.outputs.instance_id }}
+      host-ready: true
   deploy-gateway:
     name: Deploy API Gateway
     needs:
@@ -404,3 +400,16 @@ jobs:
       service-path: services/api-gateway
       service-port: '8080'
       instance-id: ${{ needs.setup-host.outputs.instance_id }}
+      host-ready: true
+  verify-services:
+    name: Functional tests and DAST after all deployments
+    needs:
+      - setup-host
+      - deploy-registry
+      - deploy-backends
+      - deploy-gateway
+    if: ${{ always() && !cancelled() && needs.setup-host.result == 'success' && needs.deploy-registry.result == 'success' }}
+    uses: ./.github/workflows/verify-services.yml
+    with:
+      instance-id: ${{ needs.setup-host.outputs.instance_id }}
+      deployment-ready: ${{ needs.deploy-backends.result == 'success' && needs.deploy-gateway.result == 'success' }}

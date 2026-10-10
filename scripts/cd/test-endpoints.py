@@ -125,11 +125,11 @@ def run_case(case, base_url, token):
             raise ValueError(f"JSON field is empty: {name}")
     for name, expected in case.get("json_equals", {}).items():
         actual = field(body, name)
-        if actual != expected:
+        if actual != expected or (isinstance(actual, bool) != isinstance(expected, bool)):
             raise ValueError(f"Unexpected value for JSON field: {name}; expected {expected!r}, received {actual!r}")
     for name, minimum in case.get("json_min", {}).items():
         value = field(body, name)
-        if not isinstance(value, (int, float)) or value < minimum:
+        if isinstance(value, bool) or not isinstance(value, (int, float)) or value < minimum:
             raise ValueError(f"JSON field below minimum: {name}")
     case["_saved_vars"] = {name: str(field(body, dotted)) for name, dotted in case.get("save_fields", {}).items()}
     return status

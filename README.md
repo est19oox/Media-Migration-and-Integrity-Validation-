@@ -42,3 +42,7 @@ Gateway browser access and temporary Redis disabling: see docs/ci-cd/gateway-acc
 Gateway is public on EC2 TCP 8080; backends bind to localhost. See
 [Gateway access](docs/ci-cd/gateway-access.md). The real Discovery Service from
 main is preserved; its CD entry is disabled pending Oracle/runtime configuration.
+
+## Current Docker deployment
+
+Terraform → idempotent host preparation → registry → enabled backend images in parallel → API Gateway last → functional tests and DAST. Docker Compose over SSM performs service rollout and rollback; Ansible is used only for host preparation and optional Oracle configuration. See [Docker CD process](docs/ci-cd/docker-deployment.md).

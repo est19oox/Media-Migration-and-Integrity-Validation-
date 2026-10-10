@@ -1,4 +1,6 @@
-# Corrected project from 20261008-090353 ZIP
+# Historical project corrections
+
+The current deployment process is documented in [Docker deployment](docs/ci-cd/docker-deployment.md). Entries below record earlier repairs and validation at the time they were made.
 
 ## Repairs
 
@@ -19,7 +21,7 @@
 
 INTEGRITY_DB_URL and INTEGRITY_DB_PASSWORD are no longer required. With neither configured, Integrity starts using embedded in-memory H2 and creates its audit table automatically. Audit records are lost on restart; this mode does not provide durable production audit storage.
 
-Oracle remains optional. Providing both secrets activates the oracle profile; INTEGRITY_DB_USERNAME defaults to INTEGRITY_SERVICE. Oracle must then be reachable from the container and contain the INTEGRITY_SERVICE schema and INTEGRITY_VALIDATION_LOG table (ddl-auto=validate). A partial secret pair does not activate Oracle. For direct runs, use SPRING_PROFILES_ACTIVE=oracle with the database settings.
+Oracle remains optional. Providing both secrets activates the oracle profile; INTEGRITY_DB_USERNAME defaults to INTEGRITY_SERVICE. Oracle must then be reachable from the container and contain the INTEGRITY_SERVICE schema and INTEGRITY_VALIDATION_LOG table (ddl-auto=validate). The current deployment rejects partial Oracle settings before rollout. For direct runs, use SPRING_PROFILES_ACTIVE=oracle with the database settings.
 
 This restores deployment without required database secrets while preserving the latest checksum validation code, folder transfer and earlier conflict repairs. It does not revert Integrity to the older placeholder service.
 
@@ -44,7 +46,7 @@ Configuration checks, conflict-marker scan, XML parsing and deployment template 
 
 - Decoupled mmiv-backend networking from Redis; rollout, Ansible rescue and explicit rollback all set the shared network and EUREKA_DEFAULT_ZONE=http://service-registry:8761/eureka/.
 - Fixed rollback image argument separation and moved changed_when outside the shell script.
-- All published service ports use 127.0.0.1 binding. Browser access is available through scripts/cd/open-gateway-tunnel.sh and the PowerShell command in docs/ci-cd/gateway-access.md. Terraform keeps authenticated SSM access with no public ingress; EC2 remains t3.medium.
+- Backend and Registry ports use 127.0.0.1 binding; Gateway uses 0.0.0.0 on 8080, with Terraform security groups controlling ingress. Browser access is available through scripts/cd/open-gateway-tunnel.sh and the PowerShell command in docs/ci-cd/gateway-access.md. Terraform keeps authenticated SSM access with no public ingress; EC2 remains t3.medium.
 - Commented Redis role YAML, standalone playbook, inventory options and setup invocation. No Redis environment files are attached to application containers. Existing Redis containers are not deleted.
 - Restored PPT/PPTX/DOC/DOCX uploads, server-side transfers and MIME types; Office file reads use attachment disposition. Preserved the uploaded project's folder endpoint /api/v1/transfers/folder, 500 files and 100 MiB total.
 - Registry functional tests remain configured. Gateway deployed tests now exercise Transfer through discovery, including file upload/read/ranges, Word upload/download and an Office folder batch. ZAP baseline scans start at the Registry dashboard and Gateway upload page, while readiness is checked independently at /actuator/health. Registry/Gateway use passive baseline scans, not active API scans.

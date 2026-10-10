@@ -1,0 +1,34 @@
+---
+# Optional secret-file staging only. Docker performs deployment and rollback.
+- name: Stage private Oracle configuration for Docker
+  hosts: mmiv
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Require complete single-line Oracle settings
+      ansible.builtin.assert:
+        that:
+          - lookup('env', 'INTEGRITY_DB_URL') | length > 0
+          - lookup('env', 'INTEGRITY_DB_PASSWORD') | length > 0
+          - "'\n' not in lookup('env', 'INTEGRITY_DB_URL')"
+          - "'\n' not in lookup('env', 'INTEGRITY_DB_USERNAME')"
+          - "'\n' not in lookup('env', 'INTEGRITY_DB_PASSWORD')"
+          - "'\r' not in lookup('env', 'INTEGRITY_DB_URL')"
+          - "'\r' not in lookup('env', 'INTEGRITY_DB_USERNAME')"
+          - "'\r' not in lookup('env', 'INTEGRITY_DB_PASSWORD')"
+      no_log: true
+    - name: Prepare private configuration directory
+      ansible.builtin.file:
+        path: /etc/mmiv
+        state: directory
+        mode: '0700'
+    - name: Stage configuration without replacing the active environment
+      ansible.builtin.copy:
+        dest: /etc/mmiv/next-integrity.env
+        mode: '0600'
+        content: |
+          SPRING_PROFILES_ACTIVE=oracle
+          INTEGRITY_DB_URL={{ lookup('env', 'INTEGRITY_DB_URL') }}
+          INTEGRITY_DB_USERNAME={{ lookup('env', 'INTEGRITY_DB_USERNAME') | default('INTEGRITY_SERVICE', true) }}
+          INTEGRITY_DB_PASSWORD={{ lookup('env', 'INTEGRITY_DB_PASSWORD') }}
+      no_log: true

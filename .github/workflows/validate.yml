@@ -71,6 +71,7 @@ jobs:
         run: |
           python3 -m pip install PyYAML
           python3 tests/ci/test-cd-contract.py
+          python3 tests/ci/test-docker-lifecycle.py
           node --test tests/ci/test-upload-page.cjs
 
       - name: Build and test services
@@ -96,6 +97,7 @@ jobs:
           ansible-playbook -i inventory/ci.ini playbook.yml --syntax-check
           ansible-playbook -i inventory/ci.ini rollback.yml --syntax-check
           ansible-playbook -i inventory/ci.ini setup-host.yml --syntax-check
+          ansible-playbook -i inventory/ci.ini stage-integrity.yml --syntax-check
           python ../../tests/ci/test-deployment-config.py
           python ../../tests/ci/test-compose-runtime.py
       - name: Docker build

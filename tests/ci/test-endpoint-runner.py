@@ -90,6 +90,13 @@ class EndpointRunnerTest(unittest.TestCase):
         self.assertEqual(result.returncode, 1)
         self.assertEqual(report['summary']['FAIL'], 1)
 
+    def test_numeric_one_does_not_pass_boolean_success_assertion(self):
+        result, report = self.run_fixture({'success': 1}, {
+            'name': 'upload', 'path': '/', 'status': 200,
+            'json_equals': {'success': True}})
+        self.assertEqual(result.returncode, 1)
+        self.assertEqual(report['summary']['FAIL'], 1)
+
     def test_missing_array_entry_and_scalar_are_rejected(self):
         for name in ('files.2.relativePath', 'files.-1.relativePath', 'files.0.nope'):
             with self.subTest(name=name), self.assertRaises(ValueError):
