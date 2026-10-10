@@ -32,6 +32,10 @@ public class AccessService {
     }
 
     User user = userOptional.get();
+    // Deny destination access for inactive users.
+    if (!user.isActive()) {
+      return new AccessCheckResponse(false, "User account is inactive");
+    }
 
     // 2. Find user's access to the requested destination
 

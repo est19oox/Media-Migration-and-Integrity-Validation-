@@ -6,7 +6,6 @@ import mmiv.csv.MetadataCsvValidationError;
 import mmiv.csv.MetadataCsvValidationException;
 import mmiv.model.ManifestMatchResult;
 import mmiv.model.MediaMetadata;
-import mmiv.model.ValidationLog;
 import mmiv.repository.FileMetadataRepository;
 import mmiv.repository.ValidationLogRepository;
 

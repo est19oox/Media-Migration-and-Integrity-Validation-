@@ -8,6 +8,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.nimbusds.jose.jwk.JWKSet;
 import com.nimbusds.jose.jwk.RSAKey;
 import java.util.List;
@@ -42,6 +43,8 @@ class UserAccessServiceApplicationTests {
 
   @Autowired private JwtDecoder jwtDecoder;
 
+  @Autowired private com.fasterxml.jackson.databind.ObjectMapper objectMapper;
+
   @BeforeEach
   void setUpUser() {
     userRepository.save(
@@ -73,7 +76,10 @@ class UserAccessServiceApplicationTests {
             .andReturn()
             .getResponse()
             .getContentAsString();
-    String token = loginResponse.replaceFirst(".*\"accessToken\":\"([^\"]+)\".*", "$1");
+    JsonNode loginJson = objectMapper.readTree(loginResponse);
+    assertEquals(Set.of("accessToken", "tokenType"), fieldNames(loginJson));
+    String token = loginJson.get("accessToken").asText();
+    assertEquals("Bearer", loginJson.get("tokenType").asText());
 
     String jwksResponse =
         mockMvc
@@ -83,20 +89,43 @@ class UserAccessServiceApplicationTests {
             .getResponse()
             .getContentAsString();
     RSAKey publicKey = (RSAKey) JWKSet.parse(jwksResponse).getKeys().get(0);
+    assertEquals(Set.of("kty", "kid", "use", "alg", "n", "e"), publicKey.toJSONObject().keySet());
     assertFalse(jwksResponse.contains("\"d\""));
     assertFalse(jwksResponse.contains("\"p\""));
     assertFalse(jwksResponse.contains("\"q\""));
+    assertFalse(jwksResponse.contains("\"dp\""));
+    assertFalse(jwksResponse.contains("\"dq\""));
+    assertFalse(jwksResponse.contains("\"qi\""));
+    assertFalse(jwksResponse.contains("\"oth\""));
+    assertFalse(jwksResponse.contains("\"k\""));
     assertFalse(jwksResponse.contains("passwordHash"));
     assertEquals("mmiv-user-access-key-1", publicKey.getKeyID());
     assertNotNull(publicKey.toRSAPublicKey());
 
     var jwt = jwtDecoder.decode(token);
+    assertEquals(Set.of("alg", "kid"), jwt.getHeaders().keySet());
+    assertEquals(
+        Set.of("iss", "sub", "iat", "exp", "username", "role", "permissions"),
+        jwt.getClaims().keySet());
     assertEquals("RS256", jwt.getHeaders().get("alg"));
     assertEquals("mmiv-user-access-key-1", jwt.getHeaders().get("kid"));
     assertEquals("https://auth.mmiv.example", jwt.getIssuer().toString());
     assertEquals("U001", jwt.getSubject());
     assertEquals(1800, jwt.getExpiresAt().getEpochSecond() - jwt.getIssuedAt().getEpochSecond());
+    assertFalse(jwt.getClaims().containsKey("password"));
+    assertFalse(jwt.getClaims().containsKey("passwordHash"));
+    assertFalse(jwt.getClaims().containsKey("destinationAccesses"));
+    assertFalse(jwt.getClaims().containsKey("destinations"));
+    assertFalse(jwt.getClaims().containsKey("privateKey"));
+    assertFalse(jwt.getClaims().containsKey("oraclePassword"));
+    assertFalse(jwt.getClaims().containsKey("oracleUsername"));
     assertTrue(jwt.getTokenValue().equals(token));
+  }
+
+  private Set<String> fieldNames(JsonNode node) {
+    java.util.Set<String> names = new java.util.HashSet<>();
+    node.fieldNames().forEachRemaining(names::add);
+    return names;
   }
 
   @Test

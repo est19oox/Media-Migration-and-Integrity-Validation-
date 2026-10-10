@@ -2,10 +2,12 @@ package mmiv.user_access_service.controller;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import java.security.KeyPairGenerator;
 import java.security.interfaces.RSAPublicKey;
+import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 
@@ -19,8 +21,14 @@ class JwksControllerTest {
     JwksController controller = new JwksController(publicKey, "rotated-key");
 
     Map<String, Object> response = controller.jwks();
-    Map<String, Object> key =
-        (Map<String, Object>) ((java.util.List<?>) response.get("keys")).get(0);
+
+    Object keysObject = response.get("keys");
+
+    List<?> keys = assertInstanceOf(List.class, keysObject);
+
+    assertFalse(keys.isEmpty());
+
+    Map<?, ?> key = assertInstanceOf(Map.class, keys.get(0));
 
     assertEquals("RSA", key.get("kty"));
     assertEquals("rotated-key", key.get("kid"));

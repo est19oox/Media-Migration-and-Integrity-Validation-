@@ -1,5 +1,6 @@
 package mmiv.user_access_service.config;
 
+import jakarta.servlet.DispatcherType;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -19,11 +20,15 @@ public class SecurityConfig {
             session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
         .authorizeHttpRequests(
             auth ->
-                auth.requestMatchers(HttpMethod.POST, "/api/auth/login")
+                auth.dispatcherTypeMatchers(DispatcherType.ERROR)
+                    .permitAll()
+                    .requestMatchers(HttpMethod.POST, "/api/auth/login")
                     .permitAll()
                     .requestMatchers(HttpMethod.GET, "/.well-known/jwks.json")
                     .permitAll()
                     .requestMatchers(HttpMethod.GET, "/actuator/health")
+                    .permitAll()
+                    .requestMatchers(HttpMethod.GET, "/api/health")
                     .permitAll()
                     .requestMatchers("/api/access/**")
                     .authenticated()

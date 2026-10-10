@@ -1,5 +1,6 @@
 package mmiv.user_access_service.controller;
 
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -10,6 +11,7 @@ import com.nimbusds.jose.crypto.MACSigner;
 import com.nimbusds.jose.crypto.RSASSASigner;
 import com.nimbusds.jwt.JWTClaimsSet;
 import com.nimbusds.jwt.SignedJWT;
+import java.security.interfaces.RSAPrivateKey;
 import java.time.Instant;
 import java.util.Date;
 import java.util.List;
@@ -34,6 +36,7 @@ import org.springframework.security.oauth2.jwt.JwtEncoder;
 import org.springframework.security.oauth2.jwt.JwtEncoderParameters;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.MvcResult;
 
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -47,10 +50,13 @@ class AccessSecurityIntegrationTest {
   private static final String WRITE_USER = "SEC-WRITE";
   private static final String GLOBAL_PERMISSION_USER = "SEC-GLOBAL";
   private static final String REVOKE_USER = "SEC-REVOKE";
+  private static final String INACTIVE_USER = "SEC-INACTIVE";
 
   @Autowired private MockMvc mockMvc;
 
   @Autowired private JwtEncoder jwtEncoder;
+
+  @Autowired private RSAPrivateKey testPrivateKey;
 
   @Autowired private UserRepository userRepository;
 
@@ -71,6 +77,11 @@ class AccessSecurityIntegrationTest {
             REVOKE_USER,
             List.of(new DestinationAccess("DEST_REVOKE", Permission.WRITE)),
             Set.of()));
+    userRepository.save(
+        user(
+            INACTIVE_USER,
+            List.of(new DestinationAccess("DEST_INACTIVE", Permission.WRITE)),
+            Set.of()));
   }
 
   @Test
@@ -88,6 +99,21 @@ class AccessSecurityIntegrationTest {
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.authorised").value(true))
         .andExpect(jsonPath("$.reason").value("Access granted"));
+  }
+
+  @Test
+  void signedRs256JwtWithoutSubjectCannotAuthorizeAccess() throws Exception {
+    assertSubjectlessTokenRejected(signedTokenWithoutSubject(null));
+  }
+
+  @Test
+  void signedRs256JwtWithEmptySubjectCannotAuthorizeAccess() throws Exception {
+    assertSubjectlessTokenRejected(signedTokenWithoutSubject(""));
+  }
+
+  @Test
+  void signedRs256JwtWithWhitespaceSubjectCannotAuthorizeAccess() throws Exception {
+    assertSubjectlessTokenRejected(signedTokenWithoutSubject("   "));
   }
 
   @Test
@@ -226,6 +252,38 @@ class AccessSecurityIntegrationTest {
         .andExpect(jsonPath("$.authorised").value(false));
   }
 
+  @Test
+  void inactiveUserWithWriteGrantIsDeniedRead() throws Exception {
+    String jwt = deactivateAfterTokenIssuance();
+
+    postAccess(INACTIVE_USER, "DEST_INACTIVE", "READ", jwt)
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.authorised").value(false));
+  }
+
+  @Test
+  void inactiveUserWithWriteGrantIsDeniedWrite() throws Exception {
+    String jwt = deactivateAfterTokenIssuance();
+
+    postAccess(INACTIVE_USER, "DEST_INACTIVE", "WRITE", jwt)
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.authorised").value(false));
+  }
+
+  private String deactivateAfterTokenIssuance() {
+    String jwt = token(INACTIVE_USER, ISSUER, Instant.now().plusSeconds(300));
+    userRepository.save(
+        new User(
+            INACTIVE_USER,
+            List.of(),
+            INACTIVE_USER,
+            "TEST",
+            false,
+            Set.of(Permission.WRITE),
+            "not-used-for-access"));
+    return jwt;
+  }
+
   private User user(
       String userId, List<DestinationAccess> destinationAccesses, Set<Permission> permissions) {
     return new User(
@@ -262,6 +320,31 @@ class AccessSecurityIntegrationTest {
             .build();
     JwsHeader header = JwsHeader.with(SignatureAlgorithm.RS256).keyId(keyId).build();
     return jwtEncoder.encode(JwtEncoderParameters.from(header, claims)).getTokenValue();
+  }
+
+  private String signedTokenWithoutSubject(String subject) throws Exception {
+    JWTClaimsSet.Builder claims =
+        new JWTClaimsSet.Builder()
+            .issuer(ISSUER)
+            .issueTime(Date.from(Instant.now().minusSeconds(1)))
+            .expirationTime(Date.from(Instant.now().plusSeconds(300)));
+    if (subject != null) {
+      claims.subject(subject);
+    }
+
+    SignedJWT jwt =
+        new SignedJWT(
+            new JWSHeader.Builder(JWSAlgorithm.RS256).keyID(keyId).build(), claims.build());
+    jwt.sign(new RSASSASigner(testPrivateKey));
+    return jwt.serialize();
+  }
+
+  private void assertSubjectlessTokenRejected(String jwt) throws Exception {
+    MvcResult result =
+        postAccess(VALID_USER, "DEST_VALID", "READ", jwt)
+            .andExpect(status().isForbidden())
+            .andReturn();
+    assertFalse(result.getResponse().getContentAsString().contains("\"authorised\":true"));
   }
 
   private String tokenWithGlobalWritePermission(String subject) {
