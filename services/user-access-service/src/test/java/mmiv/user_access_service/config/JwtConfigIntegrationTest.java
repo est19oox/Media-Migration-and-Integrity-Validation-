@@ -5,13 +5,16 @@ import static org.junit.jupiter.api.Assertions.*;
 import com.nimbusds.jose.jwk.JWKSet;
 import com.nimbusds.jose.jwk.RSAKey;
 import com.nimbusds.jose.jwk.source.ImmutableJWKSet;
+import java.nio.charset.StandardCharsets;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
 import java.security.interfaces.RSAPrivateKey;
 import java.security.interfaces.RSAPublicKey;
 import java.time.Instant;
+import java.util.Base64;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.core.io.ByteArrayResource;
 import org.springframework.security.oauth2.jose.jws.SignatureAlgorithm;
 import org.springframework.security.oauth2.jwt.*;
 
@@ -93,5 +96,62 @@ class JwtConfigIntegrationTest {
     String token = createToken(TRUSTED_ISSUER, now.minusSeconds(3600), now.minusSeconds(600));
 
     assertThrows(JwtException.class, () -> decoder.decode(token));
+  }
+
+  @Test
+  void shouldRejectMismatchedRsaKeyPair() throws Exception {
+
+    KeyPairGenerator generator = KeyPairGenerator.getInstance("RSA");
+
+    generator.initialize(2048);
+
+    // Generate two independent RSA key pairs
+    KeyPair pairA = generator.generateKeyPair();
+    KeyPair pairB = generator.generateKeyPair();
+
+    RSAPrivateKey privateKeyA = (RSAPrivateKey) pairA.getPrivate();
+
+    RSAPublicKey publicKeyB = (RSAPublicKey) pairB.getPublic();
+
+    JwtConfig config = new JwtConfig("mmiv-user-access-key-1");
+
+    assertThrows(IllegalArgumentException.class, () -> config.jwtEncoder(privateKeyA, publicKeyB));
+  }
+
+  @Test
+  void shouldRejectWeakRsaKey() throws Exception {
+
+    KeyPairGenerator generator = KeyPairGenerator.getInstance("RSA");
+
+    generator.initialize(1024);
+
+    KeyPair pair = generator.generateKeyPair();
+
+    RSAPrivateKey privateKey = (RSAPrivateKey) pair.getPrivate();
+
+    RSAPublicKey publicKey = (RSAPublicKey) pair.getPublic();
+
+    JwtConfig config = new JwtConfig("mmiv-user-access-key-1");
+
+    assertThrows(IllegalArgumentException.class, () -> config.jwtEncoder(privateKey, publicKey));
+  }
+
+  @Test
+  void shouldRejectPrivateKeyWithoutPemHeaders() throws Exception {
+
+    KeyPairGenerator generator = KeyPairGenerator.getInstance("RSA");
+
+    generator.initialize(2048);
+
+    KeyPair pair = generator.generateKeyPair();
+
+    // Valid PKCS#8 key content, but without PEM headers
+    String base64 = Base64.getEncoder().encodeToString(pair.getPrivate().getEncoded());
+
+    ByteArrayResource resource = new ByteArrayResource(base64.getBytes(StandardCharsets.UTF_8));
+
+    JwtConfig config = new JwtConfig("mmiv-user-access-key-1");
+
+    assertThrows(IllegalArgumentException.class, () -> config.rsaPrivateKey(resource));
   }
 }

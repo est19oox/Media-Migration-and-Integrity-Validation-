@@ -5,6 +5,7 @@ import com.nimbusds.jose.jwk.RSAKey;
 import com.nimbusds.jose.jwk.source.ImmutableJWKSet;
 import java.nio.charset.StandardCharsets;
 import java.security.KeyFactory;
+import java.security.Signature;
 import java.security.interfaces.RSAPrivateKey;
 import java.security.interfaces.RSAPublicKey;
 import java.security.spec.PKCS8EncodedKeySpec;
@@ -40,7 +41,12 @@ public class JwtConfig {
       throws Exception {
 
     String pem = resource.getContentAsString(StandardCharsets.UTF_8);
+    String normalizedPem = pem.strip();
 
+    if (!normalizedPem.startsWith("-----BEGIN PRIVATE KEY-----")
+        || !normalizedPem.endsWith("-----END PRIVATE KEY-----")) {
+      throw new IllegalArgumentException("Invalid RSA private key PEM format");
+    }
     String base64 =
         pem.replace("-----BEGIN PRIVATE KEY-----", "")
             .replace("-----END PRIVATE KEY-----", "")
@@ -70,6 +76,34 @@ public class JwtConfig {
 
   @Bean
   public JwtEncoder jwtEncoder(RSAPrivateKey privateKey, RSAPublicKey publicKey) {
+    if (privateKey.getModulus().bitLength() < 2048 || publicKey.getModulus().bitLength() < 2048) {
+
+      throw new IllegalArgumentException("RSA key size must be at least 2048 bits");
+    }
+    if (privateKey == null || publicKey == null) {
+      throw new IllegalArgumentException("RSA signing keys must not be null");
+    }
+
+    try {
+      byte[] challenge = "mmiv-rsa-key-validation".getBytes(StandardCharsets.UTF_8);
+
+      Signature signer = Signature.getInstance("SHA256withRSA");
+      signer.initSign(privateKey);
+      signer.update(challenge);
+
+      byte[] signature = signer.sign();
+
+      Signature verifier = Signature.getInstance("SHA256withRSA");
+      verifier.initVerify(publicKey);
+      verifier.update(challenge);
+
+      if (!verifier.verify(signature)) {
+        throw new IllegalArgumentException("RSA private and public keys do not match");
+      }
+
+    } catch (java.security.GeneralSecurityException ex) {
+      throw new IllegalArgumentException("RSA key pair validation failed", ex);
+    }
 
     RSAKey rsaKey = new RSAKey.Builder(publicKey).privateKey(privateKey).keyID(keyId).build();
 
