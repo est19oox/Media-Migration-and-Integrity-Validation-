@@ -1,15 +1,21 @@
 #!/usr/bin/env sh
 
 set -eu
-# Reject unresolved Git merge/stash conflicts before any build or deployment.
+# Reject unresolved conflicts and malformed Maven POMs before any build/deployment.
 python3 - "${1:-.}" <<'PY_CONFLICTS'
 from pathlib import Path
 import re, sys
+import xml.etree.ElementTree as ET
 root = Path(sys.argv[1])
 errors = []
 for path in root.rglob('*'):
     if not path.is_file() or any(part in {'.git', 'target', '.idea', '__pycache__', '.terraform'} for part in path.relative_to(root).parts):
         continue
+    if path.name == 'pom.xml':
+        try:
+            ET.parse(path)
+        except (ET.ParseError, OSError) as error:
+            errors.append(f'{path}: invalid Maven POM: {error}')
     try:
         lines = path.read_text(encoding='utf-8').splitlines()
     except (UnicodeDecodeError, OSError):

@@ -46,6 +46,20 @@ done
 
 "$ROOT/scripts/ci/validate-repository.sh" "$ROOT"
 
+VALIDATION_FIXTURE="$FIXTURE_ROOT/validation"
+mkdir -p "$VALIDATION_FIXTURE/services/test-service" "$VALIDATION_FIXTURE/tests" \
+    "$VALIDATION_FIXTURE/scripts" "$VALIDATION_FIXTURE/infrastructure"
+: > "$VALIDATION_FIXTURE/README.md"
+printf '<project><!-- unclosed comment\n' > "$VALIDATION_FIXTURE/services/test-service/pom.xml"
+assert_fails "unclosed POM comment" \
+    "$ROOT/scripts/ci/validate-repository.sh" "$VALIDATION_FIXTURE"
+printf '<project><dependencies></project>\n' > "$VALIDATION_FIXTURE/services/test-service/pom.xml"
+assert_fails "mismatched POM tags" \
+    "$ROOT/scripts/ci/validate-repository.sh" "$VALIDATION_FIXTURE"
+printf '<project><dependencies/></project>\n' > "$VALIDATION_FIXTURE/services/test-service/pom.xml"
+assert_succeeds "valid POM XML" \
+    "$ROOT/scripts/ci/validate-repository.sh" "$VALIDATION_FIXTURE"
+
 DEPLOYMENT_COMMIT=0123456789abcdef0123456789abcdef01234567
 DEPLOYMENT_URL=https://dast.example.test/health
 DEPLOYMENT_VALID_ENV="$FIXTURE_ROOT/deployment-valid.env"

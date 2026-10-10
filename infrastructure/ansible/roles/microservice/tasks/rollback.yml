@@ -1,0 +1,79 @@
+---
+- name: Check saved rollback image
+  ansible.builtin.stat:
+    path: "{{ microservice_previous_image_file }}"
+  register: previous_image_file
+
+- name: Require a previous deployment
+  ansible.builtin.assert:
+    that: previous_image_file.stat.exists
+    fail_msg: "No previous image exists for {{ microservice_name }}."
+
+- name: Read rollback image
+  ansible.builtin.slurp:
+    src: "{{ microservice_previous_image_file }}"
+  register: previous_image
+
+- name: Set rollback image
+  ansible.builtin.set_fact:
+    rollback_image: "{{ previous_image.content | b64decode | trim }}"
+
+- name: Require a nonempty rollback image
+  ansible.builtin.assert:
+    that: rollback_image | length > 0
+
+- name: Check saved Compose configuration
+  ansible.builtin.stat:
+    path: "{{ microservice_compose_directory }}/previous-compose.yaml"
+  register: previous_compose_file
+
+- name: Restore previous Compose configuration
+  ansible.builtin.copy:
+    src: "{{ microservice_compose_directory }}/previous-compose.yaml"
+    dest: "{{ microservice_compose_directory }}/compose.yaml"
+    remote_src: true
+    mode: '0600'
+  when: previous_compose_file.stat.exists
+
+# The saved file can differ from the image actually running before deployment
+# (for example after a manual update). Roll back to the captured runtime image.
+- name: Read restored Compose configuration
+  ansible.builtin.slurp:
+    src: "{{ microservice_compose_directory }}/compose.yaml"
+  register: restored_compose
+  when: previous_compose_file.stat.exists
+
+- name: Restore captured image in Compose configuration
+  ansible.builtin.copy:
+    content: >-
+      {{ (restored_compose.content | b64decode | from_yaml) |
+         combine({'services': {microservice_name: {'image': rollback_image}}}, recursive=true) |
+         to_nice_yaml }}
+    dest: "{{ microservice_compose_directory }}/compose.yaml"
+    mode: '0600'
+  when: previous_compose_file.stat.exists
+
+- name: Render rollback configuration for a legacy container
+  ansible.builtin.template:
+    src: compose.yaml.j2
+    dest: "{{ microservice_compose_directory }}/compose.yaml"
+    mode: '0600'
+  vars:
+    microservice_image: "{{ rollback_image }}"
+  when: not previous_compose_file.stat.exists
+
+- name: Restore previous Integrity environment
+  ansible.builtin.copy:
+    src: "{{ microservice_compose_directory }}/previous-integrity.env"
+    dest: "{{ microservice_integrity_env_file }}"
+    remote_src: true
+    mode: '0600'
+  register: restored_integrity
+  when: microservice_name == 'integrity-service'
+  no_log: true
+
+- name: Apply restored deployment
+  ansible.builtin.include_tasks: apply.yml
+  vars:
+    compose_image: "{{ rollback_image }}"
+    integrity_environment_changed: "{{ restored_integrity.changed | default(false) }}"
