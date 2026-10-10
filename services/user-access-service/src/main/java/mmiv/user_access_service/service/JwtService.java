@@ -15,43 +15,37 @@ import org.springframework.stereotype.Service;
 @Service
 public class JwtService {
 
-    private final JwtEncoder encoder;
-    private final String issuer;
+  private final JwtEncoder encoder;
+  private final String issuer;
 
-    public JwtService(
-            JwtEncoder encoder,
-            @Value("${jwt.issuer}") String issuer) {
-        if (issuer == null || issuer.isBlank()) {
-            throw new IllegalArgumentException("JWT issuer must not be blank");
-        }
-        this.encoder = encoder;
-        this.issuer = issuer;
+  public JwtService(JwtEncoder encoder, @Value("${jwt.issuer}") String issuer) {
+    if (issuer == null || issuer.isBlank()) {
+      throw new IllegalArgumentException("JWT issuer must not be blank");
+    }
+    this.encoder = encoder;
+    this.issuer = issuer;
+  }
+
+  public String generateToken(User user) {
+    if (user == null || !user.isActive()) {
+      throw new IllegalArgumentException("Cannot issue token for inactive or missing user");
     }
 
-    public String generateToken(User user) {
-        if (user == null || !user.isActive()) {
-            throw new IllegalArgumentException(
-                    "Cannot issue token for inactive or missing user");
-        }
+    Instant issuedAt = Instant.now();
+    List<String> permissions = user.getPermissions().stream().map(Enum::name).sorted().toList();
 
-        Instant issuedAt = Instant.now();
-        List<String> permissions = user.getPermissions().stream()
-                .map(Enum::name)
-                .sorted()
-                .toList();
+    JwtClaimsSet claims =
+        JwtClaimsSet.builder()
+            .issuer(issuer)
+            .subject(user.getUserId())
+            .issuedAt(issuedAt)
+            .expiresAt(issuedAt.plus(30, ChronoUnit.MINUTES))
+            .claim("username", user.getUsername())
+            .claim("role", user.getRole())
+            .claim("permissions", permissions)
+            .build();
 
-        JwtClaimsSet claims = JwtClaimsSet.builder()
-                .issuer(issuer)
-                .subject(user.getUserId())
-                .issuedAt(issuedAt)
-                .expiresAt(issuedAt.plus(30, ChronoUnit.MINUTES))
-                .claim("username", user.getUsername())
-                .claim("role", user.getRole())
-                .claim("permissions", permissions)
-                .build();
-
-        JwsHeader header = JwsHeader.with(SignatureAlgorithm.RS256).build();
-        return encoder.encode(JwtEncoderParameters.from(header, claims))
-                .getTokenValue();
-    }
+    JwsHeader header = JwsHeader.with(SignatureAlgorithm.RS256).build();
+    return encoder.encode(JwtEncoderParameters.from(header, claims)).getTokenValue();
+  }
 }

@@ -16,23 +16,18 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/auth")
 public class AuthController {
 
-    private final AuthenticationService authenticationService;
-    private final JwtService jwtService;
+  private final AuthenticationService authenticationService;
+  private final JwtService jwtService;
 
-    public AuthController(
-            AuthenticationService authenticationService,
-            JwtService jwtService) {
-        this.authenticationService = authenticationService;
-        this.jwtService = jwtService;
-    }
+  public AuthController(AuthenticationService authenticationService, JwtService jwtService) {
+    this.authenticationService = authenticationService;
+    this.jwtService = jwtService;
+  }
 
-    @PostMapping("/login")
-    public ResponseEntity<LoginResponse> login(
-            @Valid @RequestBody LoginRequest request) {
-        User user = authenticationService.authenticate(
-                request.username(),
-                request.password());
-        String token = jwtService.generateToken(user);
-        return ResponseEntity.ok(new LoginResponse(token, "Bearer"));
-    }
+  @PostMapping("/login")
+  public ResponseEntity<LoginResponse> login(@Valid @RequestBody LoginRequest request) {
+    User user = authenticationService.authenticate(request.username(), request.password());
+    String token = jwtService.generateToken(user);
+    return ResponseEntity.ok(new LoginResponse(token, "Bearer"));
+  }
 }

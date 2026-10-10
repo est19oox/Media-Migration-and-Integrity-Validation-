@@ -10,8 +10,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.nimbusds.jose.jwk.JWKSet;
 import com.nimbusds.jose.jwk.RSAKey;
-import java.util.Set;
 import java.util.List;
+import java.util.Set;
 import mmiv.user_access_service.config.TestJwtConfig;
 import mmiv.user_access_service.model.User;
 import mmiv.user_access_service.repository.OracleUserRepository;
@@ -19,8 +19,8 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -30,137 +30,132 @@ import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 
 @SpringBootTest(
-        properties = {
-            "eureka.client.enabled=false",
-            "jwt.issuer=https://auth.mmiv.example",
-            "jwt.key-id=mmiv-integration-key"
-        })
+    properties = {
+      "eureka.client.enabled=false",
+      "jwt.issuer=https://auth.mmiv.example",
+      "jwt.key-id=mmiv-integration-key"
+    })
 @ActiveProfiles("integration")
 @Import(TestJwtConfig.class)
 @AutoConfigureMockMvc
-@TestPropertySource(properties = {
-        "spring.datasource.url=jdbc:oracle:thin:@//localhost:1521/FREEPDB1",
-        "spring.datasource.username=USER_ACCESS"
-})
+@TestPropertySource(
+    properties = {
+      "spring.datasource.url=jdbc:oracle:thin:@//localhost:1521/FREEPDB1",
+      "spring.datasource.username=USER_ACCESS"
+    })
 class AuthLoginIT {
 
-    private static final String USER_ID = "IT_LOGIN_"
-            + "6b4e9c1d";
-    private static final String USERNAME = "it_login_6b4e9c1d";
-    private static final String PASSWORD = "integration-password";
+  private static final String USER_ID = "IT_LOGIN_" + "6b4e9c1d";
+  private static final String USERNAME = "it_login_6b4e9c1d";
+  private static final String PASSWORD = "integration-password";
 
-    @Autowired
-    private MockMvc mockMvc;
+  @Autowired private MockMvc mockMvc;
 
-    @Autowired
-    private OracleUserRepository repository;
+  @Autowired private OracleUserRepository repository;
 
-    @Autowired
-    private JdbcTemplate jdbcTemplate;
+  @Autowired private JdbcTemplate jdbcTemplate;
 
-    @Autowired
-    private PasswordEncoder passwordEncoder;
+  @Autowired private PasswordEncoder passwordEncoder;
 
-    @Autowired
-    private JwtDecoder jwtDecoder;
+  @Autowired private JwtDecoder jwtDecoder;
 
-    @BeforeEach
-    void createIsolatedUser() {
-        cleanup();
-        repository.save(new User(
-                USER_ID,
-                List.of(),
-                USERNAME,
-                "OPERATOR",
-                true,
-                Set.of(),
-                passwordEncoder.encode(PASSWORD)));
-    }
+  @BeforeEach
+  void createIsolatedUser() {
+    cleanup();
+    repository.save(
+        new User(
+            USER_ID,
+            List.of(),
+            USERNAME,
+            "OPERATOR",
+            true,
+            Set.of(),
+            passwordEncoder.encode(PASSWORD)));
+  }
 
-    @AfterEach
-    void cleanupIsolatedUser() {
-        cleanup();
-    }
+  @AfterEach
+  void cleanupIsolatedUser() {
+    cleanup();
+  }
 
-    @Test
-    void correctCredentialsReturnJwtVerifiedByPublishedJwks() throws Exception {
-        String token = login(PASSWORD);
-        String jwks = mockMvc.perform(get("/.well-known/jwks.json"))
-                .andExpect(status().isOk())
-                .andReturn()
-                .getResponse()
-                .getContentAsString();
+  @Test
+  void correctCredentialsReturnJwtVerifiedByPublishedJwks() throws Exception {
+    String token = login(PASSWORD);
+    String jwks =
+        mockMvc
+            .perform(get("/.well-known/jwks.json"))
+            .andExpect(status().isOk())
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
 
-        RSAKey publicKey = (RSAKey) JWKSet.parse(jwks).getKeys().get(0);
-        assertEquals("mmiv-integration-key", publicKey.getKeyID());
-        assertFalse(jwks.contains("\"d\""));
-        assertFalse(jwks.contains("\"p\""));
-        assertFalse(jwks.contains("\"q\""));
-        assertFalse(jwks.contains(PASSWORD));
+    RSAKey publicKey = (RSAKey) JWKSet.parse(jwks).getKeys().get(0);
+    assertEquals("mmiv-integration-key", publicKey.getKeyID());
+    assertFalse(jwks.contains("\"d\""));
+    assertFalse(jwks.contains("\"p\""));
+    assertFalse(jwks.contains("\"q\""));
+    assertFalse(jwks.contains(PASSWORD));
 
-        var jwt = jwtDecoder.decode(token);
-        assertEquals("RS256", jwt.getHeaders().get("alg"));
-        assertEquals("mmiv-integration-key", jwt.getHeaders().get("kid"));
-        assertEquals("https://auth.mmiv.example", jwt.getIssuer().toString());
-        assertEquals(USER_ID, jwt.getSubject());
-        assertEquals(1800,
-                jwt.getExpiresAt().getEpochSecond()
-                        - jwt.getIssuedAt().getEpochSecond());
-        assertNotNull(publicKey.toRSAPublicKey());
-        assertTrue(jwt.getTokenValue().equals(token));
-    }
+    var jwt = jwtDecoder.decode(token);
+    assertEquals("RS256", jwt.getHeaders().get("alg"));
+    assertEquals("mmiv-integration-key", jwt.getHeaders().get("kid"));
+    assertEquals("https://auth.mmiv.example", jwt.getIssuer().toString());
+    assertEquals(USER_ID, jwt.getSubject());
+    assertEquals(1800, jwt.getExpiresAt().getEpochSecond() - jwt.getIssuedAt().getEpochSecond());
+    assertNotNull(publicKey.toRSAPublicKey());
+    assertTrue(jwt.getTokenValue().equals(token));
+  }
 
-    @Test
-    void incorrectPasswordReturnsUnauthorized() throws Exception {
-        mockMvc.perform(post("/api/auth/login")
-                        .contentType("application/json")
-                        .content("""
+  @Test
+  void incorrectPasswordReturnsUnauthorized() throws Exception {
+    mockMvc
+        .perform(
+            post("/api/auth/login")
+                .contentType("application/json")
+                .content(
+                    """
                                 {"username":"it_login_6b4e9c1d","password":"wrong"}
                                 """))
-                .andExpect(status().isUnauthorized());
-    }
+        .andExpect(status().isUnauthorized());
+  }
 
-    @Test
-    void inactiveUserReturnsUnauthorized() throws Exception {
-        repository.save(new User(
-                USER_ID,
-                USERNAME,
-                "OPERATOR",
-                false,
-                Set.of(),
-                passwordEncoder.encode(PASSWORD)));
+  @Test
+  void inactiveUserReturnsUnauthorized() throws Exception {
+    repository.save(
+        new User(USER_ID, USERNAME, "OPERATOR", false, Set.of(), passwordEncoder.encode(PASSWORD)));
 
-        mockMvc.perform(post("/api/auth/login")
-                        .contentType("application/json")
-                        .content("""
+    mockMvc
+        .perform(
+            post("/api/auth/login")
+                .contentType("application/json")
+                .content(
+                    """
                                 {"username":"it_login_6b4e9c1d","password":"integration-password"}
                                 """))
-                .andExpect(status().isUnauthorized());
-    }
+        .andExpect(status().isUnauthorized());
+  }
 
-    private String login(String password) throws Exception {
-        String response = mockMvc.perform(post("/api/auth/login")
-                        .contentType("application/json")
-                        .content("""
+  private String login(String password) throws Exception {
+    String response =
+        mockMvc
+            .perform(
+                post("/api/auth/login")
+                    .contentType("application/json")
+                    .content(
+                        """
                                 {"username":"it_login_6b4e9c1d","password":"%s"}
-                                """.formatted(password)))
-                .andExpect(status().isOk())
-                .andReturn()
-                .getResponse()
-                .getContentAsString();
-        return response.replaceFirst(
-                ".*\"accessToken\":\"([^\"]+)\".*", "$1");
-    }
+                                """
+                            .formatted(password)))
+            .andExpect(status().isOk())
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+    return response.replaceFirst(".*\"accessToken\":\"([^\"]+)\".*", "$1");
+  }
 
-    private void cleanup() {
-        jdbcTemplate.update(
-                "DELETE FROM user_destination_access WHERE user_id = ?",
-                USER_ID);
-        jdbcTemplate.update(
-                "DELETE FROM user_permissions WHERE user_id = ?",
-                USER_ID);
-        jdbcTemplate.update(
-                "DELETE FROM app_users WHERE user_id = ?",
-                USER_ID);
-    }
+  private void cleanup() {
+    jdbcTemplate.update("DELETE FROM user_destination_access WHERE user_id = ?", USER_ID);
+    jdbcTemplate.update("DELETE FROM user_permissions WHERE user_id = ?", USER_ID);
+    jdbcTemplate.update("DELETE FROM app_users WHERE user_id = ?", USER_ID);
+  }
 }

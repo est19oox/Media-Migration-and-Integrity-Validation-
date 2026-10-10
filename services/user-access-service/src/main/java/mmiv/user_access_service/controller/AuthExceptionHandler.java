@@ -10,11 +10,10 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 @RestControllerAdvice
 public class AuthExceptionHandler {
 
-    @ExceptionHandler(InvalidCredentialsException.class)
-    public ResponseEntity<Map<String, String>> handleInvalidCredentials(
-            InvalidCredentialsException exception) {
-        return ResponseEntity
-                .status(HttpStatus.UNAUTHORIZED)
-                .body(Map.of("error", "Invalid username or password"));
-    }
+  @ExceptionHandler(InvalidCredentialsException.class)
+  public ResponseEntity<Map<String, String>> handleInvalidCredentials(
+      InvalidCredentialsException exception) {
+    return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+        .body(Map.of("error", "Invalid username or password"));
+  }
 }
