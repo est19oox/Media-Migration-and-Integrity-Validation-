@@ -8,7 +8,6 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import com.fasterxml.jackson.databind.JsonNode;
 import com.nimbusds.jose.jwk.JWKSet;
 import com.nimbusds.jose.jwk.RSAKey;
 import java.util.List;
@@ -21,13 +20,15 @@ import mmiv.user_access_service.repository.InMemoryUserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.web.servlet.MockMvc;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 
 @SpringBootTest(properties = "eureka.client.enabled=false")
 @ActiveProfiles("test")
@@ -43,7 +44,7 @@ class UserAccessServiceApplicationTests {
 
   @Autowired private JwtDecoder jwtDecoder;
 
-  @Autowired private com.fasterxml.jackson.databind.ObjectMapper objectMapper;
+  @Autowired private ObjectMapper objectMapper;
 
   @BeforeEach
   void setUpUser() {
@@ -78,8 +79,8 @@ class UserAccessServiceApplicationTests {
             .getContentAsString();
     JsonNode loginJson = objectMapper.readTree(loginResponse);
     assertEquals(Set.of("accessToken", "tokenType"), fieldNames(loginJson));
-    String token = loginJson.get("accessToken").asText();
-    assertEquals("Bearer", loginJson.get("tokenType").asText());
+    String token = loginJson.get("accessToken").asString();
+    assertEquals("Bearer", loginJson.get("tokenType").asString());
 
     String jwksResponse =
         mockMvc
@@ -123,9 +124,7 @@ class UserAccessServiceApplicationTests {
   }
 
   private Set<String> fieldNames(JsonNode node) {
-    java.util.Set<String> names = new java.util.HashSet<>();
-    node.fieldNames().forEachRemaining(names::add);
-    return names;
+    return Set.copyOf(node.propertyNames());
   }
 
   @Test
