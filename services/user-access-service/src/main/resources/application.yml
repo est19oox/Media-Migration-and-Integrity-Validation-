@@ -22,5 +22,6 @@ management:
         enabled: true
 
 jwt:
+  key-id: ${JWT_KEY_ID:mmiv-user-access-key-1}
   private-key: ${JWT_PRIVATE_KEY_PATH}
   public-key: ${JWT_PUBLIC_KEY_PATH}

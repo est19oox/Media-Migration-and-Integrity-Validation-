@@ -67,6 +67,7 @@ class JwtServiceTest {
         Jwt jwt = decoder.decode(token);
 
         assertEquals("RS256", jwt.getHeaders().get("alg"));
+        assertEquals("mmiv-test-key", jwt.getHeaders().get("kid"));
         assertEquals("U001", jwt.getSubject());
         assertEquals("https://auth.mmiv.example", jwt.getIssuer().toString());
         assertEquals("alice", jwt.getClaimAsString("username"));
@@ -75,6 +76,8 @@ class JwtServiceTest {
                 jwt.getClaimAsStringList("permissions"));
         assertNotNull(jwt.getIssuedAt());
         assertNotNull(jwt.getExpiresAt());
+        assertEquals(30, ChronoUnit.MINUTES.between(
+                jwt.getIssuedAt(), jwt.getExpiresAt()));
         assertTrue(jwt.getExpiresAt().isAfter(Instant.now()));
     }
 
@@ -165,6 +168,7 @@ class JwtServiceTest {
         Jwt jwt = decoder.decode(jwtService.generateToken(user));
 
         assertEquals("RS256", jwt.getHeaders().get("alg"));
+        assertEquals("mmiv-test-key", jwt.getHeaders().get("kid"));
         assertEquals("https://auth.mmiv.example", jwt.getIssuer().toString());
         assertEquals("U001", jwt.getSubject());
         assertEquals("alice", jwt.getClaimAsString("username"));

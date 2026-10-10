@@ -28,6 +28,15 @@ import java.util.Base64;
 @Profile("!test")
 public class JwtConfig {
 
+    private final String keyId;
+
+    public JwtConfig(@Value("${jwt.key-id}") String keyId) {
+        if (keyId == null || keyId.isBlank()) {
+            throw new IllegalArgumentException("JWT key ID must not be blank");
+        }
+        this.keyId = keyId;
+    }
+
     @Bean
     public RSAPrivateKey rsaPrivateKey(
             @Value("${jwt.private-key}") Resource resource)
@@ -71,7 +80,7 @@ public class JwtConfig {
 
         RSAKey rsaKey = new RSAKey.Builder(publicKey)
                 .privateKey(privateKey)
-                .keyID("mmiv-user-access-key-1")
+                .keyID(keyId)
                 .build();
 
         return new NimbusJwtEncoder(

@@ -6,6 +6,7 @@ import java.security.interfaces.RSAPrivateKey;
 import java.security.interfaces.RSAPublicKey;
 
 import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Profile;
 
@@ -22,6 +23,15 @@ import org.springframework.security.oauth2.jwt.NimbusJwtEncoder;
 @TestConfiguration
 @Profile("test")
 public class TestJwtConfig {
+
+    private final String keyId;
+
+    public TestJwtConfig(@Value("${jwt.key-id}") String keyId) {
+        if (keyId == null || keyId.isBlank()) {
+            throw new IllegalArgumentException("JWT key ID must not be blank");
+        }
+        this.keyId = keyId;
+    }
 
     @Bean
     public KeyPair testRsaKeyPair() throws Exception {
@@ -49,7 +59,7 @@ public class TestJwtConfig {
 
         RSAKey rsaKey = new RSAKey.Builder(publicKey)
                 .privateKey(privateKey)
-                .keyID("mmiv-test-key")
+                .keyID(keyId)
                 .build();
 
         return new NimbusJwtEncoder(
