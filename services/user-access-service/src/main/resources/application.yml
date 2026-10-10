@@ -3,6 +3,16 @@ server:
 spring:
   application:
     name: user-access-service
+  datasource:
+    url: ${ORACLE_JDBC_URL:jdbc:oracle:thin:@//localhost:1521/FREEPDB1}
+    username: ${ORACLE_USER:USER_ACCESS}
+    password: ${ORACLE_PASSWORD}
+    driver-class-name: oracle.jdbc.OracleDriver
+jwt:
+  issuer: ${JWT_ISSUER:https://auth.mmiv.example}
+  key-id: ${JWT_KEY_ID:mmiv-user-access-key-1}
+  private-key: ${JWT_PRIVATE_KEY_PATH}
+  public-key: ${JWT_PUBLIC_KEY_PATH}
 management:
   endpoints:
     web:

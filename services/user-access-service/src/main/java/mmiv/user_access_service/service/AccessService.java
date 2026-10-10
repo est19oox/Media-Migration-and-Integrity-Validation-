@@ -18,6 +18,10 @@ public class AccessService {
         this.userRepository = userRepository;
     }
 
+    /**
+     * Checks destination-specific access only. User-level permissions used for
+     * authentication or JWT claims do not grant access to a destination.
+     */
     public AccessCheckResponse checkAccess(AccessCheckRequest request) {
 
         // 1. Find user
