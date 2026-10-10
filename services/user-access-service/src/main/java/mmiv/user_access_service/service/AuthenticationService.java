@@ -8,38 +8,32 @@ import org.springframework.stereotype.Service;
 @Service
 public class AuthenticationService {
 
-    private final UserRepository repository;
-    private final PasswordEncoder passwordEncoder;
-    private final JwtService jwtService;
+  private final UserRepository repository;
+  private final PasswordEncoder passwordEncoder;
+  private final JwtService jwtService;
 
-    public AuthenticationService(
-            UserRepository repository,
-            PasswordEncoder passwordEncoder,
-            JwtService jwtService) {
+  public AuthenticationService(
+      UserRepository repository, PasswordEncoder passwordEncoder, JwtService jwtService) {
 
-        this.repository = repository;
-        this.passwordEncoder = passwordEncoder;
-        this.jwtService = jwtService;
+    this.repository = repository;
+    this.passwordEncoder = passwordEncoder;
+    this.jwtService = jwtService;
+  }
+
+  public String login(String username, String password) {
+
+    if (username == null || username.isBlank() || password == null || password.isBlank()) {
+      throw new InvalidCredentialsException();
     }
 
-    public String login(String username, String password) {
+    User user = repository.findByUsername(username).orElseThrow(InvalidCredentialsException::new);
 
-        if (username == null || username.isBlank()
-                || password == null || password.isBlank()) {
-            throw new InvalidCredentialsException();
-        }
-
-        User user = repository.findByUsername(username)
-                .orElseThrow(InvalidCredentialsException::new);
-
-        if (!user.isActive()
-                || user.getPasswordHash() == null
-                || !passwordEncoder.matches(
-                        password,
-                        user.getPasswordHash())) {
-            throw new InvalidCredentialsException();
-        }
-
-        return jwtService.generateToken(user);
+    if (!user.isActive()
+        || user.getPasswordHash() == null
+        || !passwordEncoder.matches(password, user.getPasswordHash())) {
+      throw new InvalidCredentialsException();
     }
+
+    return jwtService.generateToken(user);
+  }
 }

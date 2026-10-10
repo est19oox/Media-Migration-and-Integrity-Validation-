@@ -3,26 +3,24 @@ package mmiv.user_access_service.dto;
 import jakarta.validation.constraints.NotBlank;
 
 public class AccessCheckRequest {
-    
-    @NotBlank 
-    private String userId;
 
-    @NotBlank 
-    private String action;
+  @NotBlank private String userId;
 
-    public String getUserId() {
-        return userId;
-    }
+  @NotBlank private String action;
 
-    public void setUserId(String userId) {
-        this.userId = userId;
-    }
+  public String getUserId() {
+    return userId;
+  }
 
-    public String getAction() {
-        return action;
-    }
+  public void setUserId(String userId) {
+    this.userId = userId;
+  }
 
-    public void setAction(String action) {
-        this.action = action;
-    }
+  public String getAction() {
+    return action;
+  }
+
+  public void setAction(String action) {
+    this.action = action;
+  }
 }

@@ -1,5 +1,9 @@
 package mmiv.user_access_service.repository;
 
+import java.util.HashSet;
+import java.util.List;
+import java.util.Optional;
+import java.util.Set;
 import mmiv.user_access_service.model.Permission;
 import mmiv.user_access_service.model.User;
 import org.springframework.context.annotation.Primary;
@@ -8,90 +12,90 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.HashSet;
-import java.util.List;
-import java.util.Optional;
-import java.util.Set;
-
 @Repository
 @Primary
 @Profile("!test")
 public class OracleUserRepository implements UserRepository {
 
-    private final JdbcTemplate jdbcTemplate;
+  private final JdbcTemplate jdbcTemplate;
 
-    public OracleUserRepository(JdbcTemplate jdbcTemplate) {
-        this.jdbcTemplate = jdbcTemplate;
-    }
+  public OracleUserRepository(JdbcTemplate jdbcTemplate) {
+    this.jdbcTemplate = jdbcTemplate;
+  }
 
-    @Override
-    public Optional<User> findById(String userId) {
-        List<User> users = jdbcTemplate.query(
-                """
+  @Override
+  public Optional<User> findById(String userId) {
+    List<User> users =
+        jdbcTemplate.query(
+            """
                         SELECT user_id, username, role, active, password_hash
                         FROM app_users
                         WHERE user_id = ?
                         """,
-                (rs, rowNum) -> new User(
-                        rs.getString("user_id"),
-                        rs.getString("username"),
-                        rs.getString("role"),
-                        rs.getInt("active") == 1,
-                        loadPermissions(rs.getString("user_id")),
-                        rs.getString("password_hash")),
-                userId);
+            (rs, rowNum) ->
+                new User(
+                    rs.getString("user_id"),
+                    rs.getString("username"),
+                    rs.getString("role"),
+                    rs.getInt("active") == 1,
+                    loadPermissions(rs.getString("user_id")),
+                    rs.getString("password_hash")),
+            userId);
 
-        return users.stream().findFirst();
+    return users.stream().findFirst();
+  }
+
+  @Override
+  public Optional<User> findByUsername(String username) {
+    if (username == null || username.isBlank()) {
+      return Optional.empty();
     }
 
-    @Override
-    public Optional<User> findByUsername(String username) {
-        if (username == null || username.isBlank()) {
-            return Optional.empty();
-        }
-
-        List<User> users = jdbcTemplate.query(
-                """
+    List<User> users =
+        jdbcTemplate.query(
+            """
                         SELECT user_id, username, role, active, password_hash
                         FROM app_users
                         WHERE username = ?
                         """,
-                (rs, rowNum) -> new User(
-                        rs.getString("user_id"),
-                        rs.getString("username"),
-                        rs.getString("role"),
-                        rs.getInt("active") == 1,
-                        loadPermissions(rs.getString("user_id")),
-                        rs.getString("password_hash")),
-                username);
+            (rs, rowNum) ->
+                new User(
+                    rs.getString("user_id"),
+                    rs.getString("username"),
+                    rs.getString("role"),
+                    rs.getInt("active") == 1,
+                    loadPermissions(rs.getString("user_id")),
+                    rs.getString("password_hash")),
+            username);
 
-        return users.stream().findFirst();
-    }
+    return users.stream().findFirst();
+  }
 
-    private Set<Permission> loadPermissions(String userId) {
-        List<String> values = jdbcTemplate.queryForList(
-                """
+  private Set<Permission> loadPermissions(String userId) {
+    List<String> values =
+        jdbcTemplate.queryForList(
+            """
                         SELECT permission
                         FROM user_permissions
                         WHERE user_id = ?
                         """,
-                String.class,
-                userId);
+            String.class,
+            userId);
 
-        Set<Permission> permissions = new HashSet<>();
+    Set<Permission> permissions = new HashSet<>();
 
-        for (String value : values) {
-            permissions.add(Permission.valueOf(value));
-        }
-
-        return permissions;
+    for (String value : values) {
+      permissions.add(Permission.valueOf(value));
     }
 
-    @Override
-    @Transactional
-    public void save(User user) {
-        jdbcTemplate.update(
-                """
+    return permissions;
+  }
+
+  @Override
+  @Transactional
+  public void save(User user) {
+    jdbcTemplate.update(
+        """
                         MERGE INTO app_users target
                         USING (
                             SELECT ? AS user_id,
@@ -121,24 +125,22 @@ public class OracleUserRepository implements UserRepository {
                                 source.password_hash
                             )
                         """,
-                user.getUserId(),
-                user.getUsername(),
-                user.getRole(),
-                user.isActive() ? 1 : 0,
-                user.getPasswordHash());
+        user.getUserId(),
+        user.getUsername(),
+        user.getRole(),
+        user.isActive() ? 1 : 0,
+        user.getPasswordHash());
 
-        jdbcTemplate.update(
-                "DELETE FROM user_permissions WHERE user_id = ?",
-                user.getUserId());
+    jdbcTemplate.update("DELETE FROM user_permissions WHERE user_id = ?", user.getUserId());
 
-        for (Permission permission : user.getPermissions()) {
-            jdbcTemplate.update(
-                    """
+    for (Permission permission : user.getPermissions()) {
+      jdbcTemplate.update(
+          """
                             INSERT INTO user_permissions (user_id, permission)
                             VALUES (?, ?)
                             """,
-                    user.getUserId(),
-                    permission.name());
-        }
+          user.getUserId(),
+          permission.name());
     }
+  }
 }
