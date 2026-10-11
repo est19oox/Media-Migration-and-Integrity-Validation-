@@ -64,8 +64,8 @@ class CDContractTest(unittest.TestCase):
         self.assertIn('--health-start-period 180s', options)
         self.assertIn('--log-opt max-size=10m', options)
         self.assertIn('--log-opt max-file=3', options)
-        self.assertIn('--memory 2g', options)
-        self.assertIn('--memory-swap 2g', options)
+        self.assertIn('--memory 3g', options)
+        self.assertIn('--memory-swap 3g', options)
         storage = next(s for s in jobs['quality_gates']['steps']
                        if 'test-oracle-storage.py' in s.get('run', ''))
         self.assertEqual(storage['env']['ORACLE_CONTAINER'], '${{ job.services.oracle.id }}')

@@ -108,8 +108,8 @@ def main():
         return
     import json
     details = json.loads(subprocess.check_output(['docker', 'inspect', container], text=True))[0]
-    if details['HostConfig']['Memory'] != 2 * 1024 ** 3:
-        raise RuntimeError('CI must validate Oracle with the same 2 GiB memory limit as EC2')
+    if details['HostConfig']['Memory'] != 3 * 1024 ** 3 or details['HostConfig']['MemorySwap'] != 3 * 1024 ** 3:
+        raise RuntimeError('CI must validate Oracle with the same 3 GiB memory limit as EC2')
     subprocess.run(['docker','exec','-i',container,'sqlplus','-L','-s','/','as','sysdba'],
                    input=SETUP+SQL+CHECK+SQL+REPEAT_CHECK, text=True, check=True, timeout=180)
 

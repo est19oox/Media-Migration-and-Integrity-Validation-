@@ -379,7 +379,7 @@ def config_for(state):
         services['oracle'] = {'image': ORACLE_IMAGE, 'container_name': 'oracle',
             'labels': {'mmiv.oracle-startup-sha256': hashlib.sha256(ORACLE_STARTUP.encode()).hexdigest()},
             'restart': 'unless-stopped', 'networks': ['backend'], 'shm_size': '1g',
-            'mem_limit': '2g', 'memswap_limit': '2g',
+            'mem_limit': '3g', 'memswap_limit': '3g',
             'logging': {'driver': 'json-file', 'options': {'max-size': '10m', 'max-file': '3'}},
             'env_file': [{'path': '/etc/mmiv/managed-oracle/oracle.env', 'format': 'raw'}],
             'volumes': [{'type': 'volume', 'source': 'oracle-data', 'target': '/opt/oracle/oradata'}],

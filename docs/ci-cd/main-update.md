@@ -55,7 +55,7 @@ queue URL, EC2 ID and image identities are obtained automatically.
 
 | Component | Configured budget |
 | --- | --- |
-| Managed Oracle container | 2 GiB RAM; memory+swap limit also 2 GiB |
+| Managed Oracle container | 3 GiB RAM; memory+swap limit also 3 GiB |
 | User Access container | 512 MiB RAM; memory+swap limit also 512 MiB |
 | User Access JVM | 64 MiB initial heap, 256 MiB maximum heap, 64 MiB maximum direct buffers |
 | User Access JDBC pool | 4 maximum connections, 1 minimum idle |
@@ -72,7 +72,7 @@ limiting an over-budget database. Remove a directly granted UNLIMITED TABLESPACE
 privilege so it cannot bypass the schema quota.
 
 The Oracle limit bounds the container's total memory; it does not change SGA/PGA
-parameters or reserve 2 GiB continuously. CI starts Oracle with that same limit.
+parameters or reserve 3 GiB continuously. CI starts Oracle with that same limit.
 Its storage check inserts 20,000 indexed sample rows with 80-character payloads,
 verifies retention/reclamation/quotas, and repeats the routine. Actual User Access
 startup at 512 MiB is checked by deployed container health and functional tests;
@@ -177,3 +177,23 @@ above 30 GiB, EBS cannot shrink it in place: retain the actual larger volume siz
 in Terraform rather than applying a decrease. No live volume was resized here.
 Instance replacement remains blocked by prevent_destroy. Moving an already larger
 root volume to a smaller disk requires a separate migration, which is not included.
+
+## Oracle startup memory headroom
+
+The uploaded startup log reports a 1,603,398,928-byte SGA (about 1.49 GiB), then
+ORA-03113 immediately after mounting. The previous 2 GiB total container cap left
+little room for PGA, Oracle processes, startup work and other container overhead.
+OOM is a leading hypothesis, not confirmed by this log alone. CI and managed EC2
+Oracle now both use a 3 GiB memory cap, with the same combined memory/swap cap.
+User Access remains at 512 MiB; all schema/file storage budgets remain unchanged.
+
+The number of rows is not a reliable measure of Oracle's startup memory demand.
+Oracle Free's internal SGA/PGA restriction does not represent every byte charged
+to the Docker container. This change provides headroom without altering internal
+Oracle memory parameters, deleting database data, or adding another deployment.
+
+If the failure continues, inspect the container OOM state and Oracle alert/trace
+logs. A false container OOMKilled flag alone does not exclude a killed child
+process; inspect host kernel/cgroup memory events when available. ORA-03113 can
+also result from Oracle process errors unrelated to memory. The revised startup
+has not been run locally because Docker/Oracle are unavailable in this environment.
