@@ -57,7 +57,9 @@ class StackLifecycleTest(unittest.TestCase):
         elif args[:3] == ('docker', 'volume', 'inspect'):
             result.returncode = int(args[3] not in self.volumes)
             if result.returncode:
-                result.stderr = 'No such volume'
+                result.stderr = 'Error response from daemon: get mmiv-oracle-data: no such volume'
+        elif args[:3] == ('docker', 'volume', 'ls'):
+            result.stdout = '\n'.join(sorted(self.volumes))
         elif args[:3] == ('docker', 'volume', 'create'):
             self.volumes.add(args[3])
         elif args[0] == 'openssl':
@@ -238,6 +240,44 @@ class StackLifecycleTest(unittest.TestCase):
         self.assertEqual(self.volumes, {remote.ORACLE_VOLUME})
         self.state['RELEASE_ID'] = 'retry-2'
         self.assertTrue(remote.run('deploy', dict(self.state))['READY'])
+
+    def test_missing_volume_uses_listing_and_reuses_credentials_on_retry(self):
+        self.managed()
+        remote.managed_access(dict(self.state))
+        credentials = self.root / 'etc/mmiv/managed-oracle/credentials.json'
+        original = credentials.read_bytes()
+        self.assertIn(('docker', 'volume', 'ls', '--format', '{{.Name}}'), self.calls)
+        self.assertEqual(self.volumes, {remote.ORACLE_VOLUME})
+        self.calls.clear()
+        remote.managed_access(dict(self.state))
+        self.assertEqual(credentials.read_bytes(), original)
+        self.assertFalse(any(c[:3] == ('docker', 'volume', 'create') for c in self.calls))
+
+    def test_uninspectable_existing_volume_is_not_treated_as_absent(self):
+        self.managed()
+        self.volumes.add(remote.ORACLE_VOLUME)
+        def command(*args, **kwargs):
+            if args[:3] == ('docker', 'volume', 'inspect'):
+                return subprocess.CompletedProcess(args, 1, '', 'unrecognized error')
+            return self.command(*args, **kwargs)
+        with patch.object(remote, 'command', side_effect=command):
+            with self.assertRaisesRegex(RuntimeError, 'Could not inspect Oracle volume'):
+                remote.managed_access(dict(self.state))
+        self.assertFalse((self.root / 'etc/mmiv/managed-oracle/credentials.json').exists())
+        self.assertFalse(any(c[:3] == ('docker', 'volume', 'create') for c in self.calls))
+
+    def test_daemon_or_volume_listing_failure_creates_no_credentials_or_volume(self):
+        self.managed()
+        for failed in [('docker', 'info'), ('docker', 'volume', 'ls')]:
+            def command(*args, **kwargs):
+                if args[:len(failed)] == failed:
+                    raise subprocess.CalledProcessError(1, args)
+                return self.command(*args, **kwargs)
+            with patch.object(remote, 'command', side_effect=command):
+                with self.assertRaises(subprocess.CalledProcessError):
+                    remote.managed_access(dict(self.state))
+            self.assertFalse((self.root / 'etc/mmiv/managed-oracle/credentials.json').exists())
+            self.assertFalse(self.volumes)
 
     def test_existing_database_without_credentials_fails_without_resetting_it(self):
         self.managed()

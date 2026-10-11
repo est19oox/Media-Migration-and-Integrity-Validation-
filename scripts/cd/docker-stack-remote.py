@@ -278,6 +278,12 @@ def managed_access(state):
     directory = Path('/etc/mmiv/managed-oracle')
     settings = directory / 'credentials.json'
     existing = command('docker', 'volume', 'inspect', ORACLE_VOLUME, check=False)
+    if existing.returncode != 0:
+        # Verify absence through a successful daemon query, not localized stderr.
+        command('docker', 'info')
+        volumes = command('docker', 'volume', 'ls', '--format', '{{.Name}}')
+        if ORACLE_VOLUME in volumes.stdout.splitlines():
+            raise RuntimeError('Could not inspect Oracle volume')
     if not settings.exists():
         if existing.returncode == 0 or inspect('oracle'):
             raise RuntimeError('Oracle data exists without credentials; restore the host secret backup')
@@ -342,10 +348,6 @@ def managed_access(state):
     if not target.exists() or target.read_text() != oracle_env:
         atomic_write(target, oracle_env)
     if existing.returncode != 0:
-        # Do not confuse an unavailable daemon with an absent volume.
-        command('docker', 'info')
-        if 'No such' not in existing.stderr:
-            raise RuntimeError('Could not inspect Oracle volume')
         command('docker', 'volume', 'create', ORACLE_VOLUME)
     return {**state, 'USER_ACCESS_CONFIG_ID': identity}
 
