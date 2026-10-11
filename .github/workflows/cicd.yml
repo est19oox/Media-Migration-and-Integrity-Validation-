@@ -86,8 +86,30 @@ jobs:
 #
 #      - name: Terraform Apply
 #        run: terraform apply -input=false tfplan
+  terraform-validation:
+    name: Validate Terraform on an isolated runner
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      TF_PLUGIN_CACHE_DIR: ${{ runner.temp }}/mmiv-terraform-provider-cache
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: 1.15.8
+      - name: Check Terraform provider-cache behavior
+        run: python3 tests/ci/test-terraform-cache.py
+      - name: Validate all Terraform roots with a shared provider cache
+        run: |
+          df -h "$GITHUB_WORKSPACE"
+          bash scripts/ci/run-terraform-checks.sh .
+          df -h "$GITHUB_WORKSPACE"
+
   quality_gates:
     name: CI and Security Gates
+    needs: [terraform-validation]
     runs-on: ubuntu-latest
     services:
       oracle:
@@ -99,11 +121,15 @@ jobs:
         ports:
           - 1521:1521
         options: >-
+          --memory 2g
+          --memory-swap 2g
           --health-cmd healthcheck.sh
           --health-interval 10s
           --health-timeout 5s
-          --health-retries 60
-          --health-start-period 60s
+          --health-retries 90
+          --health-start-period 180s
+          --log-opt max-size=10m
+          --log-opt max-file=3
 
     steps:
       - name: Checkout repository
@@ -121,11 +147,6 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Set up Terraform
-        uses: hashicorp/setup-terraform@v4
-        with:
-          terraform_version: 1.15.8
-
       - name: Install isolated Semgrep and Checkov
         run: |
           set -euo pipefail
@@ -134,11 +155,11 @@ jobs:
           SCANNER_BIN="$RUNNER_TEMP/mmiv-scanner-bin"
           python -m venv "$SEMGREP_ENV"
           python -m venv "$CHECKOV_ENV"
-          "$SEMGREP_ENV/bin/python" -m pip install --upgrade pip
-          "$CHECKOV_ENV/bin/python" -m pip install --upgrade pip
+          "$SEMGREP_ENV/bin/python" -m pip install --no-cache-dir --upgrade pip
+          "$CHECKOV_ENV/bin/python" -m pip install --no-cache-dir --upgrade pip
           # MCP 1.12.2 (pinned by Semgrep) uses a Pydantic API removed in 2.14.
-          "$SEMGREP_ENV/bin/python" -m pip install "semgrep==1.138.0" "pydantic==2.13.5"
-          "$CHECKOV_ENV/bin/python" -m pip install "checkov==3.2.489"
+          "$SEMGREP_ENV/bin/python" -m pip install --no-cache-dir "semgrep==1.138.0" "pydantic==2.13.5"
+          "$CHECKOV_ENV/bin/python" -m pip install --no-cache-dir "checkov==3.2.489"
           "$SEMGREP_ENV/bin/python" -m pip check
           "$CHECKOV_ENV/bin/python" -m pip check
           "$SEMGREP_ENV/bin/python" -c "from mcp.server.fastmcp import FastMCP"
@@ -161,12 +182,12 @@ jobs:
             "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/${PACKAGE}"
           echo "${TRIVY_SHA256}  /tmp/${PACKAGE}" | sha256sum --check --strict
           sudo apt-get install --yes "/tmp/${PACKAGE}"
+          rm -f "/tmp/${PACKAGE}"
 
       - name: Verify CI tools
         run: |
           java -version
           mvn --version
-          terraform version
           semgrep --version
           trivy --version
           checkov --version
@@ -182,6 +203,11 @@ jobs:
           python3 tests/ci/test-stack-lifecycle.py
           node --test tests/ci/test-upload-page.cjs
 
+      - name: Reclaim and verify User Access Oracle database storage
+        env:
+          ORACLE_CONTAINER: ${{ job.services.oracle.id }}
+        run: python3 tests/ci/test-oracle-storage.py
+
       - name: Build and test services including Oracle integration
         env:
           MMIV_USER_ACCESS_ORACLE_IT: 'true'
@@ -195,9 +221,6 @@ jobs:
 
       - name: Run Trivy SCA
         run: bash scripts/ci/run-sca.sh .
-
-      - name: Validate Terraform
-        run: bash scripts/ci/run-terraform-checks.sh .
 
       - name: Run Checkov IaC scan
         run: bash scripts/ci/run-iac-scan.sh .

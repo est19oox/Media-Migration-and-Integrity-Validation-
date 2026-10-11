@@ -7,7 +7,9 @@ must also pass before tests start.
 
 ## Pipeline
 
-1. Existing CI/security gates pass. Terraform runs on every pipeline. Image builds
+1. Terraform formatting/validation runs first on an isolated runner, sharing one
+   provider cache across its three roots. CI/security gates then pass on their own
+   runner with Oracle and scanners. Terraform apply runs on every pipeline. Image builds
    run in parallel with Terraform after the gates; each image is tested, scanned,
    pushed or reused by its immutable commit tag, and recorded in an image artifact.
 2. `setup-host` waits for Terraform and all image builds. Ansible reconciles host
@@ -19,6 +21,8 @@ must also pass before tests start.
    prior release, and reconciles `/opt/mmiv/stack/compose.yaml` under `mmiv-stack`:
    - One `docker compose up -d --no-build --pull never` starts the whole release.
    - Registry and managed Oracle start first. Oracle has a persistent external volume.
+     Its startup hook reclaims unused User Access datafile/TEMP space before readiness;
+     this runs inside that startup, with no additional forward Compose invocation.
    - Backends depend on Registry health; User Access also waits for Oracle/account initialization.
    - Gateway depends on all enabled backends being healthy. Current-container Eureka
      registration, Gateway pages and routed requests must pass before the release becomes ready.

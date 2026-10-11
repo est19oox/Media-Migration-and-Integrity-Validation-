@@ -108,6 +108,82 @@ DIRECTORY = '/opt/mmiv/stack'
 ENVIRONMENT = '/etc/mmiv/integrity.env'
 ORACLE_IMAGE = 'gvenzl/oracle-free:23.26.3-slim-faststart'
 ORACLE_VOLUME = 'mmiv-oracle-data'
+ORACLE_STORAGE_SQL = '''
+SET SERVEROUTPUT ON
+ALTER SESSION SET CONTAINER=FREEPDB1;
+DECLARE
+  high_block NUMBER;
+  target_mb NUMBER;
+  before_bytes NUMBER;
+  after_bytes NUMBER;
+  allocated_bytes NUMBER;
+  max_mb NUMBER;
+  unlimited_count NUMBER;
+BEGIN
+  SELECT NVL(SUM(bytes), 0) INTO allocated_bytes FROM dba_segments WHERE owner = 'USER_ACCESS';
+  IF allocated_bytes > 128 * 1048576 THEN
+    RAISE_APPLICATION_ERROR(-20010, 'Existing USER_ACCESS allocation exceeds the 128 MiB demo budget; increase quota before deployment');
+  END IF;
+  SELECT COUNT(*) INTO unlimited_count FROM dba_sys_privs
+    WHERE grantee = 'USER_ACCESS' AND privilege = 'UNLIMITED TABLESPACE';
+  IF unlimited_count > 0 THEN
+    EXECUTE IMMEDIATE 'REVOKE UNLIMITED TABLESPACE FROM USER_ACCESS';
+  END IF;
+  EXECUTE IMMEDIATE 'ALTER USER USER_ACCESS QUOTA 128M ON USERS';
+  SELECT NVL(SUM(bytes), 0) INTO before_bytes FROM
+    (SELECT bytes FROM dba_data_files WHERE tablespace_name = 'USERS'
+     UNION ALL SELECT bytes FROM dba_temp_files WHERE tablespace_name = 'TEMP');
+  -- Only shrink unused file tails. Do not move rows, rebuild indexes, or
+  -- touch SYSTEM, SYSAUX, UNDO, redo logs, or other containers.
+  FOR f IN (SELECT d.file_id, d.bytes, t.block_size FROM dba_data_files d
+            JOIN dba_tablespaces t ON t.tablespace_name = d.tablespace_name
+            WHERE d.tablespace_name = 'USERS' AND d.online_status = 'ONLINE') LOOP
+    SELECT NVL(MAX(block_id + blocks), 0) INTO high_block
+      FROM dba_extents WHERE file_id = f.file_id;
+    target_mb := GREATEST(32, CEIL(high_block * f.block_size / 1048576) + 16);
+    IF target_mb * 1048576 < f.bytes THEN
+      BEGIN
+        EXECUTE IMMEDIATE 'ALTER DATABASE DATAFILE ' || f.file_id ||
+                          ' RESIZE ' || target_mb || 'M';
+      EXCEPTION WHEN OTHERS THEN
+        -- Oracle checks file metadata and concurrent allocation too.
+        -- An occupied tail or minimum-file constraint leaves the file intact.
+        IF SQLCODE NOT IN (-3297, -3214) THEN RAISE; END IF;
+        DBMS_OUTPUT.PUT_LINE('MMIV USERS file retained: ' || f.file_id);
+      END;
+    END IF;
+  END LOOP;
+  FOR t IN (SELECT tablespace_name FROM dba_temp_files
+            WHERE tablespace_name = 'TEMP'
+            GROUP BY tablespace_name HAVING SUM(bytes) > 64 * 1048576) LOOP
+    EXECUTE IMMEDIATE 'ALTER TABLESPACE TEMP SHRINK SPACE KEEP 64M';
+  END LOOP;
+  -- Bound growth after reclaiming free space. Existing larger files are
+  -- retained, never truncated below allocated data. Caps are per file.
+  FOR f IN (SELECT file_id, bytes, autoextensible FROM dba_data_files
+            WHERE tablespace_name = 'USERS') LOOP
+    max_mb := GREATEST(512, CEIL(f.bytes / 1048576));
+    IF f.autoextensible = 'YES' THEN
+      EXECUTE IMMEDIATE 'ALTER DATABASE DATAFILE ' || f.file_id ||
+                        ' AUTOEXTEND ON NEXT 8M MAXSIZE ' || max_mb || 'M';
+    END IF;
+  END LOOP;
+  FOR f IN (SELECT file_id, bytes, autoextensible FROM dba_temp_files
+            WHERE tablespace_name = 'TEMP') LOOP
+    max_mb := GREATEST(128, CEIL(f.bytes / 1048576));
+    IF f.autoextensible = 'YES' THEN
+      EXECUTE IMMEDIATE 'ALTER DATABASE TEMPFILE ' || f.file_id ||
+                        ' AUTOEXTEND ON NEXT 8M MAXSIZE ' || max_mb || 'M';
+    END IF;
+  END LOOP;
+  SELECT NVL(SUM(bytes), 0) INTO after_bytes FROM
+    (SELECT bytes FROM dba_data_files WHERE tablespace_name = 'USERS'
+     UNION ALL SELECT bytes FROM dba_temp_files WHERE tablespace_name = 'TEMP');
+  DBMS_OUTPUT.PUT_LINE('MMIV User Access storage bytes: before=' || before_bytes ||
+                      ', after=' || after_bytes || ', reclaimed=' || (before_bytes-after_bytes));
+END;
+/
+'''
 ORACLE_STARTUP = '''
 # Sourced by the Oracle image after startup; contains no credential values.
 rm -f /opt/oracle/oradata/mmiv-app-user-ready
@@ -125,10 +201,11 @@ BEGIN
   EXECUTE IMMEDIATE 'GRANT DB_DEVELOPER_ROLE TO USER_ACCESS';
 END;
 /
+''' + ORACLE_STORAGE_SQL + '''
 EXIT;
 SQL
 then
-  echo 'MMIV User Access schema initialization failed.' >&2
+  echo 'MMIV User Access schema initialization or storage reclaim failed.' >&2
   return 1
 fi
 if ! sqlplus -L -s /nolog >/dev/null 2>&1 <<SQL
@@ -264,6 +341,14 @@ def config_for(state):
             service['volumes'].append({'type': 'bind', 'source': '/var/lib/mmiv/transfer-log-outbox',
                                       'target': '/var/lib/mmiv/log-outbox'})
         if name == 'user-access-service':
+            service['mem_limit'] = '512m'
+            service['memswap_limit'] = '512m'
+            service['environment'].update({
+                'JAVA_TOOL_OPTIONS': '-Xms64m -Xmx256m -XX:MaxDirectMemorySize=64m',
+                'SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE': '4',
+                'SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE': '1',
+                'SERVER_TOMCAT_THREADS_MAX': '24',
+                'SERVER_TOMCAT_THREADS_MIN_SPARE': '2'})
             config_id = state.get('USER_ACCESS_CONFIG_ID', '')
             if not re.fullmatch(r'[a-f0-9]{64}', config_id):
                 raise ValueError('User Access requires a staged immutable configuration bundle')
@@ -292,11 +377,14 @@ def config_for(state):
         services[name] = service
     if state.get('MANAGED_USER_ACCESS_ORACLE') and 'user-access-service' in services:
         services['oracle'] = {'image': ORACLE_IMAGE, 'container_name': 'oracle',
+            'labels': {'mmiv.oracle-startup-sha256': hashlib.sha256(ORACLE_STARTUP.encode()).hexdigest()},
             'restart': 'unless-stopped', 'networks': ['backend'], 'shm_size': '1g',
+            'mem_limit': '2g', 'memswap_limit': '2g',
+            'logging': {'driver': 'json-file', 'options': {'max-size': '10m', 'max-file': '3'}},
             'env_file': [{'path': '/etc/mmiv/managed-oracle/oracle.env', 'format': 'raw'}],
             'volumes': [{'type': 'volume', 'source': 'oracle-data', 'target': '/opt/oracle/oradata'}],
             'healthcheck': {'test': ['CMD-SHELL', 'healthcheck.sh && test -f /opt/oracle/oradata/mmiv-app-user-ready'],
-                           'interval': '10s', 'timeout': '5s', 'retries': 90, 'start_period': '120s'}}
+                           'interval': '10s', 'timeout': '5s', 'retries': 90, 'start_period': '180s'}}
         # Validate the application login and repair a missing schema after an
         # interrupted initialization, before declaring the database ready.
         hook = Path('/etc/mmiv/managed-oracle/99-mmiv-ready.sh')

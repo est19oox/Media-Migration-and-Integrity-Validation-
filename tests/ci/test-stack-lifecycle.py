@@ -130,6 +130,17 @@ class StackLifecycleTest(unittest.TestCase):
         self.assertEqual(len(launches), 1)
         self.assertNotIn('--no-deps', launches[0])
         self.assertNotIn('ports', self.configs['oracle'])
+        self.assertEqual(self.configs['oracle']['mem_limit'], '2g')
+        self.assertEqual(self.configs['oracle']['memswap_limit'], '2g')
+        self.assertEqual(self.configs['user-access-service']['mem_limit'], '512m')
+        self.assertEqual(self.configs['user-access-service']['memswap_limit'], '512m')
+        self.assertIn('-Xmx256m', self.configs['user-access-service']['environment']['JAVA_TOOL_OPTIONS'])
+        self.assertEqual(self.configs['user-access-service']['environment']['SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE'], '4')
+        self.assertNotIn('mem_limit', self.configs['integrity-service'])
+        self.assertEqual(self.configs['oracle']['image'], 'gvenzl/oracle-free:23.26.3-slim-faststart')
+        self.assertEqual(self.configs['oracle']['logging'],
+                         {'driver': 'json-file', 'options': {'max-size': '10m', 'max-file': '3'}})
+        self.assertEqual(self.configs['oracle']['healthcheck']['start_period'], '180s')
         self.assertEqual(self.volumes, {remote.ORACLE_VOLUME})
         environment = (self.root / self.configs['user-access-service']['env_file'][0]['path'].lstrip('/')).read_text()
         self.assertIn('ORACLE_JDBC_URL=jdbc:oracle:thin:@//oracle:1521/FREEPDB1', environment)
@@ -152,17 +163,30 @@ class StackLifecycleTest(unittest.TestCase):
         self.assertEqual(originals, {p.name: p.read_bytes() for p in secrets_dir.iterdir()})
         self.assertEqual(first['USER_ACCESS_CONFIG_ID'], second['USER_ACCESS_CONFIG_ID'])
 
+    def test_storage_hook_changes_reconcile_oracle_in_single_forward_deployment(self):
+        self.managed()
+        self.assertTrue(remote.run('deploy', dict(self.state))['READY'])
+        oracle_id = self.containers['oracle']['Id']
+        self.calls.clear()
+        self.state['RELEASE_ID'] = 'storage-hook-update'
+        with patch.object(remote, 'ORACLE_STARTUP', remote.ORACLE_STARTUP + '\n# revised hook\n'):
+            self.assertTrue(remote.run('deploy', dict(self.state))['READY'])
+        self.assertNotEqual(self.containers['oracle']['Id'], oracle_id)
+        self.assertEqual(self.volumes, {remote.ORACLE_VOLUME})
+        self.assertEqual(sum(c[:2] == ('docker', 'compose') and 'up' in c for c in self.calls), 1)
+
     def test_startup_login_failure_does_not_mark_database_ready(self):
         directory = self.root / 'hook-test'
         directory.mkdir()
         executable = directory / 'sqlplus'
-        executable.write_text('#!/bin/sh\ncat >/dev/null\nif [ "$3" = /nolog ]; then exit "$TEST_LOGIN_EXIT"; fi\n')
+        executable.write_text('#!/bin/sh\ncat >"$SQL_CAPTURE"\nif [ "$3" = /nolog ]; then exit "$TEST_LOGIN_EXIT"; fi\nexit "$TEST_SCHEMA_EXIT"\n')
         executable.chmod(0o755)
         marker = directory / 'ready'
         hook = directory / 'startup.sh'
         hook.write_text(remote.ORACLE_STARTUP.replace('/opt/oracle/oradata/mmiv-app-user-ready', str(marker)))
         env = {**os.environ, 'PATH': str(directory) + os.pathsep + os.environ['PATH'],
-               'APP_USER_PASSWORD': 'test-password', 'TEST_LOGIN_EXIT': '1'}
+               'APP_USER_PASSWORD': 'test-password', 'TEST_LOGIN_EXIT': '1',
+               'TEST_SCHEMA_EXIT': '0', 'SQL_CAPTURE': str(directory / 'captured.sql')}
         for exit_code in ('1', '0'):
             env['TEST_LOGIN_EXIT'] = exit_code
             result = self.real_subprocess(['bash', '-c', 'set -euo pipefail; source "$1"', 'bash', str(hook)],
@@ -170,6 +194,13 @@ class StackLifecycleTest(unittest.TestCase):
             self.assertEqual(result.returncode == 0, exit_code == '0')
             self.assertEqual(marker.exists(), exit_code == '0')
             self.assertNotIn('test-password', result.stdout + result.stderr)
+        env['TEST_SCHEMA_EXIT'] = '1'
+        result = self.real_subprocess(['bash', '-c', 'set -euo pipefail; source "$1"', 'bash', str(hook)],
+                                      env=env, text=True, capture_output=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertFalse(marker.exists())
+        self.assertIn(remote.ORACLE_STORAGE_SQL.strip(), (directory / 'captured.sql').read_text())
+        self.assertNotIn('test-password', result.stdout + result.stderr)
 
     def test_switch_to_managed_database_retains_existing_signing_key(self):
         self.stage_access()

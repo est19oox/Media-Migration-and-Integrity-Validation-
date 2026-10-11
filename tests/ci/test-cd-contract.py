@@ -60,6 +60,31 @@ class CDContractTest(unittest.TestCase):
         self.assertIn('managed_user_access_oracle', deploy['env']['MANAGED_USER_ACCESS_ORACLE'])
         self.assertEqual(jobs['quality_gates']['services']['oracle']['image'],
                          'gvenzl/oracle-free:23.26.3-slim-faststart')
+        options = jobs['quality_gates']['services']['oracle']['options']
+        self.assertIn('--health-start-period 180s', options)
+        self.assertIn('--log-opt max-size=10m', options)
+        self.assertIn('--log-opt max-file=3', options)
+        self.assertIn('--memory 2g', options)
+        self.assertIn('--memory-swap 2g', options)
+        storage = next(s for s in jobs['quality_gates']['steps']
+                       if 'test-oracle-storage.py' in s.get('run', ''))
+        self.assertEqual(storage['env']['ORACLE_CONTAINER'], '${{ job.services.oracle.id }}')
+        self.assertLess(jobs['quality_gates']['steps'].index(storage),
+                        next(i for i, s in enumerate(jobs['quality_gates']['steps'])
+                             if 'run-tests.sh' in s.get('run', '')))
+
+    def test_terraform_validation_is_isolated_from_oracle_and_scanners(self):
+        jobs = yaml.safe_load((ROOT / '.github/workflows/cicd.yml').read_text())['jobs']
+        validation = jobs['terraform-validation']
+        self.assertNotIn('services', validation)
+        self.assertIn('TF_PLUGIN_CACHE_DIR', validation['env'])
+        self.assertIn('terraform-validation', jobs['quality_gates']['needs'])
+        self.assertEqual(sum('run-terraform-checks.sh' in s.get('run', '')
+                             for s in validation['steps']), 1)
+        self.assertFalse(any('run-terraform-checks.sh' in s.get('run', '')
+                             for s in jobs['quality_gates']['steps']))
+        self.assertFalse(any('aws-actions/configure-aws-credentials' in s.get('uses', '')
+                             for s in validation['steps']))
 
     def test_host_and_scanner_tools_are_prepared_once(self):
         jobs = yaml.safe_load((ROOT / '.github/workflows/cicd.yml').read_text())['jobs']

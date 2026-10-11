@@ -356,7 +356,7 @@ resource "aws_instance" "mmiv" {
 
   root_block_device {
     encrypted   = true
-    volume_size = 40
+    volume_size = 30
     volume_type = "gp3"
   }
 

@@ -1,3 +1,38 @@
+# Root disk budget reduced to 30 GiB
+
+Changed infrastructure/terraform/main.tf root_block_device.volume_size from 40 to
+30 GiB. EC2 stays t3.large with 8 GiB RAM. Oracle faststart, resource/storage budgets,
+persistent data, Integrity and deployment ordering are unchanged.
+
+30 GiB is a light-load demo planning budget; actual host usage was not measured.
+Existing AWS disk state was last reported at 8 GiB. If it is already above 30 GiB,
+retain its actual larger size in Terraform because EBS cannot shrink in place.
+No AWS apply or volume migration was performed.
+
+---
+
+# Resource budgets for a 20,000-record demo
+
+Managed Oracle now has a 2 GiB container memory limit. User Access has a 512 MiB
+container limit, 256 MiB maximum JVM heap, four JDBC connections and 24 Tomcat
+threads. Only these two containers receive resource changes.
+
+The existing reclaim routine now applies a 128 MiB USER_ACCESS schema quota,
+removes a direct UNLIMITED TABLESPACE grant if present, and limits USERS/TEMP file
+growth to 512/128 MiB per file in 8 MiB increments. Allocated data is preserved;
+existing oversized files retain enough room, while an existing schema allocation
+over quota fails rollout before resizing. There is no hard 20,000-row limit.
+
+CI runs Oracle at 2 GiB and validates 20,000 indexed sample rows, quotas, retained
+system files, data reclamation and repeat execution. Local deployment lifecycle
+and contract checks pass; actual Oracle SQL and memory-constrained startup require
+CI/deployment verification. No live AWS or database changes were applied.
+
+Faststart, Integrity, one forward Docker deployment, and EC2 8 GiB RAM/40 GiB disk
+remain unchanged. Total Oracle disk usage still includes its system files/image.
+
+---
+
 # Latest fix: Oracle destination-assignment integration assertions
 
 The uploaded CI log shows successful Oracle connections and three passing login
