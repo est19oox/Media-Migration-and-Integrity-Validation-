@@ -222,6 +222,49 @@ fi
 touch /opt/oracle/oradata/mmiv-app-user-ready
 '''
 
+
+# Only literal errors authored here may be exported. Raw subprocess output,
+# arguments and arbitrary exception strings can contain credential material.
+SAFE_FAILURE_MESSAGES = frozenset(['A foreign container replaced a new service; refusing removal', 'A newer release owns this stack; refusing stale rollback', 'An interrupted release has no recovery journal', 'Container belongs to another Compose project', 'Container health did not become UP', 'Could not inspect Oracle volume', 'Could not inspect the service container', 'Immutable User Access bundle was modified', 'Invalid JWT issuer or key identity', 'Invalid User Access configuration bundle identity', 'Invalid managed Oracle credentials; restore their backup', 'Invalid release action or identifier', 'Oracle container belongs to another owner', 'Oracle data exists without credentials; restore the host secret backup', 'Oracle exists without its saved Compose configuration', 'Rollback journal does not match this release', 'Service has no shared-network address', 'Service registration or Gateway routes did not become ready', 'Signing key is missing; restore its backup rather than rotate silently', 'Stored JWT keys do not match', 'The deployed release requires MMIV_LOG_QUEUE_URL', 'This release was interrupted or restored; recover it or use a new release ID', 'User Access configuration bundle is incomplete', 'User Access requires a staged immutable configuration bundle'])
+
+
+def stage(label, function, *args):
+    try:
+        return function(*args)
+    except Exception as error:
+        if not hasattr(error, 'deployment_phase'):
+            error.deployment_phase = label
+        raise
+
+
+def failure_details(error, state):
+    detail = str(error) if isinstance(error, (RuntimeError, ValueError)) else ''
+    result = {'error': type(error).__name__,
+              'error_detail': detail if detail in SAFE_FAILURE_MESSAGES else
+                              'Remote lifecycle operation failed; inspect deployment evidence.',
+              'failure_phase': getattr(error, 'deployment_phase', 'release_reconciliation')}
+    if isinstance(error, subprocess.CalledProcessError):
+        result['command_exit_code'] = error.returncode
+        args = error.cmd if isinstance(error.cmd, (list, tuple)) else []
+        if args and args[0] in ('docker', 'aws', 'openssl'):
+            result['failed_operation'] = args[0] + (' compose' if tuple(args[:2]) == ('docker', 'compose') else '')
+    containers = {}
+    for name in list(state.get('services', {})) + (['oracle'] if state.get('MANAGED_USER_ACCESS_ORACLE') else []):
+        try:
+            current = inspect(name)
+            if not current:
+                containers[name] = {'status': 'absent'}
+                continue
+            status = current.get('State') or {}
+            containers[name] = {'status': status.get('Status', 'unknown'),
+                'health': (status.get('Health') or {}).get('Status', 'unavailable'),
+                'exit_code': status.get('ExitCode'), 'oom_killed': status.get('OOMKilled')}
+        except Exception:
+            containers[name] = {'status': 'inspection_failed'}
+    result['container_states'] = containers
+    return result
+
+
 def staged_path(state):
     return Path('/etc/mmiv/next-integrity-' + state['RELEASE_ID'] + '.env')
 
@@ -535,7 +578,7 @@ def reconcile(action, state):
             restore(current, directory, interrupted, json.loads(interrupted.read_text()))
     if 'user-access-service' in state['services']:
         if state.get('MANAGED_USER_ACCESS_ORACLE'):
-            state = managed_access(state)
+            state = stage('initialize_user_access', managed_access, state)
             bundle = {'config_id': state['USER_ACCESS_CONFIG_ID']}
         else:
             bundle = json.loads(access_staged_path(state).read_text())
@@ -547,10 +590,10 @@ def reconcile(action, state):
                 raise RuntimeError('User Access configuration bundle is incomplete')
     if 'transfer-service' in state['services'] and not state.get('MMIV_LOG_QUEUE_URL'):
         raise ValueError('The deployed release requires MMIV_LOG_QUEUE_URL')
-    desired = config_for(state)
+    desired = stage('build_compose_config', config_for, state)
     compose_existed = compose.exists()
     previous = json.loads(compose.read_text()) if compose_existed else {'services': {}, 'networks': desired['networks']}
-    before = {name: inspect(name) for name in state['services']}
+    before = {name: stage('inspect_service_containers', inspect, name) for name in state['services']}
     for name, container in before.items():
         if not container:
             previous['services'].pop(name, None)
@@ -594,7 +637,7 @@ def reconcile(action, state):
                       'previous_image': container['Config']['Image'] if container else None}
                for name, container in before.items()}
     # Finish every image download before saving backups or changing any running service.
-    ensure_images(state, [item['image'] for item in desired['services'].values()])
+    stage('download_images', ensure_images, state, [item['image'] for item in desired['services'].values()])
     journal = {'release_id': state['RELEASE_ID'], 'previous_config': previous, 'changes': changes,
                'compose_existed': compose_existed, 'environment_existed': environment.exists(),
                'environment_changed': env_changed, 'touched': [], 'restored': False}
@@ -610,13 +653,13 @@ def reconcile(action, state):
         names = list(state['services'])
         journal['touched'].extend(names)
         save(journal_path, journal)
-        up(compose, names + (['oracle'] if 'oracle' in desired['services'] else []))
-        parallel(lambda name: ready(name, state), names)
+        stage('compose_startup', up, compose, names + (['oracle'] if 'oracle' in desired['services'] else []))
+        parallel(lambda name: stage('readiness_' + name, ready, name, state), names)
         result['READY'] = True
         save(directory / 'current-release.json', result)
         return result
     except Exception as error:
-        result['error'] = type(error).__name__
+        result.update(failure_details(error, state))
         try:
             result = restore(result, directory, journal_path, journal)
         except Exception as recovery_error:
@@ -645,7 +688,7 @@ if __name__ == '__main__':
     try:
         result = run(sys.argv[1], state)
     except Exception as error:
-        result = {**state, 'READY': False, 'ROLLED_BACK': False, 'error': type(error).__name__}
+        result = {**state, 'READY': False, 'ROLLED_BACK': False, **failure_details(error, state)}
     print('MMIV_RELEASE_STATE=' + json.dumps(result))
     sys.exit(0 if (result.get('READY') if sys.argv[1] == 'deploy' else
                    'recovery_error' not in result and (result.get('ROLLED_BACK') or result.get('recovery', {}).get('release') == 'NOT_STARTED')) else 1)

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Simulate one Compose stack, release recovery and SSM result polling."""
+from contextlib import redirect_stdout, redirect_stderr
 import importlib.util
 import io
 import json
@@ -338,6 +339,8 @@ class StackLifecycleTest(unittest.TestCase):
             result = remote.run('deploy', dict(self.state))
         self.assertFalse(result['READY'])
         self.assertTrue(result['ROLLED_BACK'])
+        self.assertEqual(result['failure_phase'], 'compose_startup')
+        self.assertIn('integrity-service', result['container_states'])
         self.assertEqual(self.containers['api-gateway']['Id'], gateway_id)
         self.assertTrue(all(c['Config']['Image'].endswith('-first') for c in self.containers.values()))
 
@@ -506,6 +509,41 @@ class RunnerAndBarrierTest(unittest.TestCase):
                 'ECR_REGISTRY': 'registry', 'READY': True, 'ROLLED_BACK': False, 'COMMAND_STATUS': 'Success',
                 'services': {n: {'image': 'registry/mmiv:' + n + '-commit', 'port': ssm.PORTS[n]}
                              for n in ssm.expected_services()}}
+
+    def test_failure_snapshot_excludes_commands_credentials_and_health_logs(self):
+        secret = 'private-password-value'
+        error = subprocess.CalledProcessError(17, ['docker', 'compose', '--password', secret],
+                                            output=secret, stderr=secret)
+        def fail():
+            raise error
+        with self.assertRaises(subprocess.CalledProcessError):
+            remote.stage('compose_startup', fail)
+        container = {'Config': {'Env': [secret]}, 'State': {'Status': 'exited',
+                     'ExitCode': 137, 'OOMKilled': True, 'Error': secret,
+                     'Health': {'Status': 'unhealthy', 'Log': [secret]}}}
+        with patch.object(remote, 'inspect', return_value=container):
+            details = remote.failure_details(error, {'services': {'transfer-service': {}}})
+        self.assertEqual(details['failure_phase'], 'compose_startup')
+        self.assertEqual(details['failed_operation'], 'docker compose')
+        self.assertEqual(details['command_exit_code'], 17)
+        self.assertTrue(details['container_states']['transfer-service']['oom_killed'])
+        self.assertNotIn(secret, json.dumps(details))
+        out, err = io.StringIO(), io.StringIO()
+        with redirect_stdout(out), redirect_stderr(err):
+            ssm.report_outcome('deploy', {**details, 'READY': False, 'ROLLED_BACK': True,
+                                        'environment': {'password': secret}})
+        self.assertIn('compose_startup', err.getvalue())
+        self.assertIn('exit_code=17', err.getvalue())
+        self.assertIn('transfer-service', err.getvalue())
+        self.assertNotIn(secret, out.getvalue() + err.getvalue())
+
+    def test_failure_detail_only_reports_known_safe_messages(self):
+        with patch.object(remote, 'inspect', return_value=None):
+            details = remote.failure_details(RuntimeError('password=private-value'), {})
+            self.assertNotIn('private-value', json.dumps(details))
+            safe = 'Container health did not become UP'
+            details = remote.failure_details(RuntimeError(safe), {})
+            self.assertEqual(details['error_detail'], safe)
 
     def test_incomplete_or_failed_release_starts_no_scans(self):
         for mode in ('missing', 'failed', 'restored'):
