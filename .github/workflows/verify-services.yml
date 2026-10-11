@@ -39,6 +39,11 @@ jobs:
       run: |
         bash scripts/cd/prepare-scanner-tools.sh
         echo 'SCANNER_TOOLS_PREPARED=true' >> "$GITHUB_ENV"
+    - name: Load optional smoke-test credentials from the same secret
+      if: ${{ inputs.deployment-ready }}
+      env:
+        MMIV_RUNTIME_CONFIG: ${{ secrets.MMIV_RUNTIME_CONFIG }}
+      run: python3 scripts/cd/load-runtime-config.py verification
     - name: Verify all deployed services after Gateway
       id: verify
       timeout-minutes: 180

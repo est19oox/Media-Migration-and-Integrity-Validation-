@@ -10,12 +10,15 @@ import org.springframework.web.bind.annotation.*;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.Locale;
+import java.time.Instant;
+import mmiv.transfer.logging.FileEventLogger;
 
 @Controller
 @RequestMapping("/api/v1/files")
 public class FileController {
     private final FileReadService files;
-    public FileController(FileReadService files) { this.files = files; }
+    private final FileEventLogger logs;
+    public FileController(FileReadService files, FileEventLogger logs) { this.files = files; this.logs = logs; }
 
     @RequestMapping(value = {"/{fileId}/content", "/{fileId}/download"},
             method = {RequestMethod.GET, RequestMethod.HEAD})
@@ -23,18 +26,47 @@ public class FileController {
             @RequestHeader(value = "Range", required = false) String rangeHeader,
             @RequestHeader(value = "If-Range", required = false) String ifRange,
             HttpServletRequest request, HttpServletResponse response) throws IOException {
-        StoredFile file = files.describe(fileId);
+        Instant startedAt = Instant.now();
+        StoredFile file = null;
+        long bytesServed = 0;
+        boolean success = false;
+        String errorType = null;
         boolean head = request.getMethod().equals("HEAD");
-        // An unmatched If-Range (including an unsupported date form) returns the full file.
-        String selectedRange = ifRange != null && !ifRange.equals(file.eTag()) ? null : rangeHeader;
-        ByteRange range = head ? null : ByteRange.parse(selectedRange, file.sizeBytes());
-        boolean download = request.getRequestURI().endsWith("/download");
-        if (head) { headers(response, file, null, download); return; }
-        // Open S3 before committing headers so storage failures return proper error responses.
-        try (var input = files.open(file, range)) {
-            headers(response, file, range, download);
-            try { input.transferTo(response.getOutputStream()); }
-            catch (IOException e) { input.abort(); throw e; }
+        String operation = request.getRequestURI().endsWith("/download") ? "DOWNLOAD" : "PREVIEW";
+        try {
+            file = files.describe(fileId);
+            // An unmatched If-Range (including an unsupported date form) returns the full file.
+            String selectedRange = ifRange != null && !ifRange.equals(file.eTag()) ? null : rangeHeader;
+            ByteRange range = head ? null : ByteRange.parse(selectedRange, file.sizeBytes());
+            boolean download = request.getRequestURI().endsWith("/download");
+            if (head) { headers(response, file, null, download); return; }
+            // Open S3 before committing headers so storage failures return proper error responses.
+            try (var input = files.open(file, range)) {
+                headers(response, file, range, download);
+                try {
+                    // Count successful writes, including progress before a disconnect.
+                    var output = response.getOutputStream();
+                    byte[] buffer = new byte[8192];
+                    int count;
+                    while ((count = input.read(buffer)) != -1) {
+                        output.write(buffer, 0, count);
+                        bytesServed += count;
+                    }
+                    if (bytesServed != (range == null ? file.sizeBytes() : range.length())) {
+                        throw new IOException("File stream ended before expected bytes were served");
+                    }
+                    output.flush();
+                    success = true;
+                }
+                catch (IOException e) { input.abort(); throw e; }
+            }
+        } catch (IOException | RuntimeException error) {
+            success = false;
+            errorType = error.getClass().getSimpleName();
+            throw error;
+        } finally {
+            // HEAD requests inspect metadata; they do not download file bytes.
+            if (!head) logs.download(operation, fileId, file, bytesServed, success, errorType, startedAt);
         }
     }
 

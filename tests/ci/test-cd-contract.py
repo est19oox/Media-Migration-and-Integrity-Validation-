@@ -26,7 +26,7 @@ class CDContractTest(unittest.TestCase):
         self.assertIn('terraform', jobs['setup-host']['needs'])
         self.assertIn('build-images', jobs['setup-host']['needs'])
         self.assertEqual({s['name'] for s in jobs['build-images']['strategy']['matrix']['service']},
-                         {'service-registry', 'transfer-service', 'integrity-service', 'api-gateway'})
+                         {'service-registry', 'transfer-service', 'integrity-service', 'user-access-service', 'api-gateway'})
         self.assertGreater(jobs['build-images']['strategy']['max-parallel'], 1)
         self.assertEqual(set(jobs['deploy-stack']['needs']), {'setup-host', 'build-images'})
         self.assertIn('deploy-stack', jobs['verify-services']['needs'])
@@ -49,6 +49,17 @@ class CDContractTest(unittest.TestCase):
             visited.add(name)
         for name in jobs:
             visit(name)
+
+    def test_managed_oracle_mode_and_supported_image_reach_deployment(self):
+        jobs = yaml.safe_load((ROOT / '.github/workflows/cicd.yml').read_text())['jobs']
+        runtime = next(s for s in jobs['setup-host']['steps'] if s.get('id') == 'runtime')
+        self.assertIn('load-runtime-config.py deployment', runtime['run'])
+        staging = next(s for s in jobs['setup-host']['steps'] if 'stage-user-access.yml' in s.get('run', ''))
+        self.assertIn("MANAGED_USER_ACCESS_ORACLE != 'true'", staging['if'])
+        deploy = next(s for s in jobs['deploy-stack']['steps'] if 'docker-stack-ssm.py deploy' in s.get('run', ''))
+        self.assertIn('managed_user_access_oracle', deploy['env']['MANAGED_USER_ACCESS_ORACLE'])
+        self.assertEqual(jobs['quality_gates']['services']['oracle']['image'],
+                         'gvenzl/oracle-free:23.26.3-slim-faststart')
 
     def test_host_and_scanner_tools_are_prepared_once(self):
         jobs = yaml.safe_load((ROOT / '.github/workflows/cicd.yml').read_text())['jobs']

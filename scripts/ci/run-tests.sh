@@ -100,7 +100,11 @@ run_service() {
 
     (
         cd "$service_dir"
-        mvn --batch-mode clean verify
+        if [ "$(basename "$service_dir")" = user-access-service ] && [ "${MMIV_USER_ACCESS_ORACLE_IT:-false}" = true ]; then
+            mvn --batch-mode -Poracle-it clean verify
+        else
+            mvn --batch-mode clean verify
+        fi
     )
     validate_surefire_reports "$service_dir"
 }

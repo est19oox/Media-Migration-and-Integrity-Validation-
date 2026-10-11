@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """EC2-side Docker lifecycle. Called through SSM, using the host instance role."""
 import json
+import hashlib
+import os
+import secrets
 import fcntl
 import re
 from concurrent.futures import ThreadPoolExecutor
@@ -76,9 +79,17 @@ def registered(name, address=None, port=None):
 def atomic_write(path, content):
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_suffix(path.suffix + '.next')
-    temporary.write_text(content)
-    temporary.chmod(0o600)
+    with os.fdopen(os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600), 'w') as output:
+        os.chmod(temporary, 0o600)
+        output.write(content)
+        output.flush()
+        os.fsync(output.fileno())
     temporary.replace(path)
+    descriptor = os.open(path.parent, os.O_RDONLY)
+    try:
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
 
 
 def inspect(name):
@@ -95,8 +106,128 @@ def inspect(name):
 PROJECT = 'mmiv-stack'
 DIRECTORY = '/opt/mmiv/stack'
 ENVIRONMENT = '/etc/mmiv/integrity.env'
+ORACLE_IMAGE = 'gvenzl/oracle-free:23.26.3-slim-faststart'
+ORACLE_VOLUME = 'mmiv-oracle-data'
+ORACLE_STARTUP = '''
+# Sourced by the Oracle image after startup; contains no credential values.
+rm -f /opt/oracle/oradata/mmiv-app-user-ready
+if ! sqlplus -L -s / as sysdba >/dev/null 2>&1 <<SQL
+WHENEVER OSERROR EXIT FAILURE
+WHENEVER SQLERROR EXIT FAILURE
+ALTER SESSION SET CONTAINER=FREEPDB1;
+DECLARE
+  account_count NUMBER;
+BEGIN
+  SELECT COUNT(*) INTO account_count FROM DBA_USERS WHERE USERNAME = 'USER_ACCESS';
+  IF account_count = 0 THEN
+    EXECUTE IMMEDIATE 'CREATE USER USER_ACCESS IDENTIFIED BY "${APP_USER_PASSWORD}" DEFAULT TABLESPACE USERS QUOTA UNLIMITED ON USERS';
+  END IF;
+  EXECUTE IMMEDIATE 'GRANT DB_DEVELOPER_ROLE TO USER_ACCESS';
+END;
+/
+EXIT;
+SQL
+then
+  echo 'MMIV User Access schema initialization failed.' >&2
+  return 1
+fi
+if ! sqlplus -L -s /nolog >/dev/null 2>&1 <<SQL
+WHENEVER OSERROR EXIT FAILURE
+WHENEVER SQLERROR EXIT FAILURE
+CONNECT USER_ACCESS/"${APP_USER_PASSWORD}"@//localhost:1521/FREEPDB1
+SELECT 1 FROM DUAL;
+EXIT;
+SQL
+then
+  echo 'MMIV User Access database login check failed.' >&2
+  return 1
+fi
+touch /opt/oracle/oradata/mmiv-app-user-ready
+'''
+
 def staged_path(state):
     return Path('/etc/mmiv/next-integrity-' + state['RELEASE_ID'] + '.env')
+
+
+def access_staged_path(state):
+    return Path('/etc/mmiv/next-user-access-' + state['RELEASE_ID'] + '.json')
+
+
+def managed_access(state):
+    """Create host-only credentials once, before first database initialization."""
+    directory = Path('/etc/mmiv/managed-oracle')
+    settings = directory / 'credentials.json'
+    existing = command('docker', 'volume', 'inspect', ORACLE_VOLUME, check=False)
+    if not settings.exists():
+        if existing.returncode == 0 or inspect('oracle'):
+            raise RuntimeError('Oracle data exists without credentials; restore the host secret backup')
+        directory.mkdir(parents=True, exist_ok=True, mode=0o700)
+        directory.chmod(0o700)
+        # Letter prefix avoids Oracle password identifier restrictions.
+        save(settings, {'administrator': 'A' + secrets.token_hex(24),
+                        'user_access': 'U' + secrets.token_hex(24)})
+    values = json.loads(settings.read_text())
+    if set(values) != {'administrator', 'user_access'} or not all(
+            isinstance(v, str) and re.fullmatch(r'[AU][a-f0-9]{48}', v) for v in values.values()):
+        raise RuntimeError('Invalid managed Oracle credentials; restore their backup')
+    private, public = directory / 'private.pem', directory / 'public.pem'
+    if not private.exists():
+        if public.exists() or existing.returncode == 0:
+            raise RuntimeError('Signing key is missing; restore its backup rather than rotate silently')
+        application = inspect('user-access-service')
+        if application:
+            # Switching from an external database must retain the deployed JWT key.
+            current_compose = Path(DIRECTORY) / 'compose.yaml'
+            if not current_compose.exists():
+                raise RuntimeError('Signing key is missing; restore its backup rather than rotate silently')
+            volumes = json.loads(current_compose.read_text())['services'].get('user-access-service', {}).get('volumes', [])
+            sources = {v.get('target'): v.get('source', '') for v in volumes if isinstance(v, dict)}
+            previous_private = sources.get('/run/mmiv-jwt/private.pem', '')
+            previous_public = sources.get('/run/mmiv-jwt/public.pem', '')
+            if not all(re.fullmatch(r'/etc/mmiv/user-access/versions/[a-f0-9]{64}/' + filename, source)
+                       and Path(source).is_file() for source, filename in
+                       [(previous_private, 'private.pem'), (previous_public, 'public.pem')]):
+                raise RuntimeError('Signing key is missing; restore its backup rather than rotate silently')
+            atomic_write(private, Path(previous_private).read_text())
+            atomic_write(public, Path(previous_public).read_text())
+        else:
+            key = command('openssl', 'genpkey', '-algorithm', 'RSA', '-pkeyopt', 'rsa_keygen_bits:2048').stdout
+            atomic_write(private, key)
+    derived = command('openssl', 'pkey', '-in', str(private), '-pubout').stdout
+    if public.exists() and public.read_text() != derived:
+        raise RuntimeError('Stored JWT keys do not match')
+    if not public.exists():
+        atomic_write(public, derived)
+    issuer = state.get('USER_ACCESS_JWT_ISSUER', 'https://auth.mmiv.example')
+    key_id = state.get('USER_ACCESS_JWT_KEY_ID', 'mmiv-user-access-key-1')
+    if any(not isinstance(v, str) or not v or '\n' in v or '\r' in v for v in (issuer, key_id)):
+        raise ValueError('Invalid JWT issuer or key identity')
+    environment = ('ORACLE_JDBC_URL=jdbc:oracle:thin:@//oracle:1521/FREEPDB1\n'
+                   'ORACLE_USER=USER_ACCESS\nORACLE_PASSWORD=' + values['user_access'] + '\n'
+                   'JWT_ISSUER=' + issuer + '\nJWT_KEY_ID=' + key_id + '\n'
+                   'JWT_PRIVATE_KEY_PATH=file:/run/mmiv-jwt/private.pem\n'
+                   'JWT_PUBLIC_KEY_PATH=file:/run/mmiv-jwt/public.pem\n')
+    identity = hashlib.sha256((environment + private.read_text() + derived).encode()).hexdigest()
+    bundle = Path('/etc/mmiv/user-access/versions/' + identity)
+    bundle.mkdir(parents=True, exist_ok=True, mode=0o700)
+    for name, content in [('environment.env', environment), ('private.pem', private.read_text()), ('public.pem', derived)]:
+        target = bundle / name
+        if target.exists() and target.read_text() != content:
+            raise RuntimeError('Immutable User Access bundle was modified')
+        if not target.exists():
+            atomic_write(target, content)
+    oracle_env = ('ORACLE_PASSWORD=' + values['administrator'] + '\nAPP_USER=USER_ACCESS\n'
+                  'APP_USER_PASSWORD=' + values['user_access'] + '\n')
+    target = directory / 'oracle.env'
+    if not target.exists() or target.read_text() != oracle_env:
+        atomic_write(target, oracle_env)
+    if existing.returncode != 0:
+        # Do not confuse an unavailable daemon with an absent volume.
+        command('docker', 'info')
+        if 'No such' not in existing.stderr:
+            raise RuntimeError('Could not inspect Oracle volume')
+        command('docker', 'volume', 'create', ORACLE_VOLUME)
+    return {**state, 'USER_ACCESS_CONFIG_ID': identity}
 
 
 def parallel(function, values):
@@ -127,19 +258,67 @@ def config_for(state):
                                    'EUREKA_DEFAULT_ZONE': 'http://service-registry:8761/eureka/'},
                    'volumes': [{'type': 'bind', 'source': '/var/lib/mmiv/media', 'target': '/media',
                                 'read_only': True}], 'networks': ['backend']}
+        if name == 'transfer-service':
+            service['environment']['MMIV_LOG_QUEUE_URL'] = state.get('MMIV_LOG_QUEUE_URL', '')
+            service['environment']['MMIV_LOG_OUTBOX_DIRECTORY'] = '/var/lib/mmiv/log-outbox'
+            service['volumes'].append({'type': 'bind', 'source': '/var/lib/mmiv/transfer-log-outbox',
+                                      'target': '/var/lib/mmiv/log-outbox'})
+        if name == 'user-access-service':
+            config_id = state.get('USER_ACCESS_CONFIG_ID', '')
+            if not re.fullmatch(r'[a-f0-9]{64}', config_id):
+                raise ValueError('User Access requires a staged immutable configuration bundle')
+            directory = '/etc/mmiv/user-access/versions/' + config_id
+            service['env_file'] = [{'path': directory + '/environment.env', 'format': 'raw'}]
+            service['volumes'].extend([
+                {'type': 'bind', 'source': directory + '/private.pem',
+                 'target': '/run/mmiv-jwt/private.pem', 'read_only': True},
+                {'type': 'bind', 'source': directory + '/public.pem',
+                 'target': '/run/mmiv-jwt/public.pem', 'read_only': True}])
         if name == 'integrity-service':
             service['env_file'] = [{'path': ENVIRONMENT, 'format': 'raw'}]
+        service['healthcheck'] = {'test': ['CMD-SHELL',
+            'wget -q --spider http://127.0.0.1:' + str(port) + '/actuator/health'],
+            'interval': '10s', 'timeout': '5s', 'retries': 60, 'start_period': '60s'}
+        dependencies = {}
+        if name != 'service-registry' and 'service-registry' in state['services']:
+            dependencies['service-registry'] = {'condition': 'service_healthy'}
+        if name == 'user-access-service' and state.get('MANAGED_USER_ACCESS_ORACLE'):
+            dependencies['oracle'] = {'condition': 'service_healthy'}
+        if name == 'api-gateway':
+            dependencies.update({n: {'condition': 'service_healthy'} for n in state['services']
+                                 if n != 'api-gateway'})
+        if dependencies:
+            service['depends_on'] = dependencies
         services[name] = service
-    return {'services': services, 'networks': {'backend': {'external': True, 'name': 'mmiv-backend'}}}
+    if state.get('MANAGED_USER_ACCESS_ORACLE') and 'user-access-service' in services:
+        services['oracle'] = {'image': ORACLE_IMAGE, 'container_name': 'oracle',
+            'restart': 'unless-stopped', 'networks': ['backend'], 'shm_size': '1g',
+            'env_file': [{'path': '/etc/mmiv/managed-oracle/oracle.env', 'format': 'raw'}],
+            'volumes': [{'type': 'volume', 'source': 'oracle-data', 'target': '/opt/oracle/oradata'}],
+            'healthcheck': {'test': ['CMD-SHELL', 'healthcheck.sh && test -f /opt/oracle/oradata/mmiv-app-user-ready'],
+                           'interval': '10s', 'timeout': '5s', 'retries': 90, 'start_period': '120s'}}
+        # Validate the application login and repair a missing schema after an
+        # interrupted initialization, before declaring the database ready.
+        hook = Path('/etc/mmiv/managed-oracle/99-mmiv-ready.sh')
+        if not hook.exists() or hook.read_text() != ORACLE_STARTUP:
+            atomic_write(hook, ORACLE_STARTUP)
+        hook.chmod(0o644)
+        services['oracle']['volumes'].append({'type': 'bind', 'source': str(hook),
+            'target': '/container-entrypoint-startdb.d/99-mmiv-ready.sh', 'read_only': True})
+    config = {'services': services, 'networks': {'backend': {'external': True, 'name': 'mmiv-backend'}}}
+    if 'oracle' in services:
+        config['volumes'] = {'oracle-data': {'external': True, 'name': ORACLE_VOLUME}}
+    return config
 
 
 def ensure_images(state, images):
     missing = sorted({image for image in images
                       if command('docker', 'image', 'inspect', image, check=False).returncode})
-    if missing:
+    if any(image.startswith(state['ECR_REGISTRY'] + '/') for image in missing):
         password = command('aws', 'ecr', 'get-login-password', '--region', state['AWS_REGION']).stdout
         subprocess.run(['docker', 'login', '--username', 'AWS', '--password-stdin', state['ECR_REGISTRY']],
                        input=password, text=True, capture_output=True, check=True, timeout=60)
+    if missing:
         # Bound network/disk pressure while avoiding sequential image downloads.
         with ThreadPoolExecutor(max_workers=3) as pool:
             futures = [pool.submit(command, 'docker', 'pull', image, timeout=600) for image in missing]
@@ -152,7 +331,7 @@ def compose_config(path):
                               '--no-env-resolution', '--format', 'json').stdout)
 
 
-def up(compose, names, force=()):
+def up(compose, names, force=(), dependencies=True):
     names = list(names)
     if not names:
         return
@@ -166,13 +345,14 @@ def up(compose, names, force=()):
             if owner != PROJECT:
                 command('docker', 'rm', '-f', name)
     base = ['docker', 'compose', '-p', PROJECT, '-f', str(compose),
-            'up', '-d', '--no-deps', '--no-build', '--pull', 'never']
-    forced = [name for name in names if name in force]
-    if forced:
-        command(*base, '--force-recreate', *forced)
-    ordinary = [name for name in names if name not in forced]
-    if ordinary:
-        command(*base, *ordinary)
+            'up', '-d', '--no-build', '--pull', 'never']
+    # Forward deployment uses one invocation; Compose enforces health dependencies.
+    # Recovery of a single service must not start unrelated dependencies.
+    if not dependencies:
+        base.append('--no-deps')
+    if force:
+        base.append('--force-recreate')
+    command(*base, *names, timeout=1800)
 
 
 def ready(name, state):
@@ -226,7 +406,7 @@ def restore(state, directory, journal_path, journal):
             recovery[name] = 'REMOVED_NEW_SERVICE'
         else:
             force = [name] if name == 'integrity-service' and journal['environment_changed'] else []
-            up(compose, [name], force)
+            up(compose, [name], force, dependencies=False)
             healthy(state['services'][name]['port'])
             recovery[name] = 'RESTORED'
         save(journal_path, journal)
@@ -265,6 +445,20 @@ def reconcile(action, state):
             if not interrupted.exists():
                 raise RuntimeError('An interrupted release has no recovery journal')
             restore(current, directory, interrupted, json.loads(interrupted.read_text()))
+    if 'user-access-service' in state['services']:
+        if state.get('MANAGED_USER_ACCESS_ORACLE'):
+            state = managed_access(state)
+            bundle = {'config_id': state['USER_ACCESS_CONFIG_ID']}
+        else:
+            bundle = json.loads(access_staged_path(state).read_text())
+        state = {**state, 'USER_ACCESS_CONFIG_ID': bundle['config_id']}
+        if not re.fullmatch(r'[a-f0-9]{64}', state['USER_ACCESS_CONFIG_ID']):
+            raise ValueError('Invalid User Access configuration bundle identity')
+        for filename in ('environment.env', 'private.pem', 'public.pem'):
+            if not (Path('/etc/mmiv/user-access/versions/' + bundle['config_id']) / filename).is_file():
+                raise RuntimeError('User Access configuration bundle is incomplete')
+    if 'transfer-service' in state['services'] and not state.get('MMIV_LOG_QUEUE_URL'):
+        raise ValueError('The deployed release requires MMIV_LOG_QUEUE_URL')
     desired = config_for(state)
     compose_existed = compose.exists()
     previous = json.loads(compose.read_text()) if compose_existed else {'services': {}, 'networks': desired['networks']}
@@ -283,9 +477,28 @@ def reconcile(action, state):
         previous['services'][name]['image'] = container['Config']['Image']
     environment = Path(ENVIRONMENT)
     desired_environment = (staged_path(state).read_text() if state.get('ORACLE_CONFIG_STAGED')
+                           else environment.read_text() if environment.exists()
                            else '# Embedded H2 mode: no Oracle secrets required.\n')
     env_changed = ('integrity-service' in state['services'] and
                    (not environment.exists() or environment.read_text() != desired_environment))
+    if 'integrity-service' in desired['services'] and env_changed:
+        # Preserve Integrity's database mode. A config fingerprint lets Compose
+        # detect env-file updates without a second force-recreate invocation.
+        desired['services']['integrity-service']['labels'] = {
+            'mmiv.environment': hashlib.sha256(desired_environment.encode()).hexdigest()}
+    elif 'integrity-service' in desired['services'] and 'integrity-service' in previous['services']:
+        labels = previous['services']['integrity-service'].get('labels')
+        if labels:
+            desired['services']['integrity-service']['labels'] = labels
+    if 'oracle' in desired['services']:
+        current_oracle = inspect('oracle')
+        if current_oracle and (current_oracle['Config'].get('Labels') or {}).get('com.docker.compose.project') != PROJECT:
+            raise RuntimeError('Oracle container belongs to another owner')
+        if current_oracle and 'oracle' not in previous['services']:
+            raise RuntimeError('Oracle exists without its saved Compose configuration')
+        # Database infrastructure survives application rollback, including first release failure.
+        previous['services'].setdefault('oracle', desired['services']['oracle'])
+        previous['volumes'] = desired['volumes']
     changes = {name: {'changed': not container or previous['services'].get(name) != desired['services'][name]
                       or (container['Config'].get('Labels') or {}).get('com.docker.compose.project') != PROJECT
                       or (name == 'integrity-service' and env_changed),
@@ -293,7 +506,7 @@ def reconcile(action, state):
                       'previous_image': container['Config']['Image'] if container else None}
                for name, container in before.items()}
     # Finish every image download before saving backups or changing any running service.
-    ensure_images(state, [item['image'] for item in state['services'].values()])
+    ensure_images(state, [item['image'] for item in desired['services'].values()])
     journal = {'release_id': state['RELEASE_ID'], 'previous_config': previous, 'changes': changes,
                'compose_existed': compose_existed, 'environment_existed': environment.exists(),
                'environment_changed': env_changed, 'touched': [], 'restored': False}
@@ -304,16 +517,13 @@ def reconcile(action, state):
     save(directory / 'current-release.json', result)
     try:
         save(compose, desired)
-        if 'integrity-service' in state['services']:
+        if 'integrity-service' in state['services'] and env_changed:
             atomic_write(environment, desired_environment)
-        groups = [['service-registry'], sorted(n for n in state['services']
-                  if n not in ('service-registry', 'api-gateway')), ['api-gateway']]
-        for names in groups:
-            journal['touched'].extend(names)
-            save(journal_path, journal)
-            force = ['integrity-service'] if env_changed and before.get('integrity-service') else []
-            up(compose, names, force)
-            parallel(lambda name: ready(name, state), names)
+        names = list(state['services'])
+        journal['touched'].extend(names)
+        save(journal_path, journal)
+        up(compose, names + (['oracle'] if 'oracle' in desired['services'] else []))
+        parallel(lambda name: ready(name, state), names)
         result['READY'] = True
         save(directory / 'current-release.json', result)
         return result
@@ -339,6 +549,7 @@ def run(action, state):
         finally:
             if action == 'deploy':
                 staged_path(state).unlink(missing_ok=True)
+                access_staged_path(state).unlink(missing_ok=True)
 
 
 if __name__ == '__main__':

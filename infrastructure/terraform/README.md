@@ -3,7 +3,8 @@
 This directory is the active Terraform root used by the GitHub Actions deployment workflow.
 
 The deployment workflow in `.github/workflows/cicd.yml` always runs Terraform first and only
-starts the microservice deployment matrix after Terraform succeeds.
+starts shared host setup and stack deployment after Terraform succeeds. Image
+builds can run concurrently with Terraform.
 
 The one-time bootstrap in `infrastructure/bootstrap` must be applied before GitHub Actions can
 assume the Terraform and application OIDC roles. The bootstrap creates the GitHub OIDC provider,
@@ -14,9 +15,16 @@ Ansible, EC2 IAM permissions, and the Transfer Service all use the same bucket.
 
 ## Preserve the EC2 host
 
-The EC2 resource ignores AMI and user-data drift and uses `prevent_destroy`.
+The EC2 resource ignores AMI, user-data and public-IP association drift and uses
+`prevent_destroy`.
 A newer Amazon Linux AMI is used only when creating a host, rather than replacing
-the existing host on routine deployments. Other changes requiring replacement
+the existing host on routine deployments. Public-IP association is configured
+for new hosts but is not reconciled by replacing an existing host. In particular,
+a stopped host can report `associate_public_ip_address = false` after its
+automatic public IPv4 address is released; this must not block Terraform before
+the workflow's existing start-instance step can run. This exception does not
+repair a host that genuinely lacks outbound connectivity: that requires a separate
+network configuration repair. Other changes requiring replacement
 fail the plan instead of terminating the instance. Security patches and deliberate
 host replacement remain separate maintenance operations.
 

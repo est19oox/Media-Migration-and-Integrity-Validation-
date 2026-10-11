@@ -48,3 +48,11 @@ main is preserved; its CD entry is disabled pending Oracle/runtime configuration
 ## Current Docker deployment
 
 Terraform and parallel image builds → idempotent host preparation → one Compose stack deployment through SSM: Registry first, backend group next, API Gateway last → functional tests and DAST. One release manifest records the image set and drives rollback. Ansible is used only for host preparation and optional Oracle configuration, sharing one CD installation. See [Docker CD process](docs/ci-cd/docker-deployment.md).
+
+### Current deployment configuration
+
+See [the main deployment update](docs/ci-cd/main-update.md) before running CD:
+User Access uses a persistent Oracle container with automatically generated credentials
+and JWT keys. No runtime GitHub secret is required for this default. The optional
+`MMIV_RUNTIME_CONFIG` secret still supports an external User Access database and
+explicit Integrity settings. Integrity keeps its current database configuration. Transfer publishes file events to SQS; the log service is left for its owner.

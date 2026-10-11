@@ -360,7 +360,120 @@
       }
     ],
     "integrity-service": [],
-    "user-access-service": [],
+    "user-access-service": [
+      {
+        "name": "public JWKS",
+        "path": "/.well-known/jwks.json",
+        "status": 200,
+        "json_nonempty": [
+          "keys"
+        ],
+        "json_equals": {
+          "keys.0.kty": "RSA",
+          "keys.0.use": "sig"
+        }
+      },
+      {
+        "name": "invalid login credentials",
+        "method": "POST",
+        "path": "/api/auth/login",
+        "body": {
+          "username": "nonexistent-${RUN_ID}",
+          "password": "invalid-password"
+        },
+        "status": 401
+      },
+      {
+        "name": "access check requires authentication",
+        "method": "POST",
+        "path": "/api/access/check",
+        "body": {
+          "userId": "invalid",
+          "destination": "invalid",
+          "action": "READ"
+        },
+        "status": 401
+      },
+      {
+        "name": "invalid bearer token rejected",
+        "method": "POST",
+        "path": "/api/access/check",
+        "headers": {
+          "Authorization": "Bearer invalid-token"
+        },
+        "body": {
+          "userId": "invalid",
+          "destination": "invalid",
+          "action": "READ"
+        },
+        "status": 401
+      },
+      {
+        "name": "valid login",
+        "method": "POST",
+        "path": "/api/auth/login",
+        "requires_env": [
+          "USER_ACCESS_TEST_USERNAME",
+          "USER_ACCESS_TEST_PASSWORD",
+          "USER_ACCESS_TEST_USER_ID"
+        ],
+        "body": {
+          "username": "${USER_ACCESS_TEST_USERNAME}",
+          "password": "${USER_ACCESS_TEST_PASSWORD}"
+        },
+        "status": 200,
+        "json_equals": {
+          "tokenType": "Bearer"
+        },
+        "json_nonempty": [
+          "accessToken"
+        ],
+        "save_fields": {
+          "USER_ACCESS_TEST_TOKEN": "accessToken"
+        }
+      },
+      {
+        "name": "JWT subject mismatch rejected",
+        "method": "POST",
+        "path": "/api/access/check",
+        "requires_env": [
+          "USER_ACCESS_TEST_USERNAME",
+          "USER_ACCESS_TEST_PASSWORD",
+          "USER_ACCESS_TEST_USER_ID"
+        ],
+        "headers": {
+          "Authorization": "Bearer ${USER_ACCESS_TEST_TOKEN}"
+        },
+        "body": {
+          "userId": "other-${RUN_ID}",
+          "destination": "unassigned-${RUN_ID}",
+          "action": "READ"
+        },
+        "status": 403
+      },
+      {
+        "name": "unassigned destination denied",
+        "method": "POST",
+        "path": "/api/access/check",
+        "requires_env": [
+          "USER_ACCESS_TEST_USERNAME",
+          "USER_ACCESS_TEST_PASSWORD",
+          "USER_ACCESS_TEST_USER_ID"
+        ],
+        "headers": {
+          "Authorization": "Bearer ${USER_ACCESS_TEST_TOKEN}"
+        },
+        "body": {
+          "userId": "${USER_ACCESS_TEST_USER_ID}",
+          "destination": "unassigned-${RUN_ID}",
+          "action": "READ"
+        },
+        "status": 200,
+        "json_equals": {
+          "authorised": false
+        }
+      }
+    ],
     "reporting-service": [],
     "discovery-service": [],
     "service-registry": [

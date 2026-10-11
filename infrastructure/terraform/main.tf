@@ -326,14 +326,15 @@ data "aws_ami" "amazon_linux" {
 
 # Creates the MMIV application server.
 resource "aws_instance" "mmiv" {
-  # Reuse the managed host. A newer AMI must not replace a working EC2 instance.
+  # Reuse the managed host. Launch settings must not replace an existing host.
+  # A stopped instance can report no public IP even when launched with one.
   lifecycle {
     prevent_destroy = true
-    ignore_changes  = [ami, user_data]
+    ignore_changes  = [ami, user_data, associate_public_ip_address]
   }
 
   ami                         = data.aws_ami.amazon_linux.id
-  instance_type               = "t3.medium"
+  instance_type               = "t3.large" # 8 GiB for the application stack plus Oracle
   subnet_id                   = aws_subnet.mmiv_public.id
   associate_public_ip_address = true
   monitoring                  = true
@@ -354,7 +355,9 @@ resource "aws_instance" "mmiv" {
   }
 
   root_block_device {
-    encrypted = true
+    encrypted   = true
+    volume_size = 40
+    volume_type = "gp3"
   }
 
   # setup-host.yml is the single installer for persistent host components.

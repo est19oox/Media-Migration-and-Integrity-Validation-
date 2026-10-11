@@ -89,6 +89,21 @@ jobs:
   quality_gates:
     name: CI and Security Gates
     runs-on: ubuntu-latest
+    services:
+      oracle:
+        image: gvenzl/oracle-free:23.26.3-slim-faststart
+        env:
+          ORACLE_PASSWORD: ci-oracle-admin-only
+          APP_USER: USER_ACCESS
+          APP_USER_PASSWORD: ci-access-only
+        ports:
+          - 1521:1521
+        options: >-
+          --health-cmd healthcheck.sh
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 60
+          --health-start-period 60s
 
     steps:
       - name: Checkout repository
@@ -162,11 +177,17 @@ jobs:
       - name: Check CD dependency order and upload page
         run: |
           python3 -m pip install PyYAML
+          python3 tests/ci/test-runtime-config.py
           python3 tests/ci/test-cd-contract.py
           python3 tests/ci/test-stack-lifecycle.py
           node --test tests/ci/test-upload-page.cjs
 
-      - name: Build and test services
+      - name: Build and test services including Oracle integration
+        env:
+          MMIV_USER_ACCESS_ORACLE_IT: 'true'
+          ORACLE_PASSWORD: ci-access-only
+          ORACLE_JDBC_URL: jdbc:oracle:thin:@//localhost:1521/FREEPDB1
+          ORACLE_USER: USER_ACCESS
         run: bash scripts/ci/run-tests.sh .
 
       - name: Run Semgrep SAST
@@ -184,13 +205,15 @@ jobs:
       - name: Validate Ansible
         working-directory: infrastructure/ansible
         run: |
-          python -m pip install ansible requests boto3 botocore
+          python -m pip install "ansible-core==2.19.14" requests boto3 botocore
           ansible-galaxy collection install -r requirements.yml
           ansible-playbook -i inventory/ci.ini playbook.yml --syntax-check
           ansible-playbook -i inventory/ci.ini rollback.yml --syntax-check
           # Redis playbook is temporarily disabled.
           ansible-playbook -i inventory/ci.ini setup-host.yml --syntax-check
           ansible-playbook -i inventory/ci.ini stage-integrity.yml --syntax-check
+          ansible-playbook -i inventory/ci.ini stage-user-access.yml --syntax-check
+          python ../../tests/ci/test-access-config.py
           python ../../tests/ci/test-deployment-config.py
           python ../../tests/ci/test-compose-runtime.py
 
@@ -204,6 +227,7 @@ jobs:
           path: |
             .ci/reports/**
             **/target/surefire-reports/**
+            **/target/failsafe-reports/**
   terraform:
 #    needs: [bootstrap]
     name: Terraform CI/CD
@@ -211,6 +235,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       instance_id: ${{ steps.instance.outputs.instance_id }}
+      log_queue_url: ${{ steps.instance.outputs.log_queue_url }}
 
     defaults:
       run:
@@ -280,6 +305,7 @@ jobs:
           fi
           aws ec2 wait instance-running --instance-ids "$INSTANCE_ID"
           echo "instance_id=$INSTANCE_ID" >> "$GITHUB_OUTPUT"
+          echo "log_queue_url=$(terraform output -raw file_log_queue_url)" >> "$GITHUB_OUTPUT"
 
       - name: Upload Terraform plan
         if: always()
@@ -297,9 +323,9 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       instance_id: ${{ steps.deployment.outputs.instance_id }}
+      log_queue_url: ${{ needs.terraform.outputs.log_queue_url }}
+      managed_user_access_oracle: ${{ steps.runtime.outputs.managed_user_access_oracle }}
       oracle_config_staged: ${{ steps.oracle_config.outcome == 'success' }}
-    env:
-      ORACLE_CONFIG_REQUESTED: ${{ secrets.INTEGRITY_DB_URL != '' || secrets.INTEGRITY_DB_USERNAME != '' || secrets.INTEGRITY_DB_PASSWORD != '' }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
@@ -317,6 +343,11 @@ jobs:
           set -euo pipefail
           test -n "$INSTANCE_ID" && test "$INSTANCE_ID" != "None"
           echo "instance_id=$INSTANCE_ID" >> "$GITHUB_OUTPUT"
+      - name: Load optional external runtime configuration
+        id: runtime
+        env:
+          MMIV_RUNTIME_CONFIG: ${{ secrets.MMIV_RUNTIME_CONFIG }}
+        run: python3 scripts/cd/load-runtime-config.py deployment
       - name: Wait for SSM and host initialization
         env:
           INSTANCE_ID: ${{ steps.deployment.outputs.instance_id }}
@@ -330,7 +361,7 @@ jobs:
           session-manager-plugin --version
       - name: Install Ansible
         run: |
-          python -m pip install ansible requests "boto3>=1.35.0" "botocore>=1.35.0"
+          python -m pip install "ansible-core==2.19.14" requests "boto3>=1.35.0" "botocore>=1.35.0"
           ansible-galaxy collection install -r infrastructure/ansible/requirements.yml
       - name: Generate SSM inventory
         env:
@@ -351,10 +382,15 @@ jobs:
         working-directory: infrastructure/ansible
         env:
           MMIV_RELEASE_ID: ${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
-          INTEGRITY_DB_URL: ${{ secrets.INTEGRITY_DB_URL }}
-          INTEGRITY_DB_USERNAME: ${{ secrets.INTEGRITY_DB_USERNAME }}
-          INTEGRITY_DB_PASSWORD: ${{ secrets.INTEGRITY_DB_PASSWORD }}
         run: ansible-playbook -i inventory/ci.generated.ini stage-integrity.yml
+      - name: Stage User Access database settings and signing keys
+        if: ${{ env.MANAGED_USER_ACCESS_ORACLE != 'true' }}
+        working-directory: infrastructure/ansible
+        env:
+          MMIV_RELEASE_ID: ${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          USER_ACCESS_JWT_ISSUER: ${{ vars.USER_ACCESS_JWT_ISSUER || 'https://auth.mmiv.example' }}
+          USER_ACCESS_JWT_KEY_ID: ${{ vars.USER_ACCESS_JWT_KEY_ID || 'mmiv-user-access-key-1' }}
+        run: ansible-playbook -i inventory/ci.generated.ini stage-user-access.yml
   build-images:
     name: Build and scan release images
     needs: [quality_gates]
@@ -372,9 +408,10 @@ jobs:
           - name: integrity-service
             path: services/integrity-service
             port: '8082'
-#          - name: user-access-service
-#            path: services/user-access-service
-#            port: '8083'
+          - name: user-access-service
+            path: services/user-access-service
+            port: '8083'
+          # Log / Reporting service is owned by another developer; enable when ready.
 #          - name: reporting-service
 #            path: services/reporting-service
 #            port: '8084'
@@ -415,6 +452,10 @@ jobs:
         env:
           INSTANCE_ID: ${{ needs.setup-host.outputs.instance_id }}
           ORACLE_CONFIG_STAGED: ${{ needs.setup-host.outputs.oracle_config_staged }}
+          MANAGED_USER_ACCESS_ORACLE: ${{ needs.setup-host.outputs.managed_user_access_oracle }}
+          USER_ACCESS_JWT_ISSUER: ${{ vars.USER_ACCESS_JWT_ISSUER || 'https://auth.mmiv.example' }}
+          USER_ACCESS_JWT_KEY_ID: ${{ vars.USER_ACCESS_JWT_KEY_ID || 'mmiv-user-access-key-1' }}
+          MMIV_LOG_QUEUE_URL: ${{ needs.setup-host.outputs.log_queue_url }}
         run: |
           python3 scripts/cd/docker-stack-ssm.py prepare
           python3 scripts/cd/docker-stack-ssm.py deploy
@@ -444,3 +485,4 @@ jobs:
     with:
       instance-id: ${{ needs.setup-host.outputs.instance_id }}
       deployment-ready: ${{ needs.deploy-stack.result == 'success' }}
+    secrets: inherit

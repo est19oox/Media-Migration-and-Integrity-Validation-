@@ -17,6 +17,8 @@ import java.security.MessageDigest;
 import java.security.DigestInputStream;
 import java.util.HexFormat;
 import java.util.UUID;
+import java.time.Instant;
+import mmiv.transfer.logging.FileEventLogger;
 
 @Service
 public class TransferService {
@@ -26,26 +28,36 @@ public class TransferService {
     private long maxUploadBytes = 104857600;
     private final mmiv.transfer.integration.IntegrityValidationGateway integrity;
     private final S3ObjectCleanup cleanup;
+    private final FileEventLogger logs;
 
     public TransferService(TransferRequestValidator validator, TransferStrategyFactory factory,
-            mmiv.transfer.integration.IntegrityValidationGateway integrity, S3ObjectCleanup cleanup) {
+            mmiv.transfer.integration.IntegrityValidationGateway integrity, S3ObjectCleanup cleanup, FileEventLogger logs) {
         this.validator = validator;
         this.factory = factory;
         this.integrity = integrity;
         this.cleanup = cleanup;
+        this.logs = logs;
     }
 
     public TransferResponse transfer(TransferRequest request) {
-        validator.validate(request);
-        TransferStrategy strategy = factory.getStrategy(request);
-        TransferResponse uploaded = strategy.transfer(request);
-        String transferId = UUID.randomUUID().toString();
-        var outcome = integrity.validate(transferId, uploaded.bucket(), uploaded.key(), uploaded.sha256());
-        var removal = finish(outcome.success(), uploaded.bucket(), uploaded.key(), uploaded.objectReference());
-        return new TransferResponse(uploaded.bucket(), uploaded.key(), uploaded.mediaType(), uploaded.sizeBytes(),
-                uploaded.fileId(), uploaded.sha256(), transferId, outcome.validationResult(),
-                outcome.success(), outcome.message() + ". " + removal.message(),
-                uploaded.objectReference(), removal.status());
+        Instant startedAt = Instant.now();
+        try {
+            validator.validate(request);
+            TransferStrategy strategy = factory.getStrategy(request);
+            TransferResponse uploaded = strategy.transfer(request);
+            String transferId = UUID.randomUUID().toString();
+            var outcome = integrity.validate(transferId, uploaded.bucket(), uploaded.key(), uploaded.sha256());
+            var removal = finish(outcome.success(), uploaded.bucket(), uploaded.key(), uploaded.objectReference());
+            var result = new TransferResponse(uploaded.bucket(), uploaded.key(), uploaded.mediaType(), uploaded.sizeBytes(),
+                    uploaded.fileId(), uploaded.sha256(), transferId, outcome.validationResult(),
+                    outcome.success(), outcome.message() + ". " + removal.message(),
+                    uploaded.objectReference(), removal.status());
+            logs.transfer(result, startedAt);
+            return result;
+        } catch (RuntimeException error) {
+            logs.failure("TRANSFER", null, request == null ? null : request.destinationKey(), error, startedAt);
+            throw error;
+        }
     }
 
     private S3ObjectCleanup.Result finish(boolean success, String bucket, String key,
@@ -55,15 +67,26 @@ public class TransferService {
     }
 
     public UploadResponse upload(MultipartFile file) {
-        String fileName = validator.validateUpload(file, maxUploadBytes);
-        return uploadToKey(file, fileName, "uploads/" + UUID.randomUUID() + "/" + fileName);
+        Instant startedAt = Instant.now();
+        String fileName;
+        try {
+            fileName = validator.validateUpload(file, maxUploadBytes);
+        } catch (RuntimeException error) {
+            logs.failure("UPLOAD", file == null ? null : file.getOriginalFilename(), null, error, startedAt);
+            throw error;
+        }
+        return uploadToKey(file, fileName, "uploads/" + UUID.randomUUID() + "/" + fileName, startedAt);
     }
 
     UploadResponse uploadToKey(MultipartFile file, String fileName, String key) {
-        String contentType = validator.uploadContentType(fileName);
-        TransferStrategy strategy = factory.getStrategy(new TransferRequest(fileName, key, contentType));
+        return uploadToKey(file, fileName, key, Instant.now());
+    }
+
+    private UploadResponse uploadToKey(MultipartFile file, String fileName, String key, Instant startedAt) {
         Path temporary = null;
         try {
+            String contentType = validator.uploadContentType(fileName);
+            TransferStrategy strategy = factory.getStrategy(new TransferRequest(fileName, key, contentType));
             temporary = Files.createTempFile("mmiv-upload-", ".tmp");
             file.transferTo(temporary);
             long actualSize = Files.size(temporary);
@@ -80,12 +103,19 @@ public class TransferService {
             String transferId = UUID.randomUUID().toString();
             var outcome = integrity.validate(transferId, response.bucket(), response.key(), sha256);
             var removal = finish(outcome.success(), response.bucket(), response.key(), response.objectReference());
-            return new UploadResponse(response.bucket(), response.key(), response.fileName(), response.mediaType(),
+            var result = new UploadResponse(response.bucket(), response.key(), response.fileName(), response.mediaType(),
                     response.sizeBytes(), sha256, response.fileId(), transferId, outcome.validationResult(),
                     outcome.success(), outcome.message() + ". " + removal.message(),
                     response.objectReference(), removal.status());
+            logs.upload(result, startedAt);
+            return result;
         } catch (IOException | java.security.NoSuchAlgorithmException e) {
-            throw new IllegalStateException("Upload processing failed", e);
+            var error = new IllegalStateException("Upload processing failed", e);
+            logs.failure("UPLOAD", fileName, key, error, startedAt);
+            throw error;
+        } catch (RuntimeException error) {
+            logs.failure("UPLOAD", fileName, key, error, startedAt);
+            throw error;
         } finally {
             if (temporary != null) {
                 try { Files.deleteIfExists(temporary); }
