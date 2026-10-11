@@ -197,3 +197,16 @@ logs. A false container OOMKilled flag alone does not exclude a killed child
 process; inspect host kernel/cgroup memory events when available. ORA-03113 can
 also result from Oracle process errors unrelated to memory. The revised startup
 has not been run locally because Docker/Oracle are unavailable in this environment.
+
+## SQS CreateQueue permission repair
+
+The existing Terraform role lacked the SQS provisioning inline policy because the
+full bootstrap job remains commented out. A pre-plan step now reconciles the scoped
+policy for the two named MMIV queues, using the same template as bootstrap. It
+requires the role's existing IAM policy-management authorization and does not run
+a full bootstrap apply. Queue resources, EC2 configuration and application code
+are unchanged. No live AWS permissions were modified during this code update.
+
+The reported application apply created EC2 before failing on SQS. Retain its remote
+state and generate a fresh plan when retrying. Confirm the created instance is in
+state; repair state if needed rather than provisioning a second instance.

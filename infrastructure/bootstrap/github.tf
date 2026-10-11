@@ -238,20 +238,12 @@ resource "aws_iam_role_policy" "github_app_ssm_deploy" {
   })
 }
 
-# Apply bootstrap once to extend the existing Terraform role before creating queues.
+# Shared with the idempotent pre-plan step while the full bootstrap job is disabled.
 resource "aws_iam_role_policy" "github_terraform_file_logs" {
   name = "MMIV-File-Log-Queue-Provisioning"
   role = aws_iam_role.github_terraform.name
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Effect = "Allow"
-      Action = [
-        "sqs:CreateQueue", "sqs:DeleteQueue", "sqs:GetQueueAttributes",
-        "sqs:SetQueueAttributes", "sqs:GetQueueUrl", "sqs:TagQueue",
-        "sqs:UntagQueue", "sqs:ListQueueTags"
-      ]
-      Resource = "arn:aws:sqs:ap-southeast-1:${data.aws_caller_identity.current.account_id}:mmiv-file-logs*"
-    }]
+  policy = templatefile("${path.module}/policies/file-log-queue-provisioning.json", {
+    aws_region     = "ap-southeast-1"
+    aws_account_id = data.aws_caller_identity.current.account_id
   })
 }

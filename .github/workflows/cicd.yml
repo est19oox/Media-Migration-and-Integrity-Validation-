@@ -200,6 +200,7 @@ jobs:
           python3 -m pip install PyYAML
           python3 tests/ci/test-runtime-config.py
           python3 tests/ci/test-cd-contract.py
+          python3 tests/ci/test-terraform-sqs-policy.py
           python3 tests/ci/test-stack-lifecycle.py
           node --test tests/ci/test-upload-page.cjs
 
@@ -276,6 +277,9 @@ jobs:
 
       - name: Verify AWS Connection
         run: aws sts get-caller-identity
+
+      - name: Ensure Terraform role can provision MMIV log queues
+        run: python3 ../../scripts/cd/ensure-terraform-sqs-policy.py
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v4
