@@ -5,7 +5,9 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 import mmiv.user_access_service.config.TestJwtConfig;
 import mmiv.user_access_service.dto.AccessCheckRequest;
 import mmiv.user_access_service.model.Action;
@@ -76,11 +78,12 @@ class OracleUserRepositoryIT {
     repository.grantDestinationAccess(USER_ID, "destination-read", Permission.READ);
 
     User loaded = repository.findById(USER_ID).orElseThrow();
+    assertEquals(2, loaded.getDestinationAccesses().size());
     assertEquals(
         Set.of(
-            new DestinationAccess("destination-write", Permission.WRITE),
-            new DestinationAccess("destination-read", Permission.READ)),
-        Set.copyOf(loaded.getDestinationAccesses()));
+            Map.entry("destination-write", Permission.WRITE),
+            Map.entry("destination-read", Permission.READ)),
+        destinationAssignments(loaded));
 
     assertTrue(authorized("destination-write", "READ"));
     assertTrue(authorized("destination-write", "WRITE"));
@@ -113,11 +116,18 @@ class OracleUserRepositoryIT {
         user(List.of(new DestinationAccess("destination-unrequested", Permission.WRITE))));
 
     User loaded = repository.findById(USER_ID).orElseThrow();
+    assertEquals(1, loaded.getDestinationAccesses().size());
     assertEquals(
-        Set.of(new DestinationAccess("destination-preserved", Permission.READ)),
-        Set.copyOf(loaded.getDestinationAccesses()));
+        Set.of(Map.entry("destination-preserved", Permission.READ)),
+        destinationAssignments(loaded));
     assertFalse(authorized("destination-unrequested", "READ"));
     assertFalse(authorized("destination-unassigned", "READ"));
+  }
+
+  private Set<Map.Entry<String, Permission>> destinationAssignments(User user) {
+    return user.getDestinationAccesses().stream()
+        .map(access -> Map.entry(access.getDestination(), access.getPermission()))
+        .collect(Collectors.toSet());
   }
 
   private boolean authorized(String destination, String action) {

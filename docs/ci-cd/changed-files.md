@@ -1,3 +1,23 @@
+# Latest fix: Oracle destination-assignment integration assertions
+
+The uploaded CI log shows successful Oracle connections and three passing login
+integration tests. Two repository integration tests failed because DestinationAccess
+uses object-identity equality, while database reads construct different objects.
+
+Changed only the assertions in
+`services/user-access-service/src/test/java/mmiv/user_access_service/repository/OracleUserRepositoryIT.java`:
+compare destination/permission pairs by value, independent of ordering, and assert
+the exact assignment counts. Authorization allow/deny checks remain intact.
+Production service code, Integrity and deployment configuration are unchanged.
+
+A Java compiler regression check using the actual model classes and the updated
+comparison helper reproduced the old identity failure, passed reloaded/reordered
+assignments, and rejected incorrect destinations and permissions. Repository checks
+passed. The full Oracle-backed integration suite was not rerun locally and must
+run in CI. Mockito/Caffeine warnings in the log are separate from these failures.
+
+---
+
 # Latest revision: persistent Oracle for User Access
 
 ## Changes
