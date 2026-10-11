@@ -14,8 +14,6 @@ services:
         condition: service_started
       user-access-service:
         condition: service_started
-      reporting-service:
-        condition: service_started
       integrity-service:
         condition: service_started
     environment:
@@ -61,6 +59,10 @@ services:
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
       AWS_SESSION_TOKEN: ${AWS_SESSION_TOKEN:-}
+      MMIV_LOG_QUEUE_URL: ${MMIV_LOG_QUEUE_URL:-}
+      MMIV_LOG_OUTBOX_DIRECTORY: /var/lib/mmiv/log-outbox
+    volumes:
+    - transfer-service-logs:/var/lib/mmiv/log-outbox
   discovery-service:
     build:
       context: ../../services/discovery-service
@@ -91,6 +93,12 @@ services:
         condition: service_healthy
     environment:
       EUREKA_DEFAULT_ZONE: http://service-registry:8761/eureka/
+    env_file:
+    - path: ${USER_ACCESS_ENV_FILE:?Set USER_ACCESS_ENV_FILE to a private configuration
+        file}
+      format: raw
+    volumes:
+    - ${USER_ACCESS_JWT_DIRECTORY:?Set USER_ACCESS_JWT_DIRECTORY}:/run/mmiv-jwt:ro
   reporting-service:
     build:
       context: ../../services/reporting-service
@@ -102,6 +110,8 @@ services:
         condition: service_healthy
     environment:
       EUREKA_DEFAULT_ZONE: http://service-registry:8761/eureka/
+    profiles:
+    - reporting
   integrity-service:
     build:
       context: ../../services/integrity-service
@@ -120,3 +130,5 @@ services:
       AWS_SESSION_TOKEN: ${AWS_SESSION_TOKEN:-}
 networks:
   registry: null
+volumes:
+  transfer-service-logs: {}

@@ -26,7 +26,7 @@ class CDContractTest(unittest.TestCase):
         self.assertIn('terraform', jobs['setup-host']['needs'])
         self.assertIn('build-images', jobs['setup-host']['needs'])
         self.assertEqual({s['name'] for s in jobs['build-images']['strategy']['matrix']['service']},
-                         {'service-registry', 'transfer-service', 'integrity-service', 'api-gateway'})
+                         {'service-registry', 'transfer-service', 'integrity-service', 'user-access-service', 'api-gateway'})
         self.assertGreater(jobs['build-images']['strategy']['max-parallel'], 1)
         self.assertEqual(set(jobs['deploy-stack']['needs']), {'setup-host', 'build-images'})
         self.assertIn('deploy-stack', jobs['verify-services']['needs'])
@@ -49,6 +49,56 @@ class CDContractTest(unittest.TestCase):
             visited.add(name)
         for name in jobs:
             visit(name)
+
+    def test_managed_oracle_mode_and_supported_image_reach_deployment(self):
+        jobs = yaml.safe_load((ROOT / '.github/workflows/cicd.yml').read_text())['jobs']
+        runtime = next(s for s in jobs['setup-host']['steps'] if s.get('id') == 'runtime')
+        self.assertIn('load-runtime-config.py deployment', runtime['run'])
+        staging = next(s for s in jobs['setup-host']['steps'] if 'stage-user-access.yml' in s.get('run', ''))
+        self.assertIn("MANAGED_USER_ACCESS_ORACLE != 'true'", staging['if'])
+        deploy = next(s for s in jobs['deploy-stack']['steps'] if 'docker-stack-ssm.py deploy' in s.get('run', ''))
+        self.assertIn('managed_user_access_oracle', deploy['env']['MANAGED_USER_ACCESS_ORACLE'])
+        self.assertEqual(jobs['quality_gates']['services']['oracle']['image'],
+                         'gvenzl/oracle-free:23.26.3-slim-faststart')
+        options = jobs['quality_gates']['services']['oracle']['options']
+        self.assertIn('--health-start-period 180s', options)
+        self.assertIn('--log-opt max-size=10m', options)
+        self.assertIn('--log-opt max-file=3', options)
+        self.assertIn('--memory 3g', options)
+        self.assertIn('--memory-swap 3g', options)
+        storage = next(s for s in jobs['quality_gates']['steps']
+                       if 'test-oracle-storage.py' in s.get('run', ''))
+        self.assertEqual(storage['env']['ORACLE_CONTAINER'], '${{ job.services.oracle.id }}')
+        self.assertLess(jobs['quality_gates']['steps'].index(storage),
+                        next(i for i, s in enumerate(jobs['quality_gates']['steps'])
+                             if 'run-tests.sh' in s.get('run', '')))
+
+    def test_terraform_validation_is_isolated_from_oracle_and_scanners(self):
+        jobs = yaml.safe_load((ROOT / '.github/workflows/cicd.yml').read_text())['jobs']
+        validation = jobs['terraform-validation']
+        self.assertNotIn('services', validation)
+        self.assertNotIn('TF_PLUGIN_CACHE_DIR', validation.get('env', {}))
+        cache_step = next(s for s in validation['steps'] if 'run-terraform-checks.sh' in s.get('run', ''))
+        self.assertEqual(cache_step['env']['TF_PLUGIN_CACHE_DIR'],
+                         '${{ runner.temp }}/mmiv-terraform-provider-cache')
+        self.assertIn('terraform-validation', jobs['quality_gates']['needs'])
+        self.assertEqual(sum('run-terraform-checks.sh' in s.get('run', '')
+                             for s in validation['steps']), 1)
+        self.assertFalse(any('run-terraform-checks.sh' in s.get('run', '')
+                             for s in jobs['quality_gates']['steps']))
+        self.assertFalse(any('aws-actions/configure-aws-credentials' in s.get('uses', '')
+                             for s in validation['steps']))
+
+    def test_runner_context_is_not_in_workflow_or_job_environment(self):
+        # GitHub resolves these scopes before allocating a runner. Step env
+        # supports runner context, while workflow and job env do not.
+        for filename in (ROOT / '.github/workflows').glob('*.yml'):
+            workflow = yaml.safe_load(filename.read_text())
+            for value in workflow.get('env', {}).values():
+                self.assertNotIn('runner.', str(value), str(filename))
+            for name, job in workflow.get('jobs', {}).items():
+                for value in job.get('env', {}).values():
+                    self.assertNotIn('runner.', str(value), f'{filename}:{name}')
 
     def test_host_and_scanner_tools_are_prepared_once(self):
         jobs = yaml.safe_load((ROOT / '.github/workflows/cicd.yml').read_text())['jobs']

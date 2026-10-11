@@ -48,7 +48,7 @@ class LocalFileUploadTest {
         s3 = mock(S3Client.class);
         var validator = new TransferRequestValidator("/unused-media-root");
         strategy = spy(new S3TransferStrategy(s3, "test-bucket", validator));
-        var service = new TransferService(validator, new TransferStrategyFactory(List.of(strategy)), passingIntegrity(), passingCleanup());
+        var service = new TransferService(validator, new TransferStrategyFactory(List.of(strategy)), passingIntegrity(), passingCleanup(), mock(mmiv.transfer.logging.FileEventLogger.class));
         mvc = MockMvcBuilders.standaloneSetup(new TransferController(service))
                 .setControllerAdvice(new TransferExceptionHandler()).build();
     }

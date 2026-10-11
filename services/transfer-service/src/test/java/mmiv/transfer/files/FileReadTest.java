@@ -19,6 +19,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class FileReadTest {
     private S3Client s3;
     private MockMvc mvc;
+    private mmiv.transfer.logging.FileEventLogger logs;
     private final String key = "uploads/test/notes.txt";
     private final String url = "/api/v1/files/" + FileIds.encode(key);
 
@@ -26,7 +27,8 @@ class FileReadTest {
         s3 = mock(S3Client.class);
         when(s3.headObject(any(HeadObjectRequest.class))).thenReturn(
                 HeadObjectResponse.builder().contentLength(10L).eTag("\"version\"").build());
-        mvc = MockMvcBuilders.standaloneSetup(new FileController(new FileReadService(s3, "test-bucket")))
+        logs = mock(mmiv.transfer.logging.FileEventLogger.class);
+        mvc = MockMvcBuilders.standaloneSetup(new FileController(new FileReadService(s3, "test-bucket"), logs))
                 .setControllerAdvice(new TransferExceptionHandler()).build();
     }
     private void seedContent(String bytes) {
@@ -39,6 +41,8 @@ class FileReadTest {
                 .andExpect(content().string("0123456789"))
                 .andExpect(header().string("Content-Length", "10"))
                 .andExpect(header().string("Content-Disposition", org.hamcrest.Matchers.startsWith("attachment")));
+        verify(logs).download(eq("DOWNLOAD"), eq(FileIds.encode(key)), any(StoredFile.class),
+                eq(10L), eq(true), isNull(), any(java.time.Instant.class));
         verify(s3).getObject(argThat((GetObjectRequest request) -> request.bucket().equals("test-bucket")
                 && request.key().equals(key) && request.ifMatch().equals("\"version\"") && request.range() == null));
     }
@@ -49,12 +53,15 @@ class FileReadTest {
                 .andExpect(header().string("Content-Range", "bytes 2-5/10"))
                 .andExpect(header().string("Content-Length", "4"));
         verify(s3).getObject(argThat((GetObjectRequest request) -> "bytes=2-5".equals(request.range())));
+        verify(logs).download(eq("PREVIEW"), eq(FileIds.encode(key)), any(StoredFile.class),
+                eq(4L), eq(true), isNull(), any(java.time.Instant.class));
     }
     @Test void headDoesNotFetchObjectBody() throws Exception {
         mvc.perform(head(url + "/content").header("Range", "bytes=0-3"))
                 .andExpect(status().isOk()).andExpect(content().string(""))
                 .andExpect(header().string("Content-Length", "10"));
         verify(s3, never()).getObject(any(GetObjectRequest.class));
+        verifyNoInteractions(logs);
     }
     @Test void staleIfRangeReturnsFullBody() throws Exception {
         seedContent("0123456789");

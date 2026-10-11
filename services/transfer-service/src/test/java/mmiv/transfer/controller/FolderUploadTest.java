@@ -47,7 +47,7 @@ class FolderUploadTest {
         s3 = mock(S3Client.class);
         var validator = new TransferRequestValidator("/unused");
         strategy = spy(new S3TransferStrategy(s3, "test-bucket", validator));
-        var transfers = new TransferService(validator, new TransferStrategyFactory(List.of(strategy)), passingIntegrity(), passingCleanup());
+        var transfers = new TransferService(validator, new TransferStrategyFactory(List.of(strategy)), passingIntegrity(), passingCleanup(), mock(mmiv.transfer.logging.FileEventLogger.class));
         folders = new FolderUploadService(transfers, validator);
         mvc = MockMvcBuilders.standaloneSetup(new FolderUploadController(folders))
                 .setControllerAdvice(new TransferExceptionHandler()).build();

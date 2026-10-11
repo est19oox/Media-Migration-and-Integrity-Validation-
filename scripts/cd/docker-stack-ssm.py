@@ -56,7 +56,11 @@ def prepare(directory, instance, commit, release_id):
     state = {'INSTANCE_ID': instance, 'GITHUB_SHA': commit, 'RELEASE_ID': release_id,
              'ECR_REGISTRY': registry, 'AWS_REGION': os.getenv('AWS_REGION', 'ap-southeast-1'),
              'MMIV_BUCKET_NAME': os.getenv('MMIV_BUCKET_NAME', 'media-migration-dev-landing'),
+             'MMIV_LOG_QUEUE_URL': os.getenv('MMIV_LOG_QUEUE_URL', ''),
              'ORACLE_CONFIG_STAGED': os.getenv('ORACLE_CONFIG_STAGED', 'false') == 'true',
+             'MANAGED_USER_ACCESS_ORACLE': os.getenv('MANAGED_USER_ACCESS_ORACLE', 'true') == 'true',
+             'USER_ACCESS_JWT_ISSUER': os.getenv('USER_ACCESS_JWT_ISSUER', 'https://auth.mmiv.example'),
+             'USER_ACCESS_JWT_KEY_ID': os.getenv('USER_ACCESS_JWT_KEY_ID', 'mmiv-user-access-key-1'),
              'services': images, 'READY': False, 'ROLLED_BACK': False}
     return validate(state, instance, commit)
 
@@ -83,6 +87,7 @@ def lifecycle(action, state):
         if result.returncode:
             raise RuntimeError('SSM could not submit the Docker lifecycle command')
         command_id = result.stdout.strip()
+    print(f'SSM {action} command submitted: {command_id}; instance={state["INSTANCE_ID"]}', flush=True)
     evidence = Path('.ci/reports/docker')
     evidence.mkdir(parents=True, exist_ok=True)
     (evidence / ('release-' + action + '-command.json')).write_text(
@@ -100,6 +105,7 @@ def lifecycle(action, state):
             (evidence / ('release-' + action + '-result.json')).write_text(
                 json.dumps(invocation, indent=2) + '\n')
             if invocation['Status'] in ('Success', 'Failed', 'Cancelled', 'TimedOut'):
+                print(f'SSM {action} completed: status={invocation["Status"]}; response_code={invocation.get("ResponseCode", -1)}', flush=True)
                 for line in invocation.get('StandardOutputContent', '').splitlines():
                     if line.startswith('MMIV_RELEASE_STATE='):
                         outcome = json.loads(line.split('=', 1)[1])
@@ -112,6 +118,26 @@ def lifecycle(action, state):
     raise RuntimeError('Timed out waiting for Docker lifecycle; inspect SSM command ' + command_id)
 
 
+
+def report_outcome(action, state):
+    print(f'{action}: ready={bool(state.get("READY"))}; rolled_back={bool(state.get("ROLLED_BACK"))}', flush=True)
+    if state.get('error') or (action == 'deploy' and not state.get('READY')):
+        # Selected fields only; never print the full SSM response, command or env.
+        print('Deployment failure: ' + str(state.get('error', 'UnknownError')) +
+              '; phase=' + str(state.get('failure_phase', 'unavailable')), file=sys.stderr)
+        print(str(state.get('error_detail', 'Inspect the release deployment evidence for this run.')), file=sys.stderr)
+        if 'failed_operation' in state:
+            print('Failed operation: ' + str(state['failed_operation']) +
+                  '; exit_code=' + str(state.get('command_exit_code', 'unknown')), file=sys.stderr)
+        for name, details in state.get('container_states', {}).items():
+            if name in PORTS or name == 'oracle':
+                print(name + ': ' + json.dumps({key: details.get(key) for key in
+                    ('status', 'health', 'exit_code', 'oom_killed')}), file=sys.stderr)
+        if state.get('recovery_error'):
+            print('Rollback failure: ' + str(state['recovery_error']), file=sys.stderr)
+        print('See release-deployment-evidence artifact: release-' + action + '-result.json', file=sys.stderr)
+
+
 def main():
     parser = argparse.ArgumentParser(description='Prepare/deploy/restore the complete Docker release')
     parser.add_argument('action', choices=('prepare', 'deploy', 'rollback'))
@@ -119,6 +145,7 @@ def main():
     parser.add_argument('--manifest', type=Path, default=Path('.ci/deployments/release.json'))
     args = parser.parse_args()
     instance, commit = os.environ['INSTANCE_ID'], os.environ['GITHUB_SHA']
+    print(f'Starting {args.action} for instance={instance}; commit={commit}', flush=True)
     if args.action == 'prepare':
         release_id = commit + '-' + os.getenv('GITHUB_RUN_ID', 'local') + '-' + os.getenv('GITHUB_RUN_ATTEMPT', '1')
         state = prepare(args.image_dir, instance, commit, release_id)
@@ -128,6 +155,10 @@ def main():
         validate(state, instance, commit)
     args.manifest.parent.mkdir(parents=True, exist_ok=True)
     args.manifest.write_text(json.dumps(state, indent=2) + '\n')
+    if args.action == 'prepare':
+        print(f'Release prepared: {len(state["services"])} images; manifest={args.manifest}', flush=True)
+    else:
+        report_outcome(args.action, state)
     if args.action == 'deploy':
         return int(not state.get('READY') or state.get('COMMAND_STATUS') != 'Success'
                    or state.get('COMMAND_RESPONSE_CODE') != 0)
