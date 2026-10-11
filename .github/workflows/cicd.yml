@@ -90,8 +90,6 @@ jobs:
     name: Validate Terraform on an isolated runner
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    env:
-      TF_PLUGIN_CACHE_DIR: ${{ runner.temp }}/mmiv-terraform-provider-cache
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
@@ -102,6 +100,8 @@ jobs:
       - name: Check Terraform provider-cache behavior
         run: python3 tests/ci/test-terraform-cache.py
       - name: Validate all Terraform roots with a shared provider cache
+        env:
+          TF_PLUGIN_CACHE_DIR: ${{ runner.temp }}/mmiv-terraform-provider-cache
         run: |
           df -h "$GITHUB_WORKSPACE"
           bash scripts/ci/run-terraform-checks.sh .

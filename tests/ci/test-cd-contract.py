@@ -77,7 +77,10 @@ class CDContractTest(unittest.TestCase):
         jobs = yaml.safe_load((ROOT / '.github/workflows/cicd.yml').read_text())['jobs']
         validation = jobs['terraform-validation']
         self.assertNotIn('services', validation)
-        self.assertIn('TF_PLUGIN_CACHE_DIR', validation['env'])
+        self.assertNotIn('TF_PLUGIN_CACHE_DIR', validation.get('env', {}))
+        cache_step = next(s for s in validation['steps'] if 'run-terraform-checks.sh' in s.get('run', ''))
+        self.assertEqual(cache_step['env']['TF_PLUGIN_CACHE_DIR'],
+                         '${{ runner.temp }}/mmiv-terraform-provider-cache')
         self.assertIn('terraform-validation', jobs['quality_gates']['needs'])
         self.assertEqual(sum('run-terraform-checks.sh' in s.get('run', '')
                              for s in validation['steps']), 1)
@@ -85,6 +88,17 @@ class CDContractTest(unittest.TestCase):
                              for s in jobs['quality_gates']['steps']))
         self.assertFalse(any('aws-actions/configure-aws-credentials' in s.get('uses', '')
                              for s in validation['steps']))
+
+    def test_runner_context_is_not_in_workflow_or_job_environment(self):
+        # GitHub resolves these scopes before allocating a runner. Step env
+        # supports runner context, while workflow and job env do not.
+        for filename in (ROOT / '.github/workflows').glob('*.yml'):
+            workflow = yaml.safe_load(filename.read_text())
+            for value in workflow.get('env', {}).values():
+                self.assertNotIn('runner.', str(value), str(filename))
+            for name, job in workflow.get('jobs', {}).items():
+                for value in job.get('env', {}).values():
+                    self.assertNotIn('runner.', str(value), f'{filename}:{name}')
 
     def test_host_and_scanner_tools_are_prepared_once(self):
         jobs = yaml.safe_load((ROOT / '.github/workflows/cicd.yml').read_text())['jobs']
