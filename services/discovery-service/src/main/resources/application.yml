@@ -1,3 +1,4 @@
+
 server:
   port: 8085
 
@@ -10,6 +11,8 @@ spring:
 
 discovery:
   root: ${DISCOVERY_ROOT}
+  run-on-startup: false
+  manifest-path: ${DISCOVERY_MANIFEST_PATH:}
   supported-file-types:
     - MP4
     - PDF
@@ -17,7 +20,7 @@ discovery:
     - PPT
     - PPTX
     - PNG
-    
+
 management:
   endpoints:
     web:
