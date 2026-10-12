@@ -87,7 +87,24 @@ class GatewayRoutingTest {
         http.get().uri("/upload.html").exchange().expectStatus().isOk()
                 .expectHeader().valueEquals("X-Test-Path", "/upload.html");
         http.get().uri("/").exchange().expectStatus().isOk()
-                .expectHeader().valueEquals("X-Test-Path", "/upload.html");
+                .expectHeader().valueEquals("X-Test-Backend", "A")
+                .expectHeader().valueEquals("X-Test-Path", "/login.html");
+        for (String page : new String[]{"/login.html", "/signup.html"}) {
+            http.get().uri(page).exchange().expectStatus().isOk()
+                    .expectHeader().valueEquals("X-Test-Backend", "A")
+                    .expectHeader().valueEquals("X-Test-Path", page);
+        }
+        for (String path : new String[]{"/files.html", "/auth.js", "/api/v1/session"}) {
+            http.get().uri(path).exchange().expectStatus().isOk()
+                    .expectHeader().valueEquals("X-Test-Path", path);
+        }
+        for (String action : new String[]{"login", "signup"}) {
+            http.post().uri("/user-access/api/auth/" + action)
+                    .contentType(MediaType.APPLICATION_JSON).bodyValue("{}")
+                    .exchange().expectStatus().isOk()
+                    .expectHeader().valueEquals("X-Test-Backend", "A")
+                    .expectHeader().valueEquals("X-Test-Path", "/api/auth/" + action);
+        }
         http.get().uri("/eureka/apps").exchange().expectStatus().isNotFound();
     }
     @Test void exposesItsOwnHealth() {
