@@ -13,7 +13,7 @@ window.mmivAuth = (() => {
   }
   const ready = requestSession().then(value => {
     session = value;
-    const expiresIn = Date.parse(value.expiresAt) - Date.now();
+    const expiresIn = Number(value.expiresInSeconds) * 1000;
     if (Number.isFinite(expiresIn)) {
       setTimeout(() => location.replace('/login.html'), Math.max(0, expiresIn));
     }
@@ -37,8 +37,20 @@ window.mmivAuth = (() => {
     const headers = new Headers(options.headers);
     const method = (options.method || 'GET').toUpperCase();
     if (!['GET', 'HEAD', 'OPTIONS'].includes(method)) headers.set(session.csrfHeader, session.csrfToken);
-    const response = await fetch(url, {...options, headers, credentials: 'same-origin', cache: 'no-store'});
+    let response = await fetch(url, {...options, headers, credentials: 'same-origin', cache: 'no-store'});
     if (response.status === 401) return login();
+    if (response.status === 403 && !['GET', 'HEAD', 'OPTIONS'].includes(method)) {
+      let failure;
+      try { failure = await response.clone().json(); } catch (_) {}
+      if (failure && failure.error === 'CSRF_INVALID') {
+        // This exact response is emitted by CsrfFilter before a controller runs.
+        // Refresh after another tab changes the cookie, and replay at most once.
+        session = await requestSession();
+        headers.set(session.csrfHeader, session.csrfToken);
+        response = await fetch(url, {...options, headers, credentials: 'same-origin', cache: 'no-store'});
+        if (response.status === 401) return login();
+      }
+    }
     return response;
   }
   return {ready, fetch: authenticatedFetch};

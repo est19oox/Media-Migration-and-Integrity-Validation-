@@ -35,9 +35,10 @@ public class BrowserSessionController {
     }
 
     @GetMapping
-    public Map<String, String> current(@AuthenticationPrincipal Jwt jwt, CsrfToken csrf) {
+    public Map<String, Object> current(@AuthenticationPrincipal Jwt jwt, CsrfToken csrf) {
         return Map.of("userId", jwt.getSubject(), "csrfToken", csrf.getToken(),
-                "csrfHeader", csrf.getHeaderName(), "expiresAt", jwt.getExpiresAt().toString());
+                "csrfHeader", csrf.getHeaderName(), "expiresAt", jwt.getExpiresAt().toString(),
+                "expiresInSeconds", Math.max(0, Duration.between(Instant.now(), jwt.getExpiresAt()).getSeconds()));
     }
 
     @DeleteMapping

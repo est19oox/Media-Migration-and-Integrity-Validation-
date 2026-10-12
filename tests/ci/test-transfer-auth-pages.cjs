@@ -65,7 +65,7 @@ test('cookie upload sends the server CSRF token; logout clears the server sessio
       calls.push({url, options});
       return {ok: true, status: 200,
         json: async () => ({csrfToken: 'masked-csrf', csrfHeader: 'X-XSRF-TOKEN',
-          expiresAt: '2099-01-01T00:00:00Z'})};
+          expiresAt: '2099-01-01T00:00:00Z', expiresInSeconds: 1800})};
     }
   };
   const script = readFileSync(resolve(__dirname,

@@ -113,8 +113,11 @@ class TransferSecurityIntegrationTest {
 
     @Test void cookieUploadsNeedCsrfAndLogoutClearsCookie() throws Exception {
         Cookie auth = new Cookie("MMIV_SESSION", valid());
-        mvc.perform(post("/api/v1/transfers").cookie(auth)).andExpect(status().isForbidden());
-        var result = mvc.perform(get("/api/v1/session").cookie(auth)).andExpect(status().isOk()).andReturn();
+        mvc.perform(post("/api/v1/transfers").cookie(auth)).andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.error").value("CSRF_INVALID"));
+        mvc.perform(delete("/api/v1/session").cookie(auth)).andExpect(status().isForbidden());
+        var result = mvc.perform(get("/api/v1/session").cookie(auth)).andExpect(status().isOk())
+                .andExpect(jsonPath("$.expiresInSeconds").isNumber()).andReturn();
         // The endpoint returns the masked CSRF value while the cookie stores the expected token.
         String body = result.getResponse().getContentAsString();
         var json = tools.jackson.databind.json.JsonMapper.builder().build().readTree(body);
@@ -122,11 +125,25 @@ class TransferSecurityIntegrationTest {
         assertNotNull(csrf);
         String header = json.get("csrfHeader").asString();
         String value = json.get("csrfToken").asString();
+        mvc.perform(post("/api/v1/transfers").cookie(auth, csrf).header(header, "invalid"))
+                .andExpect(status().isForbidden());
         mvc.perform(post("/api/v1/transfers").cookie(auth, csrf).header(header, value))
                 .andExpect(status().isOk());
         mvc.perform(delete("/api/v1/session").cookie(auth, csrf).header(header, value))
                 .andExpect(status().isNoContent()).andExpect(header().string("Set-Cookie",
                         org.hamcrest.Matchers.containsString("Max-Age=0")));
+    }
+
+    @Test void explicitBearerUploadDoesNotRequireBrowserCsrf() throws Exception {
+        mvc.perform(post("/api/v1/transfers").header("Authorization", "Bearer " + valid()))
+                .andExpect(status().isOk());
+        mvc.perform(get("/not-exposed").header("Authorization", "Bearer " + valid()))
+                .andExpect(status().isForbidden());
+        mvc.perform(post("/api/v1/transfers").header("Authorization", "Bearer invalid"))
+                .andExpect(status().isUnauthorized());
+        mvc.perform(post("/api/v1/transfers").cookie(new Cookie("MMIV_SESSION", valid()))
+                .header("Authorization", "Basic invalid"))
+                .andExpect(status().isUnauthorized());
     }
 
     @RestController

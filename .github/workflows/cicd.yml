@@ -198,11 +198,12 @@ jobs:
       - name: Check CD dependency order and upload page
         run: |
           python3 -m pip install PyYAML
+          python3 tests/ci/test-verification-login.py
           python3 tests/ci/test-runtime-config.py
           python3 tests/ci/test-cd-contract.py
           python3 tests/ci/test-terraform-sqs-policy.py
           python3 tests/ci/test-stack-lifecycle.py
-          node --test tests/ci/test-upload-page.cjs tests/ci/test-transfer-auth-pages.cjs
+          node --test tests/ci/test-upload-page.cjs tests/ci/test-transfer-auth-pages.cjs tests/ci/test-session-recovery.cjs
 
       - name: Reclaim and verify User Access Oracle database storage
         env:

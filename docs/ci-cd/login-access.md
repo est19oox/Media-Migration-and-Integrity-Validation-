@@ -38,7 +38,7 @@ If MMIV_RUNTIME_CONFIG already includes external database or Integrity settings,
 
 ## Verification
 
-Spring integration tests cover anonymous access, real RSA signatures, wrong issuer, expired/forged tokens, browser cookie establishment, CSRF and logout. Run mvn -B clean verify with Java 25 from services/transfer-service. These Java tests could not be executed in the editing environment because it has Java 17, no Maven and no Docker. Browser login/signup logic and the relevant Python deployment/tunnel contracts were checked locally; see login-validation.txt at the project root.
+Spring integration tests cover anonymous access, real RSA signatures, wrong issuer, expired/forged tokens, browser cookie establishment, CSRF and logout. Run mvn -B clean verify with Java 25 from services/transfer-service. These Java tests could not be executed in the editing environment because Java 25, Docker and the required cached Maven dependencies are unavailable. Browser login/signup logic and the relevant Python deployment/tunnel contracts were checked locally; see login-validation.txt at the project root.
 
 ## Signup
 
@@ -49,3 +49,5 @@ New accounts are active with role USER and no global or destination permissions.
 Signup does not include email verification or password reset. It returns to login after successful creation.
 
 The scanner obtains a fresh JWT after functional checks, so those checks do not consume its 30-minute authentication window. JWTs past their expiration time are rejected by Transfer even within the default validator clock-skew allowance.
+
+Session timing now uses expiresInSeconds calculated by the server, so an incorrect browser clock does not immediately log out a valid session. If another tab rotates the CSRF cookie, the browser refreshes the token and retries only once after the exact CSRF_INVALID response from CsrfFilter. General authorization failures are never replayed. Verification login accepts only a strict loopback tunnel URL and a Bearer JWT, refuses redirects, and keeps its temporary environment file private.

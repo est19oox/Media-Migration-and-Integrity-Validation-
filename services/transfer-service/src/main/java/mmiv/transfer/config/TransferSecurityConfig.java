@@ -11,6 +11,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplicat
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.config.ObjectPostProcessor;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.oauth2.core.DelegatingOAuth2TokenValidator;
 import org.springframework.security.oauth2.core.OAuth2Error;
@@ -24,6 +25,7 @@ import org.springframework.security.oauth2.server.resource.web.DefaultBearerToke
 import org.springframework.security.web.AuthenticationEntryPoint;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
+import org.springframework.security.web.csrf.CsrfFilter;
 
 @Configuration
 @EnableWebSecurity
@@ -89,8 +91,32 @@ public class TransferSecurityConfig {
         return http
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .csrf(csrf -> csrf.csrfTokenRepository(csrfCookies)
-                        // API clients send explicit Bearer credentials; browser cookie requests need CSRF.
-                        .ignoringRequestMatchers(request -> request.getHeader("Authorization") != null))
+                        .withObjectPostProcessor(new ObjectPostProcessor<CsrfFilter>() {
+                            @Override
+                            public <O extends CsrfFilter> O postProcess(O filter) {
+                                // Resource Server automatically exempts resolved bearer tokens.
+                                // Our resolver also accepts cookies, so replace that final matcher:
+                                // only explicit Authorization headers bypass CSRF, never cookies.
+                                filter.setRequireCsrfProtectionMatcher(request ->
+                                        CsrfFilter.DEFAULT_CSRF_MATCHER.matches(request)
+                                                && request.getHeader("Authorization") == null);
+                                filter.setAccessDeniedHandler((request, response, exception) -> {
+                                    boolean hasCookie = false;
+                                    if (request.getCookies() != null) {
+                                        for (Cookie cookie : request.getCookies()) {
+                                            if (AUTH_COOKIE.equals(cookie.getName())) hasCookie = true;
+                                        }
+                                    }
+                                    response.setStatus(hasCookie ? 403 : 401);
+                                    response.setHeader("Cache-Control", "no-store");
+                                    response.setContentType("application/json");
+                                    response.getWriter().write(hasCookie
+                                            ? "{\"error\":\"CSRF_INVALID\"}"
+                                            : "{\"error\":\"LOGIN_REQUIRED\"}");
+                                });
+                                return filter;
+                            }
+                        }))
                 .authorizeHttpRequests(auth -> auth
                         .dispatcherTypeMatchers(DispatcherType.ERROR).permitAll()
                         .requestMatchers(HttpMethod.GET, "/actuator/health", "/actuator/health/**", "/actuator/info").permitAll()
@@ -98,16 +124,7 @@ public class TransferSecurityConfig {
                         .requestMatchers("/api/v1/transfers", "/api/v1/transfers/**",
                                 "/api/v1/files", "/api/v1/files/**", "/api/v1/session").authenticated()
                         .anyRequest().denyAll())
-                .exceptionHandling(errors -> errors.authenticationEntryPoint(entryPoint)
-                        .accessDeniedHandler((request, response, exception) -> {
-                            boolean hasCookie = false;
-                            if (request.getCookies() != null) {
-                                for (Cookie cookie : request.getCookies()) {
-                                    if (AUTH_COOKIE.equals(cookie.getName())) hasCookie = true;
-                                }
-                            }
-                            response.sendError(hasCookie ? 403 : 401);
-                        }))
+                .exceptionHandling(errors -> errors.authenticationEntryPoint(entryPoint))
                 .oauth2ResourceServer(resource -> resource.bearerTokenResolver(resolver)
                         .authenticationEntryPoint(entryPoint).jwt(jwt -> {}))
                 .build();
