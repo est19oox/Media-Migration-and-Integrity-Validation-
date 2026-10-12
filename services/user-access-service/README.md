@@ -251,12 +251,122 @@ Run the destination API security tests on their own:
 These destination tests use generated RSA keys and the in-memory repository,
 with the real Spring Security filters enabled.
 
+Run the user-management security tests with:
+
+```powershell
+.\mvnw.cmd "-Dtest=UserManagementSecurityIntegrationTest" test
+```
+
 Maven Surefire runs the regular `*Test` suite. Oracle-backed tests use the `*IT`
 naming pattern and run through the `oracle-it` Maven profile:
 
 ```powershell
 .\mvnw.cmd -Poracle-it verify
 ```
+
+## 8. User Management and Initial Administrator
+
+### Admin-only user management
+
+`POST /api/users` and `PATCH /api/users/{userId}/active` require a valid bearer
+JWT and an active account whose current database role is exactly `ADMIN`. The
+service re-reads that account from the repository for every request; JWT role
+claims are not authorization. User creation accepts only role `USER`, generates
+an ID, hashes the password with the service's BCrypt cost-12 encoder, and
+returns only the ID, username, role, and active status. Duplicate usernames
+return `409`; malformed input returns `400`.
+
+The active-status endpoint accepts `{"active":true}` or `{"active":false}`.
+It preserves the user's password hash, role, global permissions, and destination
+assignments. Unknown user IDs return `404`; an administrator cannot deactivate
+their own account, and the API cannot reactivate an inactive `ADMIN`. Neither
+endpoint returns a password hash.
+
+Public administrator registration is forbidden: anyone could otherwise grant
+themselves authority without an existing trusted operator. Administrators may
+create ordinary users only. Creating or reactivating an administrator requires
+an approved operator/database recovery procedure; the initial bootstrap below
+only creates an ADMIN when none exists and never reactivates an account.
+
+### One-time initial administrator bootstrap
+
+Bootstrap is not an HTTP endpoint and does not run on normal application
+startup. It is enabled only for an explicitly invoked process by setting
+`ADMIN_BOOTSTRAP_ENABLED=true`. Bootstrap mode skips the normal startup schema
+migration runner and requires the existing schema; it cannot silently create
+or alter schema objects.
+
+The operator must run from an interactive terminal. The process displays the
+target `FREEPDB1.USER_ACCESS` and requires the operator to type that exact
+confirmation. It reads the username and password from the terminal, does not
+echo either password entry, and requires the two password entries to match.
+Without an interactive console or the exact confirmation, it exits without
+creating an account.
+
+Example one-shot PowerShell invocation from this service directory:
+
+```powershell
+& {
+  $env:ADMIN_BOOTSTRAP_ENABLED = "true"
+  .\mvnw.cmd spring-boot:run
+}
+```
+
+The app still requires its normal connection and JWT settings for startup.
+Provide these through the local secret manager or environment, not source code
+or shell history:
+
+- `ORACLE_JDBC_URL` — must connect to the `FREEPDB1` pluggable database.
+- `ORACLE_USER` — must be `USER_ACCESS` for the bootstrap safeguards.
+- `ORACLE_PASSWORD` — the local Oracle credential.
+- `JWT_PRIVATE_KEY_PATH` and `JWT_PUBLIC_KEY_PATH` — paths to the local RS256
+  key pair needed by the service at startup.
+- `ADMIN_BOOTSTRAP_ENABLED` — set to `true` only for the one-shot invocation.
+- Optional local settings: `EUREKA_CLIENT_ENABLED=false`, `JWT_ISSUER`,
+  `JWT_KEY_ID`, and `SERVER_PORT`.
+
+Before inserting, the utility verifies the actual Oracle container and session
+owner, obtains a non-waiting exclusive lock on `USER_ACCESS.APP_USERS`, and
+checks that no `ADMIN` row and no matching username exists. It refuses to
+modify any account, including an inactive administrator. It inserts one
+`ACTIVE=1`, `ROLE='ADMIN'` account using a UUID and the configured BCrypt
+encoder; it does not create permission or destination-assignment rows and does
+not change existing records. Repeated or concurrent invocations cannot create
+a second administrator: an existing `ADMIN` causes refusal, and the table lock
+serializes the check-and-insert transaction.
+
+The `USER_ACCESS` schema owner needs `SELECT`, `INSERT`, and table-lock access
+to `USER_ACCESS.APP_USERS`; when connected as the table owner these are inherent.
+The bootstrap does not need elevated `SYS` access. A failed transaction rolls
+back. If an account was successfully created with incorrect operator details,
+preserve the row and use an approved, audited database recovery procedure
+scoped to the reported user ID; do not rerun bootstrap to reset or reactivate
+it.
+
+After success, the utility prints only the generated user ID. Verify without
+selecting credentials or hashes by connecting to `FREEPDB1` and running an
+owner-qualified query such as:
+
+```sql
+SELECT USER_ID, ROLE, ACTIVE
+FROM USER_ACCESS.APP_USERS
+WHERE USER_ID = '<reported-user-id>'
+  AND ROLE = 'ADMIN'
+  AND ACTIVE = 1;
+```
+
+The returned row must match the reported ID, `ADMIN`, and `1`. Never include
+`PASSWORD_HASH` in verification output. Once verified, immediately unset
+`ADMIN_BOOTSTRAP_ENABLED` and return to the normal service startup workflow.
+
+### Safe local development
+
+Routine security and API development should use the `test` profile, generated
+RSA test keys, and `InMemoryUserRepository`; tests do not need production
+credentials or the live Oracle database. For local end-to-end work, use a
+dedicated local Oracle database and disposable keys, keep all secrets outside
+Git, and do not set `ADMIN_BOOTSTRAP_ENABLED` unless deliberately performing
+the confirmed one-time bootstrap against that local database.
 
 That profile requires a live, authorized Oracle database. Do not treat a passing
 default `clean verify` as proof that Oracle integration tests ran.

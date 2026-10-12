@@ -3,6 +3,7 @@ package mmiv.user_access_service.config;
 import java.nio.charset.StandardCharsets;
 import java.util.regex.Pattern;
 import org.springframework.beans.factory.InitializingBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Profile;
@@ -12,6 +13,11 @@ import org.springframework.jdbc.core.JdbcTemplate;
 /** Run the supplied idempotent PL/SQL schema blocks before the application becomes ready. */
 @Configuration
 @Profile("!test")
+@ConditionalOnProperty(
+    prefix = "admin.bootstrap",
+    name = "enabled",
+    havingValue = "false",
+    matchIfMissing = true)
 public class OracleSchemaConfiguration {
   private static final Pattern BLOCK = Pattern.compile("(?ms)^DECLARE\\b.*?^/\\s*$");
 
