@@ -30,6 +30,8 @@ public class SecurityConfig {
                     .permitAll()
                     .requestMatchers(HttpMethod.GET, "/api/health")
                     .permitAll()
+                    .requestMatchers("/api/users/**")
+                    .authenticated()
                     .requestMatchers("/api/access/**")
                     .authenticated()
                     .anyRequest()
