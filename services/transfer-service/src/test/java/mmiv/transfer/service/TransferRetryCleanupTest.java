@@ -13,7 +13,6 @@ import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.*;
 import java.nio.file.*;
-import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
@@ -25,8 +24,8 @@ class TransferRetryCleanupTest {
     TransferService service;
     @BeforeEach void setup() {
         var validator = new TransferRequestValidator(media.toString());
-        var strategy = new S3TransferStrategy(s3, "bucket", validator);
-        service = new TransferService(validator, new TransferStrategyFactory(List.of(strategy)),
+        var strategy = new S3TransferStrategy(s3, "bucket");
+        service = new TransferService(new mmiv.transfer.service.TransferSourcePreparer(validator, 104857600), new TransferStrategyFactory(strategy),
                 new IntegrityValidationGateway(client, 3, 0), new S3ObjectCleanup(s3, 3, 0), mock(mmiv.transfer.logging.FileEventLogger.class));
         when(s3.putObject(any(PutObjectRequest.class), any(RequestBody.class)))
                 .thenReturn(PutObjectResponse.builder().eTag("\"etag\"").versionId("version-1").build());

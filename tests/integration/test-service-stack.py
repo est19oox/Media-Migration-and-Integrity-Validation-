@@ -92,6 +92,19 @@ class S3Fixture(http.server.BaseHTTPRequestHandler):
         self.send_header('Content-Length', '0')
         self.end_headers()
     def do_GET(self):
+        parsed=urllib.parse.urlsplit(self.path)
+        query=urllib.parse.parse_qs(parsed.query,keep_blank_values=True)
+        if 'versions' in query:
+            from xml.sax.saxutils import escape
+            bucket=parsed.path.strip('/')
+            prefix=query.get('prefix',[''])[0]
+            entries=[]
+            for path,(body,_) in self.objects.items():
+                if path.startswith('/'+bucket+'/'):
+                    key=path[len(bucket)+2:]
+                    if key.startswith(prefix): entries.append('<Version><Key>'+escape(key)+'</Key><VersionId>null</VersionId><IsLatest>true</IsLatest><LastModified>2026-10-12T00:00:00Z</LastModified><ETag>fixture</ETag><Size>'+str(len(body))+'</Size><StorageClass>STANDARD</StorageClass></Version>')
+            body=('<ListVersionsResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/"><Name>'+escape(bucket)+'</Name><Prefix>'+escape(prefix)+'</Prefix><IsTruncated>false</IsTruncated>'+''.join(entries)+'</ListVersionsResult>').encode()
+            self.send_response(200);self.send_header('Content-Type','application/xml');self.send_header('Content-Length',str(len(body)));self.end_headers();self.wfile.write(body);return
         self.read_object(False)
     def do_HEAD(self):
         self.read_object(True)
@@ -172,13 +185,15 @@ def main():
                     'USER_ACCESS_JWK_SET_URI': f'http://127.0.0.1:{ports["user-access-service"]}/.well-known/jwks.json',
                     'METADATA_URL': f'http://127.0.0.1:{ports["discovery-service"]}',
                     'TRANSFER_URL': f'http://127.0.0.1:{ports["transfer-service"]}',
+                    'REPORTING_URL': f'http://127.0.0.1:{ports["reporting-service"]}',
                     'EUREKA_DEFAULT_ZONE': f'http://127.0.0.1:{ports["service-registry"]}/eureka/',
                     'EUREKA_INSTANCE_IP_ADDRESS': '127.0.0.1', 'EUREKA_INSTANCE_PREFER_IP_ADDRESS': 'true',
                     'SPRING_RABBITMQ_HOST': '127.0.0.1', 'SPRING_RABBITMQ_PORT': str(ports['rabbit']),
                     'SPRING_RABBITMQ_USERNAME': 'mmiv', 'SPRING_RABBITMQ_PASSWORD': secret,
                     'MONGODB_URI': f'mongodb://127.0.0.1:{ports["mongo"]}/mmiv_reporting',
                     'JAVA_TOOL_OPTIONS': '-Xms32m -Xmx256m -XX:MaxDirectMemorySize=64m',
-                    'MMIV_EVENTS_ENABLED': 'true'})
+                    'MMIV_EVENTS_ENABLED': 'true', 'MMIV_BOOTSTRAP_ADMIN_ENABLED': 'true',
+                    'MMIV_BOOTSTRAP_ADMIN_USERNAME': 'admin', 'MMIV_BOOTSTRAP_ADMIN_PASSWORD': secret})
         for name in SERVICES:
             output = (directory / (name + '.log')).open('w')
             outputs.append(output)
@@ -213,14 +228,42 @@ def main():
                 assert response.code == 302, response.code
                 assert response.headers.get('Location') == '/login.html', response.headers.get('Location')
         print('PASS direct Transfer and Gateway redirects use exact /login.html Location', flush=True)
+        assert request(gateway + '/admin.html')[0] == 200
+        assert request(gateway + '/admin.js')[0] == 200
+        admin_api = gateway + '/user-access/api/admin'
+        assert request(admin_api + '/me')[0] == 401
+        assert request(admin_api + '/me', token=token)[0] == 403
+        status, body = request(native + '/api/auth/login', 'POST', {'username': 'admin', 'password': secret})
+        assert status == 200, (status, body)
+        admin_token = json.loads(body)['accessToken']
+        status, body = request(admin_api + '/me', token=admin_token)
+        assert status == 200 and json.loads(body)['destination'] == 'it-landing', (status, body)
+        external_auth = {'username': 'outside_' + uuid.uuid4().hex[:12], 'password': secrets.token_hex(16)}
+        status, body = request(native + '/api/auth/signup', 'POST', external_auth)
+        assert status == 201
+        external_id = json.loads(body)['userId']
+        status, body = request(native + '/api/auth/login', 'POST', external_auth)
+        external_token = json.loads(body)['accessToken']
+        status, body = request(admin_api + '/invitations', 'POST', {'username': external_auth['username']}, admin_token)
+        assert status == 200, (status, body)
+        invitation = json.loads(body)['token']
+        assert request(admin_api + '/invitations/accept', 'POST', {'token': invitation}, token)[0] == 403
+        assert request(admin_api + '/invitations/accept', 'POST', {'token': invitation}, external_token)[0] == 200
+        assert request(admin_api + '/invitations/accept', 'POST', {'token': invitation}, external_token)[0] == 403
+        assert request(admin_api + '/me', token=external_token)[0] == 200
+        print('PASS default administrator password login and account-bound single-use delegation', flush=True)
+        verification_run=str(uuid.uuid4())
+        run_header={'X-MMIV-Verification-Run':verification_run}
         plan_request = {'destinationId': 'it-landing', 'sourcePath': 'test.txt'}
         assert request(gateway + '/api/metadata/plans', 'POST', plan_request)[0] == 401
-        status,body=request(gateway + '/api/metadata/plans', 'POST', plan_request, token)
+        status,body=request(gateway + '/api/metadata/plans', 'POST', plan_request, token, headers=run_header)
         assert status == 403, (status,body)
         status,body=request(gateway + '/api/v1/transfers', 'POST', {'sourcePath': 'test.txt', 'destinationKey': 'evil'}, token)
         assert status == 400, (status,body)
-        sql(f"INSERT INTO USER_DESTINATION_ACCESS VALUES ('{user_id}','it-landing','WRITE');\nCOMMIT;")
-        status, body = request(gateway + '/api/metadata/plans', 'POST', plan_request, token)
+        status, body = request(admin_api + '/users/' + user_id + '/destinations', 'PUT',
+                               {'destination': 'it-landing', 'permission': 'WRITE'}, external_token)
+        assert status == 200, (status, body)
+        status, body = request(gateway + '/api/metadata/plans', 'POST', plan_request, token, headers=run_header)
         assert status == 200, (status, body)
         plan = json.loads(body)
         status, body = request(gateway + '/api/metadata/plans/' + plan['metadataId'] + '/transfer', 'POST', {}, token)
@@ -241,12 +284,40 @@ def main():
             return report if report.get('status') == 'COMPLETED' else False
         report = wait(completed_report, 90)
         print('PASS metadata -> transfer -> integrity -> RabbitMQ -> report', flush=True)
-        sql(f"UPDATE USER_DESTINATION_ACCESS SET PERMISSION='READ' WHERE USER_ID='{user_id}';\nCOMMIT;")
+        assert request(admin_api + '/users/' + user_id + '/destinations', 'PUT',
+                       {'destination': 'it-landing', 'permission': 'READ'}, external_token)[0] == 200
         assert request(gateway + '/api/v1/transfers', 'POST', {'metadataId': plan['metadataId']}, token)[0] == 403
-        sql(f"DELETE FROM USER_DESTINATION_ACCESS WHERE USER_ID='{user_id}';\nCOMMIT;")
+        assert request(admin_api + '/users/' + user_id + '/destinations?destination=it-landing', 'DELETE', token=external_token)[0] == 200
         assert request(gateway + '/api/v1/files/' + result['fileId'] + '/content', token=token)[0] == 403
         assert request(gateway + '/api/reports/' + plan['migrationId'], token=token)[0] == 403
         print('PASS permission revocation applies to existing JWTs', flush=True)
+        # Restore WRITE for cleanup, and prove an unrelated plan/object survives.
+        assert request(admin_api + '/users/' + user_id + '/destinations', 'PUT',
+                       {'destination': 'it-landing', 'permission': 'WRITE'}, external_token)[0] == 200
+        status, body=request(gateway+'/api/metadata/plans','POST',plan_request,token)
+        assert status==200
+        unrelated=json.loads(body)
+        assert request(gateway+'/api/metadata/plans/'+unrelated['metadataId']+'/transfer','POST',{},token)[0]==200
+        # The same run ID under another account is a separate scope.
+        assert request(admin_api+'/users/'+external_id+'/destinations','PUT',
+                       {'destination':'it-landing','permission':'WRITE'},external_token)[0]==200
+        status,body=request(gateway+'/api/metadata/plans','POST',plan_request,external_token,headers=run_header)
+        assert status==200
+        foreign=json.loads(body)
+        cleanup_url=gateway+'/api/metadata/verification/'+verification_run+'/cleanup'
+        status,body=request(cleanup_url,'POST',{},token)
+        assert status==200,(status,body)
+        assert json.loads(body)['deletedPlans']==1
+        assert '/it-landing/'+plan['destinationKey'] not in S3Fixture.objects
+        assert '/it-landing/'+unrelated['destinationKey'] in S3Fixture.objects
+        assert request(gateway+'/api/metadata/plans/'+plan['metadataId'],token=token)[0]==404
+        assert request(gateway+'/api/metadata/plans/'+unrelated['metadataId'],token=token)[0]==200
+        assert request(gateway+'/api/metadata/plans/'+foreign['metadataId'],token=external_token)[0]==200
+        assert request(gateway+'/api/metadata/plans','POST',plan_request,token,headers=run_header)[0]==409
+        assert request(cleanup_url,'POST',{},token)[0]==200
+        assert int(mongo("db.getSiblingDB('mmiv_reporting').migration_reports.countDocuments({_id:"+json.dumps(plan['metadataId'])+"})"))==0
+        assert int(mongo("db.getSiblingDB('mmiv_reporting').audit_events.countDocuments({migrationId:"+json.dumps(plan['metadataId'])+"})"))==0
+        print('PASS scoped verification cleanup removes S3, metadata, reports and migration audits; preserves unrelated data',flush=True)
         # Every service emits lifecycle + request audit, and broker outage preserves pending events.
         def source_count():
             return int(mongo("db.getSiblingDB('mmiv_reporting').service_logs.distinct('sourceService').length")) == len(SERVICES)
@@ -281,7 +352,7 @@ def main():
                                    env=test_env, stdout=log, stderr=subprocess.STDOUT, check=True, timeout=240)
             print('PASS User Access and Discovery Oracle integration suites', flush=True)
         (artifacts / 'summary.json').write_text(json.dumps({'passed': True, 'services': SERVICES, 'reportStatus': report['status'],
-                                                         'checks': ['login-redirects', 'permission-denial', 'assigned-destination', 'integrity', 'report', 'revocation', 'all-service-logs', 'broker-recovery', 'account-cleanup']}, indent=2) + '\n')
+                                                         'checks': ['verification-data-cleanup', 'default-admin', 'admin-invitations', 'admin-permission-management', 'login-redirects', 'permission-denial', 'assigned-destination', 'integrity', 'report', 'revocation', 'all-service-logs', 'broker-recovery', 'account-cleanup']}, indent=2) + '\n')
     finally:
         for process in reversed(processes):
             process.terminate()

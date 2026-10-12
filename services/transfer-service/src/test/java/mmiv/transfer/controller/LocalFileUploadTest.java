@@ -1,6 +1,6 @@
 package mmiv.transfer.controller;
 
-import mmiv.transfer.dto.UploadSource;
+import mmiv.transfer.dto.PreparedTransfer;
 import mmiv.transfer.factory.TransferStrategyFactory;
 import mmiv.transfer.service.TransferService;
 import mmiv.transfer.strategy.S3TransferStrategy;
@@ -47,8 +47,8 @@ class LocalFileUploadTest {
     @BeforeEach void setup() {
         s3 = mock(S3Client.class);
         var validator = new TransferRequestValidator("/unused-media-root");
-        strategy = spy(new S3TransferStrategy(s3, "test-bucket", validator));
-        var service = new TransferService(validator, new TransferStrategyFactory(List.of(strategy)), passingIntegrity(), passingCleanup(), mock(mmiv.transfer.logging.FileEventLogger.class));
+        strategy = spy(new S3TransferStrategy(s3, "test-bucket"));
+        var service = new TransferService(new mmiv.transfer.service.TransferSourcePreparer(validator, 104857600), new TransferStrategyFactory(strategy), passingIntegrity(), passingCleanup(), mock(mmiv.transfer.logging.FileEventLogger.class));
         var metadata=mock(mmiv.transfer.integration.MetadataClient.class);
         when(metadata.allocate(anyString(),anyLong(),nullable(String.class))).thenAnswer(call -> {
             String name=call.getArgument(0);long size=call.getArgument(1);
@@ -56,7 +56,7 @@ class LocalFileUploadTest {
             return new mmiv.transfer.integration.MetadataClient.Plan(id,id,java.util.UUID.randomUUID(),"owner","test-bucket","test-bucket",
                     "migrations/"+id+"/"+name,null,name,validator.uploadContentType(name),size,"UPLOAD",name);
         });
-        mvc = MockMvcBuilders.standaloneSetup(new TransferController(new mmiv.transfer.integration.MetadataTransferFacade(metadata,service,new mmiv.transfer.service.FolderUploadService(service,validator),mock(mmiv.events.EventPublisher.class),validator)))
+        mvc = MockMvcBuilders.standaloneSetup(new TransferController(new mmiv.transfer.integration.MetadataTransferFacade(metadata,service,new mmiv.transfer.service.FolderUploadService(service,validator),mock(mmiv.events.EventPublisher.class),validator,new mmiv.transfer.integration.VerificationRunGuard())))
                 .setControllerAdvice(new TransferExceptionHandler()).build();
     }
 
@@ -81,8 +81,8 @@ class LocalFileUploadTest {
                 .andExpect(jsonPath("$.fileName").value("notes.txt"))
                 .andExpect(jsonPath("$.sizeBytes").value(bytes.length))
                 .andExpect(jsonPath("$.sha256").value(HexFormat.of().formatHex(digest)));
-        var source = ArgumentCaptor.forClass(UploadSource.class);
-        verify(strategy).transferUploaded(source.capture());
+        var source = ArgumentCaptor.forClass(PreparedTransfer.class);
+        verify(strategy).transfer(source.capture());
         assertFalse(Files.exists(source.getValue().path()));
     }
 
@@ -123,8 +123,8 @@ class LocalFileUploadTest {
                 "file", "notes.txt", "text/plain", "hello".getBytes())))
                 .andExpect(status().isBadGateway())
                 .andExpect(jsonPath("$.error").value("Storage transfer failed"));
-        var source = ArgumentCaptor.forClass(UploadSource.class);
-        verify(strategy).transferUploaded(source.capture());
+        var source = ArgumentCaptor.forClass(PreparedTransfer.class);
+        verify(strategy).transfer(source.capture());
         assertFalse(Files.exists(source.getValue().path()));
         verify(gateway, never()).validate(anyString(), anyString(), anyString(), anyString());
     }

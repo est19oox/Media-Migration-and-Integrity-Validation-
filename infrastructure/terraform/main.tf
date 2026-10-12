@@ -161,7 +161,8 @@ resource "aws_iam_role_policy" "mmiv_ec2_s3" {
       {
         Effect = "Allow"
         Action = [
-          "s3:ListBucket"
+          "s3:ListBucket",
+          "s3:ListBucketVersions"
         ]
         Resource = aws_s3_bucket.migration.arn
       },

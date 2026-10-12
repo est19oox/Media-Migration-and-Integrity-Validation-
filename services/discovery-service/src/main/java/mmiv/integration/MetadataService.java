@@ -24,7 +24,8 @@ public class MetadataService {
             @Value("${mmiv.s3.bucket:media-migration-dev-landing}") String bucket) {
         this.permissions=permissions; this.plans=plans; this.events=events; this.root=Path.of(root); this.destination=destination; this.bucket=bucket;
     }
-    public MetadataPlan create(Jwt jwt, CreatePlan request, boolean upload) {
+    public MetadataPlan create(Jwt jwt, CreatePlan request, boolean upload) { return create(jwt,request,upload,null); }
+    public MetadataPlan create(Jwt jwt, CreatePlan request, boolean upload, UUID verificationRun) {
         if (request == null || request.destinationId() == null || !destination.equals(request.destinationId()))
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Unknown destination");
         permissions.require(jwt.getTokenValue(), jwt.getSubject(), destination,"WRITE");
@@ -48,7 +49,7 @@ public class MetadataService {
                 || java.util.Arrays.stream(objectPath.split("/",-1)).anyMatch(part->part.equals(".") || part.equals("..") || part.isBlank() || !part.matches("[\\p{L}\\p{N}._ ()-]{1,200}")))
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Invalid relative media path");
         var id=UUID.randomUUID(); var file=UUID.randomUUID();
-        var plan=new MetadataPlan(id,id,file,jwt.getSubject(),destination,bucket,"migrations/"+id+"/"+objectPath,source,name,contentType,size,upload?"UPLOAD":"SOURCE",objectPath);
+        var plan=new MetadataPlan(id,id,file,jwt.getSubject(),destination,bucket,"migrations/"+id+"/"+objectPath,source,name,contentType,size,upload?"UPLOAD":"SOURCE",objectPath,verificationRun);
         plans.save(plan);
         events.migration("MIGRATION_STARTED","migration.started",id,null,
                 Map.of("initiatedBy",jwt.getSubject(),"source",Map.of("type","DIRECT_UPLOAD","rootId","media")));
@@ -62,7 +63,10 @@ public class MetadataService {
     public MetadataPlan get(Jwt jwt, UUID id, String action) {
         var found="READ".equals(action)?plans.find(id,jwt.getSubject(),false):plans.find(id,jwt.getSubject());
         var plan=found.orElseThrow(()->new ResponseStatusException(HttpStatus.NOT_FOUND,"Metadata not found"));
-        permissions.require(jwt.getTokenValue(),jwt.getSubject(),plan.destinationId(),action); return plan;
+        permissions.require(jwt.getTokenValue(),jwt.getSubject(),plan.destinationId(),action);
+        if("WRITE".equals(action) && plan.verificationRunId()!=null && plans.isClosed(plan.ownerId(),plan.verificationRunId()))
+            throw new ResponseStatusException(HttpStatus.CONFLICT,"Verification run is closed");
+        return plan;
     }
     public String destination() { return destination; }
     private static String contentType(String name) {

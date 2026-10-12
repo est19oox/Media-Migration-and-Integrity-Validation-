@@ -42,9 +42,23 @@ public class MetadataClient {
     public Plan allocate(String name,long size,String destinationId,String relativePath) {
         var payload=new java.util.LinkedHashMap<String,Object>();payload.put("fileName",name);payload.put("sizeBytes",size);
         payload.put("destinationId",destinationId==null?destination:destinationId);if(relativePath!=null)payload.put("relativePath",relativePath);
-        return request(()->metadata.post().uri("/api/metadata/allocations").header("Authorization","Bearer "+currentJwt().getTokenValue())
+        return request(()->metadata.post().uri("/api/metadata/allocations").headers(headers->{headers.setBearerAuth(currentJwt().getTokenValue());
+            if(org.springframework.web.context.request.RequestContextHolder.getRequestAttributes() instanceof org.springframework.web.context.request.ServletRequestAttributes attributes) {
+                String run=attributes.getRequest().getHeader("X-MMIV-Verification-Run");if(run!=null)headers.set("X-MMIV-Verification-Run",UUID.fromString(run).toString());
+            }})
                 .body(payload)
                 .retrieve().body(Plan.class));
+    }
+    public List<Plan> verificationPlans(UUID run) {
+        try {
+            var response=metadata.get().uri("/api/metadata/verification/{run}/plans",run)
+                .header("Authorization","Bearer "+currentJwt().getTokenValue()).retrieve().body(Plan[].class);
+            if(response==null) throw new ResponseStatusException(HttpStatus.BAD_GATEWAY,"Invalid cleanup assignment");
+            return Arrays.stream(response).map(plan->request(()->plan)).peek(plan->{
+                if(!run.equals(plan.verificationRunId())) throw new ResponseStatusException(HttpStatus.BAD_GATEWAY,"Invalid cleanup run");
+            }).toList();
+        } catch(HttpClientErrorException error){throw new ResponseStatusException(error.getStatusCode(),"Cleanup assignment rejected");}
+        catch(RestClientException error){throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,"Metadata unavailable");}
     }
     public Object destinations() {
         requireAccess("WRITE");
@@ -76,5 +90,10 @@ public class MetadataClient {
     }
     public record Decision(boolean authorised,String reason) {}
     public record Plan(UUID metadataId,UUID migrationId,UUID fileId,String ownerId,String destinationId,String bucket,
-            String destinationKey,String sourcePath,String fileName,String contentType,long sizeBytes,String kind,String objectPath) {}
+            String destinationKey,String sourcePath,String fileName,String contentType,long sizeBytes,String kind,String objectPath,UUID verificationRunId) {
+        public Plan(UUID metadataId,UUID migrationId,UUID fileId,String ownerId,String destinationId,String bucket,
+                String destinationKey,String sourcePath,String fileName,String contentType,long sizeBytes,String kind,String objectPath) {
+            this(metadataId,migrationId,fileId,ownerId,destinationId,bucket,destinationKey,sourcePath,fileName,contentType,sizeBytes,kind,objectPath,null);
+        }
+    }
 }

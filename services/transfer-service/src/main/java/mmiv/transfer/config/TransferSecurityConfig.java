@@ -125,7 +125,7 @@ public class TransferSecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/actuator/health", "/actuator/health/**", "/actuator/info").permitAll()
                         .requestMatchers(HttpMethod.GET, "/", "/upload.html", "/files.html", "/auth.js").authenticated()
                         .requestMatchers("/api/v1/transfers", "/api/v1/transfers/**",
-                                "/api/v1/files", "/api/v1/files/**", "/api/v1/session", "/api/v1/destinations").authenticated()
+                                "/api/v1/files", "/api/v1/files/**", "/api/v1/session", "/api/v1/destinations", "/api/v1/verification/**").authenticated()
                         .anyRequest().denyAll())
                 .exceptionHandling(errors -> errors.authenticationEntryPoint(entryPoint))
                 .oauth2ResourceServer(resource -> resource.bearerTokenResolver(resolver)

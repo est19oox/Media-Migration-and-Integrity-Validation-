@@ -24,7 +24,7 @@ public class ServiceSecurityConfiguration {
     @Bean public SecurityFilterChain serviceSecurity(HttpSecurity http) throws Exception {
         return http.csrf(csrf->csrf.disable()).sessionManagement(s->s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(a->a.dispatcherTypeMatchers(jakarta.servlet.DispatcherType.ERROR).permitAll().requestMatchers("/actuator/health","/actuator/health/**","/actuator/info").permitAll()
-                .requestMatchers("/api/reports/**").authenticated().anyRequest().denyAll())
+                .requestMatchers("/api/reports/**","/api/verification/**").authenticated().anyRequest().denyAll())
             .oauth2ResourceServer(o->o.jwt(j->{})).build();
     }
 }

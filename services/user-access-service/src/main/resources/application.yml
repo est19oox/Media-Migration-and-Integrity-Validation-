@@ -43,3 +43,8 @@ eureka:
 # All services publish through the shared durable RabbitMQ outbox.
 mmiv.events.enabled: ${MMIV_EVENTS_ENABLED:true}
 mmiv.events.outbox-directory: ${MMIV_EVENTS_OUTBOX_DIRECTORY:./.mmiv-outbox}
+
+# Managed EC2 deployments inject a host-generated password through the private environment bundle.
+mmiv.bootstrap-admin.enabled: ${MMIV_BOOTSTRAP_ADMIN_ENABLED:false}
+mmiv.bootstrap-admin.username: ${MMIV_BOOTSTRAP_ADMIN_USERNAME:admin}
+mmiv.bootstrap-admin.password: ${MMIV_BOOTSTRAP_ADMIN_PASSWORD:}

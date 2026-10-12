@@ -22,6 +22,8 @@ The current development Gateway uses HTTP, so JWT_COOKIE_SECURE defaults to fals
 
 ## Authenticated CD verification
 
+Verification data cleanup runs before account deletion, even after failed checks. One UUID tags the invocation's metadata plans and scanner requests. Only that owner's tagged objects, metadata, reports, migration audit events and associated file logs are removed; all versions of the exact assigned S3 keys are deleted. Supplied accounts and their other data are preserved. Minimal closed-run markers and migration tombstones remain to block delayed writes/events, while temporary run-ID files are removed. CI reports retain the ID and cleanup result. The EC2 role needs `s3:ListBucketVersions` as configured in Terraform; apply that infrastructure change before deploying this cleanup behavior.
+
 The existing anonymous upload smoke tests and DAST have been updated to log in through the Gateway. By default verification signs up one randomly named account, reuses it for the run, and deletes it through the authenticated cleanup endpoint after all checks, including failed checks. To use a supplied account instead, add credentials to the MMIV_RUNTIME_CONFIG GitHub secret:
 
 ```json
@@ -44,7 +46,7 @@ Spring integration tests cover anonymous access, real RSA signatures, wrong issu
 
 Open /signup.html using the Create an account link on login. POST /user-access/api/auth/signup accepts username and password. Successful signup returns HTTP 201 and a userId; duplicates return 409. Usernames are case-sensitive, 3–40 ASCII letters/numbers/dots/underscores/hyphens. Passwords require at least 8 characters and at most 72 UTF-8 bytes; they are hashed using the existing BCrypt encoder.
 
-New accounts are active with role USER and no global or destination permissions. Clients cannot select roles or privileges. As documented above, the current Transfer gate checks login only, so these accounts can use Transfer; destination/ownership checks are a separate integration. Accounts persist in Oracle using the existing APP_USERS schema. Unique username constraints and an INSERT-only repository method prevent duplicate requests from overwriting existing credentials. No new migration or signup secret is needed.
+New accounts are active with role USER and no global or destination permissions. Clients cannot select roles or privileges. Transfers require current destination WRITE permission, and reads require READ permission; metadata ownership checks also apply. Administrators grant access through `/admin.html`; see [administrator setup](../admin/administrator-access.md). Accounts persist in Oracle using the existing APP_USERS schema. Unique username constraints and an INSERT-only repository method prevent duplicate requests from overwriting existing credentials. No new migration or signup secret is needed.
 
 Signup does not include email verification or password reset. It returns to login after successful creation.
 

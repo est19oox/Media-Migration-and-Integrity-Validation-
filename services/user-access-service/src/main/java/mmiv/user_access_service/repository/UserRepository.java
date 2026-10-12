@@ -18,5 +18,9 @@ public interface UserRepository {
 
   void grantDestinationAccess(String userId, String destination, Permission permission);
 
+  void createAdminInvitation(String userId, String tokenHash, java.time.Instant expiresAt, String issuerId);
+
+  boolean acceptAdminInvitation(String userId, String tokenHash, java.time.Instant now);
+
   void revokeDestinationAccess(String userId, String destination);
 }

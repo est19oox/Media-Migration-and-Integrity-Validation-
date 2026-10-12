@@ -15,7 +15,9 @@ def zap_started(zap, target):
         raise ValueError('Upload fixture must target the local SSM tunnel')
     token = os.environ.get('API_TEST_TOKEN', '')
     if not token: raise RuntimeError('Authenticated Transfer scan requires a login token')
-    authorization = 'Authorization: Bearer ' + token + '\r\n'
+    run=str(uuid.UUID(os.environ['MMIV_VERIFICATION_RUN_ID']))
+    zap.replacer.add_rule('mmiv-verification-run',True,'REQ_HEADER',False,'X-MMIV-Verification-Run',run)
+    authorization = 'Authorization: Bearer ' + token + '\r\nX-MMIV-Verification-Run: ' + run + '\r\n'
     content = 'MMIV ZAP upload fixture\n'
     boundary = 'mmiv-' + uuid.uuid4().hex
     body = (f'--{boundary}\r\n'

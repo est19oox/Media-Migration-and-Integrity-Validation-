@@ -41,6 +41,12 @@ SCAN_PID=
 ZAP_CONTAINER="mmiv-ec2-dast-$$"
 # Never use a previous scan's session ID during cleanup of an early failure.
 : > "$REPORT_DIR/tunnel.log"
+OWNS_VERIFICATION_RUN=false
+if [[ -z "${MMIV_VERIFICATION_RUN_ID:-}" ]]; then
+  MMIV_VERIFICATION_RUN_ID=$(python3 -c 'import uuid; print(uuid.uuid4())')
+  OWNS_VERIFICATION_RUN=true
+fi
+export MMIV_VERIFICATION_RUN_ID
 TOTAL_STARTED=$SECONDS
 aws_ssm() {
   aws ssm "$@" --region "$REGION" --cli-connect-timeout 10 --cli-read-timeout 20
@@ -51,6 +57,13 @@ cleanup() {
   set +e
   timeout 15s docker rm -f -v "$ZAP_CONTAINER" >/dev/null 2>&1
   if [[ -n "$SCAN_PID" ]]; then kill "$SCAN_PID" 2>/dev/null; wait "$SCAN_PID" 2>/dev/null; fi
+  if [[ "$OWNS_VERIFICATION_RUN" == true && "$PORT" == 8080 && -f "$TEMP_DIR/auth.env" && "${DAST_CLEANUP_ONLY:-false}" != true ]]; then
+    MMIV_VERIFICATION_ACCOUNT_FILE="$ACCOUNT_FILE" VERIFICATION_AUTH_BASE_PATH=/user-access \
+      python3 scripts/cd/login-for-verification.py "http://127.0.0.1:$LOCAL_PORT" "$TEMP_DIR/auth.env" \
+        > "$REPORT_DIR/data-cleanup-login.log" 2>&1 && \
+      python3 scripts/cd/cleanup-verification-data.py "http://127.0.0.1:$LOCAL_PORT" "$TEMP_DIR/auth.env" "$MMIV_VERIFICATION_RUN_ID" "$REPORT_DIR/data-cleanup.json" \
+        > "$REPORT_DIR/data-cleanup.log" 2>&1 || EXIT_CODE=1
+  fi
   if [[ "${ACCOUNT_FILE:-}" == "$TEMP_DIR/account.json" && -f "$TEMP_DIR/account.json" ]]; then
     MMIV_VERIFICATION_ACCOUNT_FILE="$ACCOUNT_FILE" VERIFICATION_AUTH_BASE_PATH="${AUTH_PREFIX-/user-access}" \
       python3 scripts/cd/login-for-verification.py "http://127.0.0.1:$LOCAL_PORT" "$TEMP_DIR/auth.env" --cleanup \
@@ -145,6 +158,12 @@ echo "Deployed health endpoint reachable: $READY_URL"
 echo "ZAP target configured: $TARGET_URL"
 
 ACCOUNT_FILE="${MMIV_VERIFICATION_ACCOUNT_FILE:-$TEMP_DIR/account.json}"
+if [[ "${DAST_CLEANUP_ONLY:-false}" == true && "${DAST_DATA_CLEANUP_ONLY:-false}" == true ]]; then
+  MMIV_VERIFICATION_ACCOUNT_FILE="$ACCOUNT_FILE" VERIFICATION_AUTH_BASE_PATH=/user-access \
+    python3 scripts/cd/login-for-verification.py "http://127.0.0.1:$LOCAL_PORT" "$TEMP_DIR/auth.env"
+  python3 scripts/cd/cleanup-verification-data.py "http://127.0.0.1:$LOCAL_PORT" "$TEMP_DIR/auth.env" "$MMIV_VERIFICATION_RUN_ID" "$REPORT_DIR/data-cleanup.json"
+  exit 0
+fi
 if [[ "${DAST_CLEANUP_ONLY:-false}" == true ]]; then
   MMIV_VERIFICATION_ACCOUNT_FILE="$ACCOUNT_FILE" VERIFICATION_AUTH_BASE_PATH= \
     python3 scripts/cd/login-for-verification.py "http://127.0.0.1:$LOCAL_PORT" "$TEMP_DIR/auth.env" --cleanup
@@ -170,7 +189,7 @@ prepare_auth() {
     chmod 600 "$TEMP_DIR/tokens.txt"
     export MMIV_VERIFICATION_TOKEN_FILE="$TEMP_DIR/tokens.txt"
     MMIV_VERIFICATION_ACCOUNT_FILE="$ACCOUNT_FILE" python3 scripts/cd/grant-verification-permission.py
-    AUTH_DOCKER_ARGS=(--env-file "$TEMP_DIR/auth.env")
+    AUTH_DOCKER_ARGS=(--env-file "$TEMP_DIR/auth.env" -e MMIV_VERIFICATION_RUN_ID)
   fi
 }
 prepare_auth

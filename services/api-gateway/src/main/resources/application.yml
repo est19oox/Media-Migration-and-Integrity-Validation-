@@ -27,7 +27,7 @@ spring:
             - id: user-access-login-page
               uri: lb://user-access-service
               predicates:
-                - Path=/login.html,/signup.html
+                - Path=/login.html,/signup.html,/admin.html,/admin.js
             - id: transfer-api
               uri: lb://transfer-service
               predicates:

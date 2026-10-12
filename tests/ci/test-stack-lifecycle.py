@@ -150,14 +150,20 @@ class StackLifecycleTest(unittest.TestCase):
         self.assertIn('ORACLE_USER=USER_ACCESS', environment)
         self.assertIn('JWT_PRIVATE_KEY_PATH=file:/run/mmiv-jwt/private.pem', environment)
         self.assertIn('JWT_PUBLIC_KEY_PATH=file:/run/mmiv-jwt/public.pem', environment)
+        bootstrap_environment = (secrets_dir / 'bootstrap-admin.env').read_text()
+        self.assertIn('MMIV_BOOTSTRAP_ADMIN_ENABLED=true', bootstrap_environment)
+        self.assertIn('MMIV_BOOTSTRAP_ADMIN_USERNAME=admin', bootstrap_environment)
+        self.assertIn({'path': '/etc/mmiv/managed-oracle/bootstrap-admin.env', 'format': 'raw'}, self.configs['user-access-service']['env_file'])
+        self.assertNotIn('MMIV_BOOTSTRAP_ADMIN_PASSWORD', environment)
         self.assertNotIn('oracle', self.configs['integrity-service'].get('depends_on', {}))
         self.assertEqual((self.root / 'etc/mmiv/integrity.env').read_text(),
                          '# Embedded H2 mode: no Oracle secrets required.\n')
         self.assertTrue(all((secrets_dir / n).stat().st_mode & 0o777 == 0o600
-                            for n in ('credentials.json', 'private.pem', 'public.pem', 'oracle.env')))
+                            for n in ('credentials.json', 'bootstrap-admin.json', 'bootstrap-admin.env', 'private.pem', 'public.pem', 'oracle.env')))
         state_text = json.dumps(first)
         compose_text = (self.root / 'opt/mmiv/stack/compose.yaml').read_text()
         self.assertNotIn(json.loads((secrets_dir / 'credentials.json').read_text())['user_access'], state_text + compose_text)
+        self.assertNotIn(json.loads((secrets_dir / 'bootstrap-admin.json').read_text())['password'], state_text + compose_text)
         self.update(['user-access-service'])
         second = remote.run('deploy', dict(self.state))
         self.assertTrue(second['READY'])
@@ -240,6 +246,15 @@ class StackLifecycleTest(unittest.TestCase):
         self.assertEqual(self.volumes, {remote.ORACLE_VOLUME})
         self.state['RELEASE_ID'] = 'retry-2'
         self.assertTrue(remote.run('deploy', dict(self.state))['READY'])
+
+    def test_missing_default_admin_credentials_are_not_silently_replaced(self):
+        self.managed()
+        remote.managed_access(dict(self.state))
+        credentials = self.root / 'etc/mmiv/managed-oracle/bootstrap-admin.json'
+        credentials.unlink()
+        with self.assertRaisesRegex(RuntimeError, 'restore their private backup'):
+            remote.managed_access(dict(self.state))
+        self.assertFalse(credentials.exists())
 
     def test_missing_volume_uses_listing_and_reuses_credentials_on_retry(self):
         self.managed()
@@ -627,7 +642,9 @@ class RunnerAndBarrierTest(unittest.TestCase):
                     patch.object(verification.subprocess, 'run', return_value=SimpleNamespace(returncode=cleanup_code)) as cleanup:
                 self.assertEqual(verification.verify(self.state(), Path(directory)), int(bool(scan_code or cleanup_code)))
                 self.assertEqual(len(account_paths), 1)
-                cleanup.assert_called_once()
+                self.assertEqual(cleanup.call_count,2)
+                self.assertEqual(cleanup.call_args_list[0].kwargs['env']['DAST_DATA_CLEANUP_ONLY'],'true')
+                self.assertNotIn('DAST_DATA_CLEANUP_ONLY',cleanup.call_args_list[1].kwargs['env'])
                 self.assertEqual(cleanup.call_args.kwargs['env']['DAST_CLEANUP_ONLY'], 'true')
                 self.assertFalse(Path(next(iter(account_paths))).exists())
 

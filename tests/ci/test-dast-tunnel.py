@@ -65,7 +65,13 @@ elif operation == 'start-session':
             self.wfile.write(b'{{"status":"UP"}}')
         def do_POST(self):
             body = json.loads(self.rfile.read(int(self.headers['Content-Length'])))
-            if self.path != '/user-access/api/auth/login' or body != {{'username': 'test-user', 'password': 'test-pass'}}:
+            if self.path.startswith('/api/metadata/verification/'):
+                (directory / 'data-cleanup-called').write_text(self.path)
+                self.send_response(503 if os.environ.get('TEST_CLEANUP_FAIL') else 200)
+                self.end_headers()
+                self.wfile.write(b'{{"deletedPlans":0}}')
+                return
+            if self.path != '/user-access/api/auth/login'  or body != {{'username': 'test-user', 'password': 'test-pass'}}:
                 self.send_response(401)
                 self.end_headers()
                 return
@@ -111,12 +117,19 @@ elif operation == 'start-session':
             self.assertEqual(result.returncode, 23, result.stdout + result.stderr)
             port = self.selected_port()
             self.assertNotEqual(port, occupied.getsockname()[1])
+            self.assertTrue((self.directory / 'data-cleanup-called').exists())
             args = json.loads((self.directory / 'functional-args.json').read_text())
             self.assertIn(f'http://127.0.0.1:{port}', args)
             self.assertEqual((self.directory / 'terminated').read_text(), 'test-owned-session')
             self.assert_port_closed(port)
             with socket.create_connection(occupied.getsockname(), timeout=1):
                 pass
+
+    def test_data_cleanup_failure_fails_scan_and_still_closes_tunnel(self):
+        result=self.run_scan(TEST_CLEANUP_FAIL='1')
+        self.assertEqual(result.returncode,1)
+        self.assertTrue((self.directory/'data-cleanup-called').exists())
+        self.assert_port_closed(self.selected_port())
 
     def test_explicit_busy_port_has_a_clear_error_and_preserves_listener(self):
         with socket.socket() as occupied:

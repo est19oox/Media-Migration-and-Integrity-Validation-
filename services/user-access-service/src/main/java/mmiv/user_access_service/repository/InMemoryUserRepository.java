@@ -13,6 +13,27 @@ import org.springframework.stereotype.Repository;
 @Profile("test")
 public class InMemoryUserRepository implements UserRepository {
 
+  private record Invitation(String userId, java.time.Instant expiresAt) {}
+  private final Map<String, Invitation> invitations = new ConcurrentHashMap<>();
+
+  @Override
+  public synchronized void createAdminInvitation(String userId, String tokenHash, java.time.Instant expiresAt, String issuerId) {
+    if (invitations.putIfAbsent(tokenHash, new Invitation(userId, expiresAt)) != null)
+      throw new org.springframework.dao.DuplicateKeyException("Invitation already exists");
+  }
+
+  @Override
+  public synchronized boolean acceptAdminInvitation(String userId, String tokenHash, java.time.Instant now) {
+    var invitation = invitations.get(tokenHash);
+    var user = users.get(userId);
+    if (invitation == null || !invitation.userId().equals(userId) || !invitation.expiresAt().isAfter(now)
+        || user == null || !user.isActive() || !"USER".equals(user.getRole())) return false;
+    invitations.entrySet().removeIf(entry -> entry.getValue().userId().equals(userId));
+    users.put(userId, new User(userId, user.getDestinationAccesses(), user.getUsername(), "ADMIN",
+        true, user.getPermissions(), user.getPasswordHash()));
+    return true;
+  }
+
   private final Map<String, User> users = new ConcurrentHashMap<>();
 
   @Override

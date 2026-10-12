@@ -1,33 +1,30 @@
 package mmiv.transfer.factory;
 
-import mmiv.transfer.dto.TransferRequest;
-import mmiv.transfer.strategy.TransferStrategy;
+import mmiv.transfer.strategy.S3TransferStrategy;
+import mmiv.transfer.strategy.TransferBackend;
 import org.junit.jupiter.api.Test;
-import java.util.List;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 class TransferStrategyFactoryTest {
-    private final TransferRequest request = new TransferRequest("image.png", "image.png", null);
-    @Test void selectsMatchingStrategy() {
-        var rejected = mock(TransferStrategy.class);
-        var selected = mock(TransferStrategy.class);
-        when(selected.supports(request)).thenReturn(true);
-        assertSame(selected, new TransferStrategyFactory(List.of(rejected, selected)).getStrategy(request));
+    @Test void explicitlySelectsS3WithoutProbingOrExecutingTheStrategy() {
+        var s3 = mock(S3TransferStrategy.class);
+        assertSame(s3, new TransferStrategyFactory(s3).getStrategy(TransferBackend.S3));
+        verifyNoInteractions(s3);
     }
-    @Test void selectsFirstMatchAndStopsSearching() {
-        var first = mock(TransferStrategy.class);
-        var second = mock(TransferStrategy.class);
-        when(first.supports(request)).thenReturn(true);
-        assertSame(first, new TransferStrategyFactory(List.of(first, second)).getStrategy(request));
-        verifyNoInteractions(second);
+    @Test void selectionAlwaysReturnsTheInjectedInstance() {
+        var s3 = mock(S3TransferStrategy.class);
+        var factory = new TransferStrategyFactory(s3);
+        assertSame(s3, factory.getStrategy(TransferBackend.S3));
+        assertSame(s3, factory.getStrategy(TransferBackend.S3));
+        verifyNoInteractions(s3);
     }
-    @Test void rejectsUnsupportedMedia() {
-        var strategy = mock(TransferStrategy.class);
-        assertThrows(IllegalArgumentException.class, () -> new TransferStrategyFactory(List.of(strategy)).getStrategy(request));
-        verify(strategy, never()).transfer(any());
+    @Test void rejectsMissingBackendWithoutCallingStorage() {
+        var s3 = mock(S3TransferStrategy.class);
+        assertThrows(IllegalArgumentException.class, () -> new TransferStrategyFactory(s3).getStrategy(null));
+        verifyNoInteractions(s3);
     }
-    @Test void rejectsEmptyStrategyList() {
-        assertThrows(IllegalArgumentException.class, () -> new TransferStrategyFactory(List.of()).getStrategy(request));
+    @Test void rejectsMissingS3DependencyAtConstruction() {
+        assertThrows(NullPointerException.class, () -> new TransferStrategyFactory(null));
     }
 }

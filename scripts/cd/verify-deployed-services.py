@@ -7,6 +7,7 @@ from pathlib import Path
 import subprocess
 import sys
 import tempfile
+import uuid
 from importlib.util import module_from_spec, spec_from_file_location
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -35,6 +36,7 @@ def verify(deployments, report_root):
 
 def verify_scans(deployments, report_root, account_file):
     results = []
+    run_id = str(uuid.uuid4())
     try:
         # Run scans sequentially. Rollback starts only after all scans finish.
         for name, item in sorted(deployments['services'].items(), key=lambda pair: (
@@ -48,6 +50,7 @@ def verify_scans(deployments, report_root, account_file):
                    'DAST_PATH': '/' if name == 'service-registry' else '/upload.html' if name == 'api-gateway' else '/actuator/health',
                    'DAST_READY_PATH': '/actuator/health',
                    'MMIV_VERIFICATION_ACCOUNT_FILE': str(account_file),
+                   'MMIV_VERIFICATION_RUN_ID': run_id,
                    'MMIV_VERIFICATION_DESTINATION': deployments.get('MMIV_BUCKET_NAME', 'media-migration-dev-landing'),
                    'MMIV_MANAGED_VERIFICATION_DB': 'true' if deployments.get('MANAGED_USER_ACCESS_ORACLE', True) else 'false'}
             print('Verifying ' + name, flush=True)
@@ -61,6 +64,16 @@ def verify_scans(deployments, report_root, account_file):
                 code = process.wait()
             results.append({'service': name, 'exit_code': code})
     finally:
+        if account_file.exists() or (os.environ.get('USER_ACCESS_TEST_USERNAME') and os.environ.get('USER_ACCESS_TEST_PASSWORD')):
+            directory=report_root/'data-cleanup';directory.mkdir(parents=True,exist_ok=True)
+            env={**os.environ,'INSTANCE_ID':deployments['INSTANCE_ID'],'DAST_SERVICE_NAME':'discovery-service','DAST_PORT':'8085',
+                 'DAST_PATH':'/actuator/health','DAST_READY_PATH':'/actuator/health','DAST_CLEANUP_ONLY':'true',
+                 'DAST_DATA_CLEANUP_ONLY':'true','MMIV_VERIFICATION_ACCOUNT_FILE':str(account_file),
+                 'MMIV_VERIFICATION_RUN_ID':run_id,'DAST_REPORT_DIR':str(directory.resolve())}
+            with (directory/'cleanup.log').open('w') as log:
+                data_cleanup=subprocess.run(['bash',str(ROOT/'scripts/cd/run-dast-ssm.sh')],cwd=ROOT,env=env,stdout=log,stderr=subprocess.STDOUT)
+            results.append({'service':'verification-data-cleanup','exit_code':data_cleanup.returncode,'runId':run_id})
+            if data_cleanup.returncode:print('Verification data cleanup failed; see scoped run evidence.',file=sys.stderr)
         if account_file.exists():
             directory = report_root / 'account-cleanup'
             directory.mkdir(parents=True, exist_ok=True)

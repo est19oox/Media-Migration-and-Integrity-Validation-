@@ -26,7 +26,7 @@ public class SecurityConfig {
             auth ->
                 auth.dispatcherTypeMatchers(DispatcherType.ERROR)
                     .permitAll()
-                    .requestMatchers(HttpMethod.GET, "/login.html", "/signup.html")
+                    .requestMatchers(HttpMethod.GET, "/login.html", "/signup.html", "/admin.html", "/admin.js")
                     .permitAll()
                     .requestMatchers(HttpMethod.POST, "/api/auth/login", "/api/auth/signup")
                     .permitAll()
@@ -37,6 +37,8 @@ public class SecurityConfig {
                     .requestMatchers(HttpMethod.GET, "/api/health")
                     .permitAll()
                     .requestMatchers(HttpMethod.DELETE, "/api/auth/verification-account")
+                    .authenticated()
+                    .requestMatchers("/api/admin/**")
                     .authenticated()
                     .requestMatchers("/api/access/**")
                     .authenticated()

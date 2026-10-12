@@ -1,6 +1,6 @@
 package mmiv.transfer.controller;
 
-import mmiv.transfer.dto.UploadSource;
+import mmiv.transfer.dto.PreparedTransfer;
 import mmiv.transfer.factory.TransferStrategyFactory;
 import mmiv.transfer.service.*;
 import mmiv.transfer.strategy.S3TransferStrategy;
@@ -46,8 +46,8 @@ class FolderUploadTest {
     @BeforeEach void setup() {
         s3 = mock(S3Client.class);
         var validator = new TransferRequestValidator("/unused");
-        strategy = spy(new S3TransferStrategy(s3, "test-bucket", validator));
-        var transfers = new TransferService(validator, new TransferStrategyFactory(List.of(strategy)), passingIntegrity(), passingCleanup(), mock(mmiv.transfer.logging.FileEventLogger.class));
+        strategy = spy(new S3TransferStrategy(s3, "test-bucket"));
+        var transfers = new TransferService(new mmiv.transfer.service.TransferSourcePreparer(validator, 104857600), new TransferStrategyFactory(strategy), passingIntegrity(), passingCleanup(), mock(mmiv.transfer.logging.FileEventLogger.class));
         folders = new FolderUploadService(transfers, validator);
         var metadata=mock(mmiv.transfer.integration.MetadataClient.class);
         when(metadata.allocate(anyString(),anyLong(),nullable(String.class),anyString())).thenAnswer(call -> {
@@ -56,7 +56,7 @@ class FolderUploadTest {
             return new mmiv.transfer.integration.MetadataClient.Plan(id,id,java.util.UUID.randomUUID(),"owner","test-bucket","test-bucket",
                     "migrations/"+id+"/"+path,null,name,validator.uploadContentType(name),size,"UPLOAD",path);
         });
-        mvc = MockMvcBuilders.standaloneSetup(new FolderUploadController(new mmiv.transfer.integration.MetadataTransferFacade(metadata,transfers,folders,mock(mmiv.events.EventPublisher.class),validator)))
+        mvc = MockMvcBuilders.standaloneSetup(new FolderUploadController(new mmiv.transfer.integration.MetadataTransferFacade(metadata,transfers,folders,mock(mmiv.events.EventPublisher.class),validator,new mmiv.transfer.integration.VerificationRunGuard())))
                 .setControllerAdvice(new TransferExceptionHandler()).build();
     }
     @Test void preservesNestedPathsAndDuplicateBasenamesAndCleansTemporaryFiles() throws Exception {
@@ -68,8 +68,8 @@ class FolderUploadTest {
                 .andExpect(jsonPath("$.failed").value(0))
                 .andExpect(jsonPath("$.files[1].relativePath").value("album/sub/deep/a.txt"))
                 .andExpect(jsonPath("$.files[1].upload.sha256").isNotEmpty());
-        var sources = ArgumentCaptor.forClass(UploadSource.class);
-        verify(strategy, times(2)).transferUploaded(sources.capture());
+        var sources = ArgumentCaptor.forClass(PreparedTransfer.class);
+        verify(strategy, times(2)).transfer(sources.capture());
         var first = sources.getAllValues().get(0);
         var second = sources.getAllValues().get(1);
         assertTrue(first.key().matches("migrations/[0-9a-f-]+/album/a.txt"));
@@ -133,8 +133,8 @@ class FolderUploadTest {
                 .andExpect(jsonPath("$.files[0].status").value("FAILED"))
                 .andExpect(jsonPath("$.files[0].error").value("File transfer failed"))
                 .andExpect(jsonPath("$.files[1].status").value("PASSED"));
-        var sources = ArgumentCaptor.forClass(UploadSource.class);
-        verify(strategy, times(2)).transferUploaded(sources.capture());
+        var sources = ArgumentCaptor.forClass(PreparedTransfer.class);
+        verify(strategy, times(2)).transfer(sources.capture());
         for (var source : sources.getAllValues()) assertFalse(Files.exists(source.path()));
     }
 
@@ -146,8 +146,8 @@ class FolderUploadTest {
                 .andExpect(status().isOk()).andExpect(jsonPath("$.succeeded").value(1))
                 .andExpect(jsonPath("$.failed").value(0))
                 .andExpect(jsonPath("$.files[0].relativePath").value("Office/sub/" + name));
-        var source = ArgumentCaptor.forClass(UploadSource.class);
-        verify(strategy).transferUploaded(source.capture());
+        var source = ArgumentCaptor.forClass(PreparedTransfer.class);
+        verify(strategy).transfer(source.capture());
         assertEquals(new TransferRequestValidator("/unused").uploadContentType(name),
                 source.getValue().contentType());
     }

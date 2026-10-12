@@ -34,7 +34,7 @@ sequenceDiagram
 
 The initial destination ID is the configured `MMIV_BUCKET_NAME`; override its ID with `MMIV_DESTINATION_ID`. The bucket is server configuration. Metadata creates keys under `migrations/<metadataId>/...`. A user may select the configured destination ID, but cannot supply a bucket or object key. The current S3 implementation supports one configured destination per stack.
 
-Signup creates an account with no destination grants. An administrator grants access in the User Access database, for example with a parameterized statement:
+Signup creates an account with no destination grants. Administrators manage grants through `/admin.html`; see [administrator access and invitations](../admin/administrator-access.md). Authorized database operators can also use a parameterized statement:
 
 ```sql
 INSERT INTO USER_DESTINATION_ACCESS (USER_ID, DESTINATION, PERMISSION)
@@ -56,6 +56,24 @@ Use a JWT from `/user-access/api/auth/login` in `Authorization: Bearer ...` for 
 Multipart `/api/v1/transfers` accepts `file` and an optional `destinationId`. Transfer asks metadata to validate and allocate the destination before any S3 write. `/api/v1/transfers/folder` accepts matching `files`/`relativePaths` and `destinationId`; it validates the complete folder and authorizes all allocations before writing. Metadata preserves the relative folder path beneath each server-generated assignment prefix.
 
 `GET /api/v1/destinations` exposes the configured writable destination through the authenticated browser session. The upload page disables upload when that permission is absent.
+
+## Transfer strategy and factory
+
+`TransferService` explicitly requests a `TransferBackend`, and `TransferStrategyFactory` selects it with a switch. Spring creates and injects the concrete S3 strategy; it does not choose from a strategy list. Selection uses neither bean ordering nor response times, and it never races uploads. A future Azure branch is left commented in the factory and backend enum until its implementation and metadata, integrity, and cleanup support are ready. The current metadata contract assigns S3 destinations, so `TransferService` selects `TransferBackend.S3` on the server. File extensions determine validation and content type, while the destination transport determines the strategy.
+
+Both metadata-authorized local sources and multipart uploads use `TransferSourcePreparer`. It validates the input, copies it into a private temporary snapshot, enforces the configured size limit while reading, and computes SHA-256 during that same copy. Local sources and uploads must be nonempty and within `mmiv.upload.max-size-bytes` (100 MiB by default). This prevents an oversized actual stream from bypassing an advertised upload size. The snapshot remains stable if the original source changes and is closed after the operation, including failures.
+
+Each strategy has one operation, `transfer(PreparedTransfer)`, and returns a `StoredTransfer` receipt containing the bucket, assigned key, and exact object version/ETag. `S3TransferStrategy` only writes those prepared bytes with their checksum. `TransferService` owns the shared integrity retry, guarded remote cleanup, API response mapping, and RabbitMQ logging. Metadata remains responsible for destination assignment and permission checks; the public API still accepts a metadata ID rather than arbitrary source paths or object keys. Additional transports require corresponding metadata, integrity, and cleanup support before deployment.
+
+```mermaid
+flowchart LR
+    M[Metadata-authorized source or upload] --> P[TransferSourcePreparer]
+    P --> T[PreparedTransfer snapshot]
+    T --> F[TransferStrategyFactory: S3]
+    F --> S[S3TransferStrategy]
+    S --> R[StoredTransfer receipt]
+    R --> V[TransferService: integrity, cleanup, logging]
+```
 
 ## RabbitMQ logging and reports
 
@@ -87,3 +105,7 @@ Set `MMIV_ORACLE_MAVEN` to your Maven executable to run the User Access and Disc
 It tests permission denial, metadata-controlled transfer, integrity, report projection, grant revocation, logging from all services, broker outage recovery, and deletion of the generated test account. It uses no AWS resources. The S3 fixture exercises real SDK HTTP requests but does not validate AWS IAM.
 
 CI continues to create a dedicated account through signup. For managed Oracle, an authorized SSM command grants only that cached generated USER account WRITE permission to the configured verification destination. No public API grants this permission. Supplied accounts are left unchanged and must already have the appropriate grant. External Oracle requires a supplied account. Cleanup deletes the generated account and its grants after verification, including failed verification runs.
+
+Each verification invocation uses a UUID in `X-MMIV-Verification-Run`. Metadata records that ID when allocating plans. Final cleanup authenticates the owner and checks current WRITE permission, closes the run, waits for admitted transfers, deletes all S3 versions and delete markers at each assigned test key, removes associated reports, migration audit events and file logs, then removes the plans. Account cleanup runs last. Other owners, other runs and ordinary untagged uploads remain untouched, including when verification uses a supplied account. Cleanup failure fails verification and keeps plans available for investigation/retry.
+
+Temporary run-ID files are removed. Minimal closed-run markers in Oracle and migration tombstones in MongoDB remain to reject delayed writes/events; CI cleanup evidence also retains the run ID. General operational logs and scan artifacts remain. This cleanup applies to tagged future runs and does not sweep older untagged test data.

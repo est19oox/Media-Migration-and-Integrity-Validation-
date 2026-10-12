@@ -330,11 +330,24 @@ def managed_access(state):
     key_id = state.get('USER_ACCESS_JWT_KEY_ID', 'mmiv-user-access-key-1')
     if any(not isinstance(v, str) or not v or '\n' in v or '\r' in v for v in (issuer, key_id)):
         raise ValueError('Invalid JWT issuer or key identity')
+    bootstrap = directory / 'bootstrap-admin.json'
+    if not bootstrap.exists():
+        application = inspect('user-access-service')
+        already_enabled = application and 'MMIV_BOOTSTRAP_ADMIN_ENABLED=true' in application.get('Config', {}).get('Env', [])
+        if (directory / 'bootstrap-admin.env').exists() or already_enabled:
+            raise RuntimeError('Bootstrap administrator credentials are missing; restore their private backup')
+        save(bootstrap, {'username': 'admin', 'password': secrets.token_hex(24)})
+    administrator = json.loads(bootstrap.read_text())
+    if set(administrator) != {'username', 'password'} or administrator['username'] != 'admin' or not re.fullmatch(r'[a-f0-9]{48}', administrator['password']):
+        raise RuntimeError('Invalid bootstrap administrator configuration; restore its private backup')
     environment = ('ORACLE_JDBC_URL=jdbc:oracle:thin:@//oracle:1521/FREEPDB1\n'
                    'ORACLE_USER=USER_ACCESS\nORACLE_PASSWORD=' + values['user_access'] + '\n'
                    'JWT_ISSUER=' + issuer + '\nJWT_KEY_ID=' + key_id + '\n'
                    'JWT_PRIVATE_KEY_PATH=file:/run/mmiv-jwt/private.pem\n'
                    'JWT_PUBLIC_KEY_PATH=file:/run/mmiv-jwt/public.pem\n')
+    bootstrap_env = ('MMIV_BOOTSTRAP_ADMIN_ENABLED=true\nMMIV_BOOTSTRAP_ADMIN_USERNAME=admin\n'
+                     'MMIV_BOOTSTRAP_ADMIN_PASSWORD=' + administrator['password'] + '\n')
+    atomic_write(directory / 'bootstrap-admin.env', bootstrap_env)
     identity = hashlib.sha256((environment + private.read_text() + derived).encode()).hexdigest()
     bundle = Path('/etc/mmiv/user-access/versions/' + identity)
     bundle.mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -456,6 +469,8 @@ def config_for(state):
             if not re.fullmatch(r'[a-f0-9]{64}', config_id):
                 raise ValueError('User Access requires a staged immutable configuration bundle')
             directory = '/etc/mmiv/user-access/versions/' + config_id
+            if state.get('MANAGED_USER_ACCESS_ORACLE'):
+                service['env_file'].append({'path': '/etc/mmiv/managed-oracle/bootstrap-admin.env', 'format': 'raw'})
             service['env_file'].append({'path': directory + '/environment.env', 'format': 'raw'})
             service['volumes'].extend([
                 {'type': 'bind', 'source': directory + '/private.pem',

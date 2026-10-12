@@ -74,6 +74,8 @@ def run_case(case, base_url, token):
     elif "raw_body" in case:
         data = case["raw_body"].encode()
     headers = {"Content-Type": "application/json", **case.get("headers", {})}
+    if os.getenv("MMIV_VERIFICATION_RUN_ID"):
+        headers["X-MMIV-Verification-Run"] = str(uuid.UUID(os.environ["MMIV_VERIFICATION_RUN_ID"]))
     if "multipart" in case:
         data, headers["Content-Type"] = multipart_body(case["multipart"])
     if token and not case.get("anonymous"):

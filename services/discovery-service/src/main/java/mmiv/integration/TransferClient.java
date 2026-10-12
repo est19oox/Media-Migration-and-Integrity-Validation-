@@ -18,7 +18,10 @@ public class TransferClient {
         factory.setReadTimeout(Duration.ofMinutes(3)); client=RestClient.builder().baseUrl(url).requestFactory(factory).build();
     }
     public Object transfer(UUID metadataId,String token) {
-        try {return client.post().uri("/api/v1/transfers").header("Authorization","Bearer "+token)
+        try {return client.post().uri("/api/v1/transfers").headers(headers->{headers.setBearerAuth(token);
+            if(org.springframework.web.context.request.RequestContextHolder.getRequestAttributes() instanceof org.springframework.web.context.request.ServletRequestAttributes attributes){
+                String run=attributes.getRequest().getHeader("X-MMIV-Verification-Run");if(run!=null)headers.set("X-MMIV-Verification-Run",UUID.fromString(run).toString());
+            }})
                 .body(Map.of("metadataId",metadataId)).retrieve().body(Object.class);}
         catch(RestClientException e) {throw new ResponseStatusException(HttpStatus.BAD_GATEWAY,"Transfer service unavailable");}
     }
