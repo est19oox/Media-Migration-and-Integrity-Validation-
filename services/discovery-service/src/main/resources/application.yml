@@ -1,15 +1,28 @@
+
 server:
   port: 8085
 
 spring:
+  application:
+    name: discovery-service
+
   datasource:
     url: ${DB_URL}
     username: ${DB_USERNAME}
     password: ${DB_PASSWORD}
     driver-class-name: oracle.jdbc.OracleDriver
 
+eureka:
+  client:
+    service-url:
+      defaultZone: ${EUREKA_URL:http://localhost:8761/eureka/}
+    register-with-eureka: true
+    fetch-registry: true
+
 discovery:
   root: ${DISCOVERY_ROOT}
+  run-on-startup: false
+  manifest-path: ${DISCOVERY_MANIFEST_PATH:}
   supported-file-types:
     - MP4
     - PDF
@@ -17,7 +30,7 @@ discovery:
     - PPT
     - PPTX
     - PNG
-    
+
 management:
   endpoints:
     web:

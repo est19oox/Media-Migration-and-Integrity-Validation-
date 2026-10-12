@@ -9,11 +9,18 @@ import mmiv.service.DiscoveryService;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.stereotype.Component;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 
 import java.nio.file.Path;
 import java.util.List;
 
 @Component
+@ConditionalOnProperty(
+        prefix = "discovery",
+        name = "run-on-startup",
+        havingValue = "true",
+        matchIfMissing = false
+)
 public class DiscoveryRunner implements CommandLineRunner {
 
     private final DiscoveryService discoveryService;
