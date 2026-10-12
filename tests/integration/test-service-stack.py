@@ -201,6 +201,18 @@ def main():
         wait(lambda: request(gateway + '/user-access/.well-known/jwks.json')[0] == 200, 120)
         wait(lambda: request(gateway + '/api/v1/transfers', 'POST', {})[0] == 401, 120)
         wait(lambda: request(gateway + '/api/reports/00000000-0000-0000-0000-000000000000')[0] == 401, 120)
+        class NoRedirect(urllib.request.HTTPRedirectHandler):
+            def redirect_request(self, req, fp, code, msg, headers, newurl):
+                return None
+        opener = urllib.request.build_opener(NoRedirect())
+        for base in (f'http://127.0.0.1:{ports["transfer-service"]}', gateway):
+            try:
+                opener.open(base + '/upload.html', timeout=30)
+                raise AssertionError('Anonymous upload page must redirect')
+            except urllib.error.HTTPError as response:
+                assert response.code == 302, response.code
+                assert response.headers.get('Location') == '/login.html', response.headers.get('Location')
+        print('PASS direct Transfer and Gateway redirects use exact /login.html Location', flush=True)
         plan_request = {'destinationId': 'it-landing', 'sourcePath': 'test.txt'}
         assert request(gateway + '/api/metadata/plans', 'POST', plan_request)[0] == 401
         status,body=request(gateway + '/api/metadata/plans', 'POST', plan_request, token)
@@ -269,7 +281,7 @@ def main():
                                    env=test_env, stdout=log, stderr=subprocess.STDOUT, check=True, timeout=240)
             print('PASS User Access and Discovery Oracle integration suites', flush=True)
         (artifacts / 'summary.json').write_text(json.dumps({'passed': True, 'services': SERVICES, 'reportStatus': report['status'],
-                                                         'checks': ['permission-denial', 'assigned-destination', 'integrity', 'report', 'revocation', 'all-service-logs', 'broker-recovery', 'account-cleanup']}, indent=2) + '\n')
+                                                         'checks': ['login-redirects', 'permission-denial', 'assigned-destination', 'integrity', 'report', 'revocation', 'all-service-logs', 'broker-recovery', 'account-cleanup']}, indent=2) + '\n')
     finally:
         for process in reversed(processes):
             process.terminate()

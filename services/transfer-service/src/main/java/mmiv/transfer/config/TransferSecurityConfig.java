@@ -68,7 +68,9 @@ public class TransferSecurityConfig {
         return (request, response, exception) -> {
             response.setHeader("Cache-Control", "no-store");
             if (isPage(request)) {
-                response.sendRedirect("/login.html");
+                // Keep the same origin-relative redirect behind the gateway and direct access.
+                response.setStatus(302);
+                response.setHeader("Location", "/login.html");
             } else {
                 response.setHeader("WWW-Authenticate", "Bearer");
                 response.sendError(401, "Login required");

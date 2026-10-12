@@ -98,6 +98,9 @@ def run_case(case, base_url, token):
     # Retain only configured diagnostic fields, even when an assertion fails.
     # Never record arbitrary response bodies or request authentication headers.
     case["_http_status"] = status
+    # Redirect diagnostics only: do not capture cookies or authentication headers.
+    if any(name.lower() == "location" for name in case.get("header_equals", {})):
+        case["_reported_headers"] = {"Location": response_headers.get("Location")}
     body = None
     if any(key.startswith("json_") for key in case) or case.get("save_fields") or case.get("report_fields"):
         try:
@@ -188,6 +191,8 @@ def main():
                 result["http_status"] = case["_http_status"]
             if case.get("_reported_fields"):
                 result["response"] = case["_reported_fields"]
+            if case.get("_reported_headers"):
+                result["response_headers"] = case["_reported_headers"]
         result["elapsed_seconds"] = round(time.monotonic() - started, 3)
         results.append(result)
         print(f"{result['status']}: {args.service} / {result['name']} "

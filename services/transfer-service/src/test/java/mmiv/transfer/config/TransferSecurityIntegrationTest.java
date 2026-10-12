@@ -87,7 +87,14 @@ class TransferSecurityIntegrationTest {
     static String valid() throws Exception { return token(ISSUER, Instant.now().plusSeconds(600)); }
 
     @Test void anonymousPagesRedirectAndFileApiRejects() throws Exception {
-        mvc.perform(get("/upload.html")).andExpect(status().isFound()).andExpect(redirectedUrl("/login.html"));
+        for (String page : new String[] {"/", "/upload.html", "/files.html"}) {
+            mvc.perform(get(page).header("Host", "public.example:8080")
+                            .header("X-Forwarded-Host", "public.example")
+                            .header("X-Forwarded-Proto", "https"))
+                    .andExpect(status().isFound())
+                    .andExpect(header().string("Location", "/login.html"))
+                    .andExpect(header().string("Cache-Control", "no-store"));
+        }
         mvc.perform(get("/files.html")).andExpect(status().isFound());
         mvc.perform(get("/api/v1/files/test/content")).andExpect(status().isUnauthorized());
         mvc.perform(head("/api/v1/files/test/download")).andExpect(status().isUnauthorized());

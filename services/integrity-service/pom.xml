@@ -12,6 +12,7 @@
   <version>1.0.0-SNAPSHOT</version>
   <name>Integrity Service</name>
   <properties>
+    <rabbitmq-amqp-client.version>5.34.0</rabbitmq-amqp-client.version>
     <java.version>25</java.version>
     <!-- Align both Jackson families to the patched versions reported by Trivy. -->
     <jackson-2-bom.version>2.21.7</jackson-2-bom.version>
@@ -23,6 +24,11 @@
   </properties>
   <dependencyManagement>
     <dependencies>
+      <dependency>
+        <groupId>com.rabbitmq</groupId>
+        <artifactId>amqp-client</artifactId>
+        <version>${rabbitmq-amqp-client.version}</version>
+      </dependency>
       <dependency>
         <groupId>org.springframework.cloud</groupId>
         <artifactId>spring-cloud-dependencies</artifactId>
