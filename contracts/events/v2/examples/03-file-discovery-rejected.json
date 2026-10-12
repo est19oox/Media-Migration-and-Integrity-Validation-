@@ -1,0 +1,19 @@
+{
+  "eventId": "6215d12b-b088-43a6-a5b4-61f2590fe16f",
+  "eventType": "FILE_DISCOVERY_COMPLETED",
+  "schemaVersion": 2,
+  "sourceService": "discovery-service",
+  "migrationId": "c49f2f8f-ad97-45a8-8867-f3ca8a971d80",
+  "fileId": "c9c14c82-aaf2-45ac-b1ea-dca64284c13b",
+  "occurredAt": "2026-10-11T10:01:01Z",
+  "data": {
+    "status": "REJECTED",
+    "manifestMediaId": "MEDIA-002",
+    "fileName": "video.mp4",
+    "failure": {
+      "code": "AMBIGUOUS_FILE_NAME",
+      "message": "Multiple source files have the same file name",
+      "retryable": false
+    }
+  }
+}

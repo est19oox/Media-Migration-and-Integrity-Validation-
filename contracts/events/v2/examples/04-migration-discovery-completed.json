@@ -1,0 +1,14 @@
+{
+  "eventId": "1da1aef1-0385-4a26-8f0a-dcf98a5233c1",
+  "eventType": "MIGRATION_DISCOVERY_COMPLETED",
+  "schemaVersion": 2,
+  "sourceService": "discovery-service",
+  "migrationId": "c49f2f8f-ad97-45a8-8867-f3ca8a971d80",
+  "occurredAt": "2026-10-11T10:02:00Z",
+  "data": {
+    "status": "COMPLETED",
+    "totalFiles": 1,
+    "acceptedFiles": 1,
+    "rejectedFiles": 0
+  }
+}

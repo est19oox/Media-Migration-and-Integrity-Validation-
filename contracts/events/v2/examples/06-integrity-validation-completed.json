@@ -1,0 +1,15 @@
+{
+  "eventId": "e33e8af7-56f1-45ec-94fd-76da981dfe29",
+  "eventType": "INTEGRITY_VALIDATION_COMPLETED",
+  "schemaVersion": 2,
+  "sourceService": "integrity-service",
+  "migrationId": "c49f2f8f-ad97-45a8-8867-f3ca8a971d80",
+  "fileId": "9eceb6d4-8a39-48da-8abe-1238ba8c7a67",
+  "occurredAt": "2026-10-11T10:30:00Z",
+  "data": {
+    "transferId": "344cd216-dac8-4bd2-a350-1dc891c9f4cb",
+    "status": "PASSED",
+    "checksumAlgorithm": "SHA-256",
+    "durationMs": 3200
+  }
+}
