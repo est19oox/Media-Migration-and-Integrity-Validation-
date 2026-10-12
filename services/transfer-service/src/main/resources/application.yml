@@ -4,6 +4,12 @@ server:
     max-part-count: 1100 # Up to 500 files plus 500 relativePaths fields.
 
 spring:
+  rabbitmq:
+    host: ${SPRING_RABBITMQ_HOST:localhost}
+    port: ${SPRING_RABBITMQ_PORT:5672}
+    username: ${SPRING_RABBITMQ_USERNAME:guest}
+    password: ${SPRING_RABBITMQ_PASSWORD:guest}
+
   application:
     name: transfer-service
   servlet:
@@ -65,3 +71,7 @@ eureka:
   instance:
     prefer-ip-address: true
     instance-id: ${spring.application.name}:${spring.cloud.client.ip-address}:${server.port}
+
+mmiv-events:
+  enabled: ${MMIV_EVENTS_ENABLED:false}
+  exchange: ${MMIV_EVENTS_EXCHANGE:mmiv.events}

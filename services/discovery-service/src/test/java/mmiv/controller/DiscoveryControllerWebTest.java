@@ -1,9 +1,9 @@
-
 package mmiv.controller;
 
 import mmiv.csv.MetadataCsvValidationError;
 import mmiv.csv.MetadataCsvValidationException;
 import mmiv.dto.DiscoveryResponse;
+import mmiv.events.DiscoveryEventPublisher;
 import mmiv.model.DiscoveryRunResult;
 import mmiv.model.ManifestMatchResult;
 import mmiv.model.MigrationFileInventory;
@@ -16,7 +16,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.dao.DataIntegrityViolationException;
-import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -34,6 +33,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * <p>Security filters are disabled here: this test covers response bodies and
  * error mapping, while bearer-token rules are covered separately by
  * {@code mmiv.security.DiscoverySecurityIntegrationTest}.
+ *
+ * <p>The DiscoveryEventPublisher is mocked to isolate controller behaviour
+ * from RabbitMQ infrastructure during web-layer testing.
  */
 @WebMvcTest(
         controllers = DiscoveryController.class,
@@ -53,6 +55,10 @@ class DiscoveryControllerWebTest {
 
     @MockitoBean
     private ManifestProcessingService manifestProcessingService;
+
+    // Mock RabbitMQ event publisher to prevent real messaging during tests.
+    @MockitoBean
+    private DiscoveryEventPublisher eventPublisher;
 
     private final Path rootPath = Path.of("/test/media");
     private final Path csvPath = Path.of("/test/manifest.csv");
@@ -77,7 +83,8 @@ class DiscoveryControllerWebTest {
                 .andExpect(jsonPath("$.failed").value(0))
                 .andExpect(jsonPath("$.inserted").value(0));
 
-        verify(discoveryService).discoverAndSaveWithResult(rootPath);
+        verify(discoveryService)
+                .discoverAndSaveWithResult(rootPath);
     }
 
     @Test
@@ -89,11 +96,15 @@ class DiscoveryControllerWebTest {
 
         ManifestMatchResult mismatch =
                 ManifestMatchResult.mismatch(
-                        null, null, "FILE_SIZE", "100"
+                        null,
+                        null,
+                        "FILE_SIZE",
+                        "100"
                 );
 
         when(manifestProcessingService.processManifest(
-                csvPath, rootPath
+                csvPath,
+                rootPath
         )).thenReturn(List.of(success, mismatch));
 
         mockMvc.perform(post("/api/discovery/manifest"))
@@ -107,7 +118,8 @@ class DiscoveryControllerWebTest {
     void manifestShouldHandleEmptyResults() throws Exception {
 
         when(manifestProcessingService.processManifest(
-                csvPath, rootPath
+                csvPath,
+                rootPath
         )).thenReturn(List.of());
 
         mockMvc.perform(post("/api/discovery/manifest"))
@@ -122,15 +134,18 @@ class DiscoveryControllerWebTest {
 
         MetadataCsvValidationException exception =
                 new MetadataCsvValidationException(
-                        List.of(new MetadataCsvValidationError(
-                                2,
-                                "File Size",
-                                "Invalid numeric value"
-                        ))
+                        List.of(
+                                new MetadataCsvValidationError(
+                                        2,
+                                        "File Size",
+                                        "Invalid numeric value"
+                                )
+                        )
                 );
 
         when(manifestProcessingService.processManifest(
-                csvPath, rootPath
+                csvPath,
+                rootPath
         )).thenThrow(exception);
 
         mockMvc.perform(post("/api/discovery/manifest"))
@@ -151,15 +166,18 @@ class DiscoveryControllerWebTest {
 
         MetadataCsvValidationException exception =
                 new MetadataCsvValidationException(
-                        List.of(new MetadataCsvValidationError(
-                                0,
-                                "File",
-                                "CSV file does not exist"
-                        ))
+                        List.of(
+                                new MetadataCsvValidationError(
+                                        0,
+                                        "File",
+                                        "CSV file does not exist"
+                                )
+                        )
                 );
 
         when(manifestProcessingService.processManifest(
-                csvPath, rootPath
+                csvPath,
+                rootPath
         )).thenThrow(exception);
 
         mockMvc.perform(post("/api/discovery/manifest"))
@@ -173,10 +191,13 @@ class DiscoveryControllerWebTest {
     void databaseErrorShouldReturnHttp503() throws Exception {
 
         when(manifestProcessingService.processManifest(
-                csvPath, rootPath
-        )).thenThrow(new DataIntegrityViolationException(
-                "Database error"
-        ));
+                csvPath,
+                rootPath
+        )).thenThrow(
+                new DataIntegrityViolationException(
+                        "Database error"
+                )
+        );
 
         mockMvc.perform(post("/api/discovery/manifest"))
                 .andExpect(status().isServiceUnavailable())
@@ -189,7 +210,9 @@ class DiscoveryControllerWebTest {
     void ioErrorShouldReturnHttp500() throws Exception {
 
         when(discoveryService.discoverAndSaveWithResult(rootPath))
-                .thenThrow(new IOException("File read failed"));
+                .thenThrow(
+                        new IOException("File read failed")
+                );
 
         mockMvc.perform(post("/api/discovery/scan"))
                 .andExpect(status().isInternalServerError())

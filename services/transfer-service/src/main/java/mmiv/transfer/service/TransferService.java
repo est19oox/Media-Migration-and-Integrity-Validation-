@@ -19,6 +19,9 @@ import java.util.HexFormat;
 import java.util.UUID;
 import java.time.Instant;
 import mmiv.transfer.logging.FileEventLogger;
+import mmiv.transfer.events.TransferEventPublisher;
+import java.util.Map;
+import java.time.Duration;
 
 @Service
 public class TransferService {
@@ -29,14 +32,16 @@ public class TransferService {
     private final mmiv.transfer.integration.IntegrityValidationGateway integrity;
     private final S3ObjectCleanup cleanup;
     private final FileEventLogger logs;
+    private final TransferEventPublisher events;
 
     public TransferService(TransferRequestValidator validator, TransferStrategyFactory factory,
-            mmiv.transfer.integration.IntegrityValidationGateway integrity, S3ObjectCleanup cleanup, FileEventLogger logs) {
+            mmiv.transfer.integration.IntegrityValidationGateway integrity, S3ObjectCleanup cleanup, FileEventLogger logs, TransferEventPublisher events) {
         this.validator = validator;
         this.factory = factory;
         this.integrity = integrity;
         this.cleanup = cleanup;
         this.logs = logs;
+        this.events = events;
     }
 
     public TransferResponse transfer(TransferRequest request) {
@@ -46,6 +51,7 @@ public class TransferService {
             TransferStrategy strategy = factory.getStrategy(request);
             TransferResponse uploaded = strategy.transfer(request);
             String transferId = UUID.randomUUID().toString();
+            publishStored(transferId, startedAt);
             var outcome = integrity.validate(transferId, uploaded.bucket(), uploaded.key(), uploaded.sha256());
             var removal = finish(outcome.success(), uploaded.bucket(), uploaded.key(), uploaded.objectReference());
             var result = new TransferResponse(uploaded.bucket(), uploaded.key(), uploaded.mediaType(), uploaded.sizeBytes(),
@@ -101,6 +107,7 @@ public class TransferService {
             UploadResponse response = strategy.transferUploaded(new UploadSource(
                     temporary, fileName, key, contentType, actualSize, sha256));
             String transferId = UUID.randomUUID().toString();
+            publishStored(transferId, startedAt);
             var outcome = integrity.validate(transferId, response.bucket(), response.key(), sha256);
             var removal = finish(outcome.success(), response.bucket(), response.key(), response.objectReference());
             var result = new UploadResponse(response.bucket(), response.key(), response.fileName(), response.mediaType(),
@@ -125,5 +132,14 @@ public class TransferService {
                 }
             }
         }
+    }
+
+    private void publishStored(String transferId, Instant startedAt) {
+        UUID id = UUID.fromString(transferId);
+        events.publish("FILE_TRANSFER_COMPLETED", "transfer.file.completed", "transfer-service",
+                id, TransferEventPublisher.fileId(id), Map.of(
+                        "transferId", transferId,
+                        "status", "STORED",
+                        "durationMs", Math.max(0L, Duration.between(startedAt, Instant.now()).toMillis())));
     }
 }

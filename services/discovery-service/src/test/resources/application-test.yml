@@ -21,3 +21,8 @@ discovery:
 jwt:
   issuer: https://auth.mmiv.example
   jwk-set-uri: http://localhost:8083/.well-known/jwks.json
+
+management:
+  health:
+    rabbit:
+      enabled: false
