@@ -1,5 +1,11 @@
 # Integration validation — 2026-10-12
 
+## Folder workspace and shared browser login
+
+The five changed service builds passed 469 executed Java tests: User Access 118, Discovery 75, Transfer 127, Reporting 144 and Gateway 5. Twelve optional Discovery Oracle tests were skipped. Twenty-one page behavior tests and 77 Python deployment/verification tests passed. All inline page scripts passed syntax checks.
+
+The seven-service integration test passed using real Oracle, RabbitMQ and MongoDB plus a local S3 HTTP fixture. It verified shared cookie login and CSRF recovery, user dropdown loading from Oracle, administrator folder creation, rejection of bucket-root uploads, folder-only listings, shared READ downloads/reports, rejected WRITE and cross-folder reads, current-role system logs, folder-scoped dashboards, permission revocation, scoped verification cleanup, broker outage recovery and generated-account deletion. The test snapshots its JAR inputs so rebuilding the workspace cannot alter running classpaths. Actual AWS S3/SSM, full ZAP scanning and EC2 deployment were not run for this change. See the [folder workspace guide](../admin/folder-workspace.md).
+
 ## Scoped verification cleanup
 
 The affected Maven builds passed 341 executed tests across Discovery (75), Transfer (122), and Reporting (144), with zero failures/errors. Twelve optional Oracle tests were skipped. The cleanup helper, DAST tunnel, stack lifecycle and endpoint-runner Python suites passed 58 tests. Bash syntax and Terraform formatting checks passed.

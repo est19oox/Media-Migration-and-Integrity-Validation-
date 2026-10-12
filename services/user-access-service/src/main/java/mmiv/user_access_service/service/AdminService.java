@@ -23,12 +23,15 @@ public class AdminService {
   private final UserRepository users;
   private final EventPublisher events;
   private final String destination;
+  @Value("${MMIV_BUCKET_NAME:media-migration-dev-landing}") private String bucket;
+  private final mmiv.user_access_service.repository.FolderRepository folders;
 
-  public AdminService(UserRepository users, EventPublisher events,
+  public AdminService(UserRepository users, EventPublisher events, mmiv.user_access_service.repository.FolderRepository folders,
       @Value("${mmiv.admin.destination-id:${MMIV_DESTINATION_ID:${MMIV_BUCKET_NAME:media-migration-dev-landing}}}") String destination) {
     this.users = users;
     this.events = events;
     this.destination = destination;
+    this.folders = folders;
   }
 
   public AdminIdentity identity(Jwt jwt) {
@@ -47,8 +50,8 @@ public class AdminService {
       if (permission == null) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Permission is required");
       User target = target(userId);
       if (!target.isActive()) throw new ResponseStatusException(HttpStatus.CONFLICT, "User account is inactive");
-      users.grantDestinationAccess(userId, destination, permission);
-      audit("ADMIN_PERMISSION_GRANTED", jwt.getSubject(), userId, permission.name());
+      users.grantDestinationAccess(userId, requestedDestination, permission);
+      audit("ADMIN_PERMISSION_GRANTED", jwt.getSubject(), userId, permission.name(),requestedDestination);
       return details(target(userId));
     });
   }
@@ -58,8 +61,8 @@ public class AdminService {
     return authorized(jwt, () -> {
       validateDestination(requestedDestination);
       target(userId);
-      users.revokeDestinationAccess(userId, destination);
-      audit("ADMIN_PERMISSION_REVOKED", jwt.getSubject(), userId, "NONE");
+      users.revokeDestinationAccess(userId, requestedDestination);
+      audit("ADMIN_PERMISSION_REVOKED", jwt.getSubject(), userId, "NONE",requestedDestination);
       return details(target(userId));
     });
   }
@@ -123,8 +126,21 @@ public class AdminService {
   public record Invitation(String token, java.time.Instant expiresAt) {}
 
   private void validateDestination(String value) {
-    if (!destination.equals(value))
-      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unknown destination");
+    if (!folders.exists(value))
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unknown folder");
+  }
+
+  public List<UserDetails> search(Jwt jwt, String query) {
+    return authorized(jwt, () -> users.searchUsers(query == null ? "" : query).stream().map(this::details).toList());
+  }
+  public List<String> folders(Jwt jwt) { return authorized(jwt, folders::list); }
+  public List<String> createFolder(Jwt jwt, String name) {
+    return authorized(jwt, () -> {
+      if (!mmiv.user_access_service.repository.FolderRepository.valid(name) || bucket.equals(name))
+        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Use a folder name of up to 80 letters, numbers, spaces, dots, underscores or hyphens");
+      folders.create(name); events.audit("ADMIN_FOLDER_CREATED", Map.of("actorId", jwt.getSubject(), "folder", name));
+      return folders.list();
+    });
   }
 
   private User target(String userId) {
@@ -137,8 +153,11 @@ public class AdminService {
   }
 
   private void audit(String operation, String actor, String target, String permission) {
+    audit(operation,actor,target,permission,destination);
+  }
+  private void audit(String operation, String actor, String target, String permission,String folder) {
     Runnable publish = () -> events.audit(operation,
-        Map.of("actorId", actor, "targetUserId", target, "destination", destination, "permission", permission));
+        Map.of("actorId", actor, "targetUserId", target, "destination", folder, "permission", permission));
     if (TransactionSynchronizationManager.isSynchronizationActive()) {
       TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
         @Override public void afterCommit() { publish.run(); }

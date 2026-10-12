@@ -114,7 +114,7 @@ def main():
     sql = invitation_sql(args.user_id, hashlib.sha256(token.encode('ascii')).hexdigest(), args.replace_expired)
     issue_over_ssm(args.instance_id, args.region, sql)
     print('First-admin invitation issued for the selected account. Expires in 24 hours.')
-    print(args.base_url.rstrip('/') + '/admin.html#invite=' + token)
+    print(args.base_url.rstrip('/') + '/invite.html#invite=' + token)
 
 
 if __name__ == '__main__':

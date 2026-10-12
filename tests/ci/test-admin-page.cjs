@@ -1,71 +1,32 @@
-const {test} = require('node:test');
-const assert = require('node:assert/strict');
-const {readFileSync} = require('node:fs');
-const vm = require('node:vm');
-const source = readFileSync('services/user-access-service/src/main/resources/static/admin.js', 'utf8');
-function page(responses, hash='') {
-  const nodes = new Map();
-  const element = id => {
-    if (!nodes.has(id)) nodes.set(id, {value:'', textContent:'', hidden:false, disabled:false, listeners:{},
-      addEventListener(event,callback){this.listeners[event]=callback;}});
-    return nodes.get(id);
-  };
-  const requests=[]; const copied=[]; const historyCalls=[];
-  const context={document:{getElementById:element,querySelectorAll:()=>['grant','revoke','logout','copyInvitation'].map(element)},
-    location:{origin:'https://mmiv.example',hash,pathname:'/admin.html'},history:{replaceState(...args){historyCalls.push(args);}},
-    navigator:{clipboard:{async writeText(value){copied.push(value);}}},URL,URLSearchParams,AbortController,setTimeout,clearTimeout,
-    localStorage:{setItem(){throw new Error('Secrets must not enter persistent storage');}},
-    sessionStorage:{setItem(){throw new Error('Secrets must not enter persistent storage');}},
-    async fetch(path,options){requests.push({path,options});const response=responses.shift();assert.ok(response,'Unexpected request');return {ok:response.status===200,status:response.status,async json(){return response.body;}};}};
-  vm.runInNewContext(source,context);
-  element('username').value='admin';element('password').value='private-password';
-  async function trigger(id,event='click') {
-    element(id).listeners[event]({preventDefault(){}});
-    for(let i=0;i<8;i++) await new Promise(resolve=>setImmediate(resolve));
-  }
-  return {element,requests,copied,historyCalls,trigger};
+const {test}=require('node:test');
+const assert=require('node:assert/strict');
+const {readFileSync}=require('node:fs');
+const vm=require('node:vm');
+const source=readFileSync('services/transfer-service/src/main/resources/static/admin.js','utf8');
+async function page(role='ADMIN',hash=''){
+ const nodes=new Map(),requests=[],historyCalls=[],copied=[];
+ const element=id=>{if(!nodes.has(id))nodes.set(id,{value:'',textContent:'',hidden:id==='management',disabled:false,options:[],listeners:{},addEventListener(event,fn){this.listeners[event]=fn;},replaceChildren(){this.options=[];this.value='';}});return nodes.get(id);};
+ const user={userId:'11111111-1111-4111-8111-111111111111',username:'alice',active:true,destinations:[]};
+ let folders=['SW001','semester2'];
+ const context={document:{getElementById:element,querySelectorAll:()=>['grant','revoke','copyInvitation'].map(element)},location:{origin:'https://mmiv.example',hash,pathname:'/admin.html'},history:{replaceState(...args){historyCalls.push(args);}},navigator:{clipboard:{async writeText(text){copied.push(text);}}},URL,URLSearchParams,Error,mmivAuth:{ready:Promise.resolve()},mmivPortal:{option(select,value,text){select.options.push({value,textContent:text});select.value ||= value;},async api(path,options){requests.push({path,options});if(path==='/me')return {role};if(path==='/admin/folders'){if(options){folders.push(JSON.parse(options.body).name);}return folders;}if(path.startsWith('/admin/users?q='))return [user];if(path.includes('/permissions')){user.destinations=options.method==='DELETE'?[]:[JSON.parse(options.body)];return {...user};}if(path==='/admin/invitations')return {token:'b'.repeat(64)};if(path==='/invitations/accept')return {};throw new Error('Unexpected request '+path);}}};
+ vm.runInNewContext(source,context);const flush=async()=>{for(let i=0;i<10;i++)await new Promise(setImmediate);};await flush();
+ return {element,requests,historyCalls,copied,async trigger(id,event='click'){element(id).listeners[event]({preventDefault(){}});await flush();}};
 }
-const login={status:200,body:{accessToken:'synthetic-jwt',tokenType:'Bearer'}};
-const identity={status:200,body:{userId:'admin-id',destination:'landing'}};
-test('administrator signs in with password, token stays in memory, logout hides data',async()=>{
- const app=page([login,identity]);await app.trigger('adminLogin','submit');
- assert.equal(app.requests[0].path,'/user-access/api/auth/login');
- assert.equal(JSON.parse(app.requests[0].options.body).password,'private-password');
- assert.equal(app.requests[1].options.headers.Authorization,'Bearer synthetic-jwt');
- assert.equal(app.requests[1].options.credentials,'omit');
- assert.equal(app.element('password').value,'');assert.equal(app.element('management').hidden,false);
- await app.trigger('logout');assert.equal(app.element('management').hidden,true);
+test('administration reuses the existing login and loads user and folder dropdowns',async()=>{
+ const app=await page();assert.equal(app.element('management').hidden,false);assert.equal(app.element('users').options[0].textContent,'alice');assert.equal(app.element('folders').options.length,2);assert.ok(app.requests.every(r=>!r.path.includes('/auth/login')));
 });
-test('ordinary users remain outside administration',async()=>{
- const app=page([login,{status:403}]);await app.trigger('adminLogin','submit');
- assert.equal(app.element('management').hidden,true);assert.match(app.element('message').textContent,/invalid or expired/);
+test('ordinary account has no administration controls',async()=>{
+ const app=await page('USER');assert.equal(app.element('management').hidden,true);assert.match(app.element('message').textContent,/Administrator access required/);assert.equal(app.requests.length,1);
 });
-test('invitation is removed from address and redeemed only after password login',async()=>{
- const token='a'.repeat(64);const app=page([login,identity],'#invite='+token);
- assert.equal(app.historyCalls[0][2],'/admin.html');await app.trigger('adminLogin','submit');
- assert.equal(app.requests[1].path,'/user-access/api/admin/invitations/accept');
- assert.equal(JSON.parse(app.requests[1].options.body).token,token);
- assert.equal(app.element('management').hidden,false);
- assert.ok(app.requests.every(request=>!request.path.includes(token)));
+test('selected folder controls the permission grant and revoke',async()=>{
+ const app=await page();app.element('folders').value='semester2';app.element('permission').value='READ';await app.trigger('grant');const request=app.requests.find(r=>r.options?.method==='PUT');assert.deepEqual(JSON.parse(request.options.body),{destination:'semester2',permission:'READ'});await app.trigger('revoke');assert.ok(app.requests.some(r=>r.path.endsWith('?destination=semester2')&&r.options.method==='DELETE'));
 });
-test('permission grant uses the looked-up account and configured destination',async()=>{
- const user={userId:'target-id',username:'outside',active:true,destinations:[]};
- const app=page([login,identity,{status:200,body:user},{status:200,body:user}]);
- await app.trigger('adminLogin','submit');app.element('targetUsername').value='outside';await app.trigger('userLookup','submit');
- app.element('permission').value='WRITE';await app.trigger('grant');
- assert.equal(app.requests[3].path,'/user-access/api/admin/users/target-id/destinations');
- assert.deepEqual(JSON.parse(app.requests[3].options.body),{destination:'landing',permission:'WRITE'});
+test('folder creation and filtering update the dropdown',async()=>{
+ const app=await page();app.element('folderName').value='SW002';await app.trigger('createFolder','submit');assert.equal(app.element('folders').options.length,3);app.element('folderQuery').value='semester';await app.trigger('folderQuery','input');assert.deepEqual(app.element('folders').options.map(o=>o.value),['semester2']);
 });
-test('invitation link can be copied for delivery without sending email automatically',async()=>{
- const token='b'.repeat(64);const app=page([login,identity,{status:200,body:{token,expiresAt:'2026-10-13T00:00:00Z'}}]);
- await app.trigger('adminLogin','submit');app.element('inviteUsername').value='outside';await app.trigger('inviteAdmin','submit');await app.trigger('copyInvitation');
- assert.equal(app.copied[0],'https://mmiv.example/admin.html#invite='+token);
- assert.equal(app.requests.length,3);
+test('invitation uses the shared session and is removed from the address',async()=>{
+ const app=await page('ADMIN','#invite='+'a'.repeat(64));assert.ok(app.requests.some(r=>r.path==='/invitations/accept'));assert.equal(app.historyCalls[0][2],'/admin.html');
 });
-
-test('operator using a local tunnel can generate a recipient-accessible website link',async()=>{
- const token='c'.repeat(64);const app=page([login,identity,{status:200,body:{token,expiresAt:'2026-10-13T00:00:00Z'}}]);
- await app.trigger('adminLogin','submit');app.element('inviteUsername').value='outside';
- app.element('invitationOrigin').value='https://public.mmiv.example';await app.trigger('inviteAdmin','submit');
- assert.equal(app.element('invitationLink').textContent,'https://public.mmiv.example/admin.html#invite='+token);
+test('invitation link can be delivered with a recipient-accessible origin',async()=>{
+ const app=await page();app.element('invitationOrigin').value='https://website.example';app.element('inviteUsername').value='alice';await app.trigger('inviteAdmin','submit');assert.equal(app.element('invitationLink').textContent,'https://website.example/invite.html#invite='+'b'.repeat(64));await app.trigger('copyInvitation');assert.deepEqual(app.copied,[app.element('invitationLink').textContent]);
 });

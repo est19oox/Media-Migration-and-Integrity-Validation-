@@ -47,6 +47,7 @@ if [[ -z "${MMIV_VERIFICATION_RUN_ID:-}" ]]; then
   OWNS_VERIFICATION_RUN=true
 fi
 export MMIV_VERIFICATION_RUN_ID
+export MMIV_VERIFICATION_DESTINATION="${MMIV_VERIFICATION_DESTINATION:-verification}"
 TOTAL_STARTED=$SECONDS
 aws_ssm() {
   aws ssm "$@" --region "$REGION" --cli-connect-timeout 10 --cli-read-timeout 20
@@ -189,7 +190,7 @@ prepare_auth() {
     chmod 600 "$TEMP_DIR/tokens.txt"
     export MMIV_VERIFICATION_TOKEN_FILE="$TEMP_DIR/tokens.txt"
     MMIV_VERIFICATION_ACCOUNT_FILE="$ACCOUNT_FILE" python3 scripts/cd/grant-verification-permission.py
-    AUTH_DOCKER_ARGS=(--env-file "$TEMP_DIR/auth.env" -e MMIV_VERIFICATION_RUN_ID)
+    AUTH_DOCKER_ARGS=(--env-file "$TEMP_DIR/auth.env" -e MMIV_VERIFICATION_RUN_ID -e MMIV_VERIFICATION_DESTINATION)
   fi
 }
 prepare_auth

@@ -32,7 +32,7 @@ sequenceDiagram
 
 ## Permission and destination configuration
 
-The initial destination ID is the configured `MMIV_BUCKET_NAME`; override its ID with `MMIV_DESTINATION_ID`. The bucket is server configuration. Metadata creates keys under `migrations/<metadataId>/...`. A user may select the configured destination ID, but cannot supply a bucket or object key. The current S3 implementation supports one configured destination per stack.
+`MMIV_BUCKET_NAME` remains the server-configured bucket. Destination IDs now name registered top-level folders inside it. Administrators create folders through the portal and Oracle stores the catalog in `MMIV_FOLDERS`. Metadata verifies the folder exists and the current WRITE grant, then assigns `<folder>/migrations/<metadataId>/<relativePath>`. The UUID prevents concurrent or same-name uploads from overwriting each other; the browser hides that storage detail. Users cannot choose arbitrary buckets or object keys. Existing root objects and bucket grants are retained but are not automatically migrated or exposed as folders.
 
 Signup creates an account with no destination grants. Administrators manage grants through `/admin.html`; see [administrator access and invitations](../admin/administrator-access.md). Authorized database operators can also use a parameterized statement:
 
@@ -42,7 +42,7 @@ VALUES (:user_id, :destination_id, 'WRITE');
 COMMIT;
 ```
 
-`READ` permits destination file reads and the caller's own metadata/reports. `WRITE` includes READ and permits discovery, assignment creation, and transfers. Grants are checked against User Access on each operation; revoking a grant takes effect even when the JWT has not expired. Permission-service failures deny the operation. Knowing another user's metadata ID does not authorize resolving or reading it.
+`READ` permits browsing and downloading shared-folder files and reading their metadata/reports. `WRITE` includes READ and permits discovery, assignment creation, and transfers. Grants are checked against User Access on each operation; revoking a grant takes effect even when the JWT has not expired. Permission-service failures deny the operation. Resolving or transferring a plan still requires its owner; reading requires the assigned folder's READ permission. Active administrators have access to registered folders.
 
 ## Gateway API
 
@@ -51,7 +51,7 @@ Use a JWT from `/user-access/api/auth/login` in `Authorization: Bearer ...` for 
 1. `POST /api/metadata/plans` with `{"destinationId":"<configured ID>","sourcePath":"folder/file.pdf"}` creates an assignment for an existing readable file under the shared media root.
 2. `POST /api/metadata/plans/{metadataId}/transfer` starts the transfer through metadata. Alternatively, `POST /api/v1/transfers` accepts **only** `{"metadataId":"<UUID>"}`. Legacy sourcePath/destinationKey requests without a metadata ID return 400.
 3. `GET /api/reports/{migrationId}` returns the projected report. The migration ID is returned by metadata. Global report listing is denied to prevent exposing other users' reports.
-4. `GET /api/metadata/plans/{metadataId}` reads owned metadata with READ permission. Assignments expire for new transfers after 24 hours; authorized metadata/report reads remain available.
+4. `GET /api/metadata/plans/{metadataId}` reads shared-folder metadata with READ permission. Assignments expire for new transfers after 24 hours; authorized metadata/report reads remain available.
 
 Multipart `/api/v1/transfers` accepts `file` and an optional `destinationId`. Transfer asks metadata to validate and allocate the destination before any S3 write. `/api/v1/transfers/folder` accepts matching `files`/`relativePaths` and `destinationId`; it validates the complete folder and authorizes all allocations before writing. Metadata preserves the relative folder path beneath each server-generated assignment prefix.
 

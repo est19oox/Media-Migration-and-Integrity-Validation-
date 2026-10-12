@@ -26,7 +26,8 @@ public final class FileIds {
     private static void validateKey(String key) {
         if (key == null || key.isBlank() || key.startsWith("/")
                 || key.getBytes(StandardCharsets.UTF_8).length > 1024
-                || key.chars().anyMatch(Character::isISOControl)) {
+                || key.chars().anyMatch(Character::isISOControl) || key.contains("\\")
+                || java.util.Arrays.stream(key.split("/",-1)).anyMatch(part->part.equals(".") || part.equals(".."))) {
             throw new IllegalArgumentException("Invalid file key");
         }
     }

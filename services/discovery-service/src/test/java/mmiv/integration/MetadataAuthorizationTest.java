@@ -24,12 +24,12 @@ class MetadataAuthorizationTest {
     @Test void assignsDestinationAndUsesDatabasePermissionRatherThanJwtClaim() throws Exception {
         Files.writeString(root.resolve("test.txt"),"hello");
         var plan=service().create(jwt,new MetadataService.CreatePlan("landing","test.txt",null,0),false);
-        assertEquals("bucket",plan.bucket());assertEquals("migrations/"+plan.metadataId()+"/test.txt",plan.destinationKey());
+        assertEquals("bucket",plan.bucket());assertEquals("landing/migrations/"+plan.metadataId()+"/test.txt",plan.destinationKey());
         verify(permissions).require("caller-token","caller","landing","WRITE");verify(plans).save(plan);
         verify(events,times(3)).migration(anyString(),anyString(),eq(plan.migrationId()),nullable(UUID.class),anyMap());
     }
     @Test void rejectsUnconfiguredDestinationAndPathTraversalBeforeSaving() {
-        assertThrows(ResponseStatusException.class,()->service().create(jwt,new MetadataService.CreatePlan("other",null,"test.txt",5),true));
+        assertThrows(ResponseStatusException.class,()->service().create(jwt,new MetadataService.CreatePlan("../other",null,"test.txt",5),true));
         assertThrows(ResponseStatusException.class,()->service().create(jwt,new MetadataService.CreatePlan("landing","../outside.txt",null,0),false));
         verifyNoInteractions(plans,events);
     }

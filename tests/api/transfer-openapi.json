@@ -44,7 +44,8 @@
               "schema": {
                 "type": "object",
                 "required": [
-                  "file"
+                  "file",
+                  "destinationId"
                 ],
                 "properties": {
                   "file": {
@@ -53,7 +54,8 @@
                   },
                   "destinationId": {
                     "type": "string",
-                    "description": "Configured destination ID; permission is checked by metadata"
+                    "description": "Registered folder name inside the configured bucket; current WRITE permission is required",
+                    "example": "verification"
                   }
                 }
               }

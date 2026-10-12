@@ -23,6 +23,11 @@ public class AdminController {
   @GetMapping("/me")
   public AdminService.AdminIdentity identity(@AuthenticationPrincipal Jwt jwt) { return admins.identity(jwt); }
 
+  @GetMapping("/user-options") public java.util.List<AdminService.UserDetails> users(@AuthenticationPrincipal Jwt jwt, @RequestParam(defaultValue="") String q) { return admins.search(jwt,q); }
+  @GetMapping("/folders") public java.util.List<String> folders(@AuthenticationPrincipal Jwt jwt) { return admins.folders(jwt); }
+  @PostMapping("/folders") public java.util.List<String> createFolder(@AuthenticationPrincipal Jwt jwt,@RequestBody Folder request) { return admins.createFolder(jwt,request.name()); }
+  public record Folder(String name) {}
+
   @GetMapping("/users")
   public AdminService.UserDetails lookup(@AuthenticationPrincipal Jwt jwt, @RequestParam String username) {
     return admins.lookup(jwt, username);

@@ -26,9 +26,10 @@ public class MetadataService {
     }
     public MetadataPlan create(Jwt jwt, CreatePlan request, boolean upload) { return create(jwt,request,upload,null); }
     public MetadataPlan create(Jwt jwt, CreatePlan request, boolean upload, UUID verificationRun) {
-        if (request == null || request.destinationId() == null || !destination.equals(request.destinationId()))
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Unknown destination");
-        permissions.require(jwt.getTokenValue(), jwt.getSubject(), destination,"WRITE");
+        if (request == null || request.destinationId() == null || !request.destinationId().matches("[A-Za-z0-9][A-Za-z0-9 _.-]{0,79}") || bucket.equals(request.destinationId()))
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Choose a registered folder");
+        permissions.requireFolder(jwt.getTokenValue(),request.destinationId());
+        permissions.require(jwt.getTokenValue(), jwt.getSubject(), request.destinationId(),"WRITE");
         String name; String source = null; long size;
         if (upload) { name=request.fileName(); size=request.sizeBytes()==null?0:request.sizeBytes(); }
         else {
@@ -49,7 +50,9 @@ public class MetadataService {
                 || java.util.Arrays.stream(objectPath.split("/",-1)).anyMatch(part->part.equals(".") || part.equals("..") || part.isBlank() || !part.matches("[\\p{L}\\p{N}._ ()-]{1,200}")))
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Invalid relative media path");
         var id=UUID.randomUUID(); var file=UUID.randomUUID();
-        var plan=new MetadataPlan(id,id,file,jwt.getSubject(),destination,bucket,"migrations/"+id+"/"+objectPath,source,name,contentType,size,upload?"UPLOAD":"SOURCE",objectPath,verificationRun);
+        if((request.destinationId()+"/migrations/"+id+"/"+objectPath).getBytes(java.nio.charset.StandardCharsets.UTF_8).length>1024)
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"File path is too long");
+        var plan=new MetadataPlan(id,id,file,jwt.getSubject(),request.destinationId(),bucket,request.destinationId()+"/migrations/"+id+"/"+objectPath,source,name,contentType,size,upload?"UPLOAD":"SOURCE",objectPath,verificationRun);
         plans.save(plan);
         events.migration("MIGRATION_STARTED","migration.started",id,null,
                 Map.of("initiatedBy",jwt.getSubject(),"source",Map.of("type","DIRECT_UPLOAD","rootId","media")));
@@ -61,14 +64,22 @@ public class MetadataService {
         return plan;
     }
     public MetadataPlan get(Jwt jwt, UUID id, String action) {
-        var found="READ".equals(action)?plans.find(id,jwt.getSubject(),false):plans.find(id,jwt.getSubject());
+        var found="READ".equals(action)?plans.findAny(id):plans.find(id,jwt.getSubject());
         var plan=found.orElseThrow(()->new ResponseStatusException(HttpStatus.NOT_FOUND,"Metadata not found"));
+        if("READ".equals(action) && !plan.destinationKey().startsWith(plan.destinationId()+"/") && !plan.ownerId().equals(jwt.getSubject()))
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND,"Metadata not found");
         permissions.require(jwt.getTokenValue(),jwt.getSubject(),plan.destinationId(),action);
         if("WRITE".equals(action) && plan.verificationRunId()!=null && plans.isClosed(plan.ownerId(),plan.verificationRunId()))
             throw new ResponseStatusException(HttpStatus.CONFLICT,"Verification run is closed");
         return plan;
     }
     public String destination() { return destination; }
+    public List<MetadataPlan> folderPlans(Jwt jwt,String folder,int page) {
+        if(page<0 || page>100000) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Invalid page");
+        permissions.requireFolder(jwt.getTokenValue(),folder);
+        permissions.require(jwt.getTokenValue(),jwt.getSubject(),folder,"READ");
+        return plans.folderPlans(folder,page);
+    }
     private static String contentType(String name) {
         String extension=name.substring(name.lastIndexOf('.')+1).toLowerCase(Locale.ROOT);
         return switch(extension) { case "mp4"->"video/mp4"; case "mp3"->"audio/mpeg"; case "png"->"image/png";

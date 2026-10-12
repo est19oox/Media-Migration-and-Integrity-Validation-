@@ -1,34 +1,52 @@
 <!doctype html>
-<html lang="zh-CN">
+<html lang="en">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>MMIV 查看云文件</title>
-<style>
-body{font:16px system-ui;max-width:850px;margin:40px auto;padding:24px;background:#f4f6fa;color:#162033}main{background:white;padding:30px;border-radius:16px}input{width:95%;padding:10px}button{margin:16px 0;padding:10px 20px}img,video{max-width:100%;max-height:65vh}iframe{width:100%;height:65vh;border:0}pre{white-space:pre-wrap;overflow-wrap:anywhere}#status{overflow-wrap:anywhere}
-</style>
+<title>View cloud files · MMIV</title>
+<link rel="stylesheet" href="/portal.css">
+<header><strong>MMIV</strong><nav><a href="/home.html">Home</a><a href="/upload.html" data-upload hidden>Upload</a><a href="/logs.html">Logs</a><a href="/admin.html" data-admin hidden>Administration</a></nav><button id="logout" type="button">Sign out</button></header>
 <main>
-<button id="logout" type="button" style="float:right">退出登录 / Sign out</button>
-<h1>查看云上的文件</h1>
-<p>输入上传结果中的 fileId。<a href="/upload.html">上传新文件</a></p>
-<form id="form"><label for="fileId">fileId</label><input id="fileId" required><button>查看文件</button></form>
+<h1>View files in the cloud</h1>
+<p>Choose a permitted folder, then select a file to preview or download.</p>
+<label for="folder">Folder</label><select id="folder"></select>
+<section><div class="scroll"><table><thead><tr><th>File</th><th>Size</th><th>Actions</th></tr></thead><tbody id="files"></tbody></table></div><button id="more" hidden>Load more</button></section>
 <p id="status" role="status" aria-live="polite"></p>
-<p id="links" hidden><a id="open" target="_blank" rel="noopener">独立窗口打开</a> · <a id="download">下载原文件</a></p>
+<p id="links" hidden><a id="open" target="_blank" rel="noopener">Open in a new window</a> · <a id="download">Download original file</a></p>
 <div id="preview"></div>
 </main>
-<script src="/auth.js"></script>
+<script src="/auth.js"></script><script src="/portal.js"></script>
 <script>
-document.querySelector('#form').addEventListener('submit', async event => {
-  event.preventDefault();
-  const id = document.querySelector('#fileId').value.trim();
+let cursor=null, generation=0, previewGeneration=0;
+async function listFiles(append=false) {
+  const current=++generation, folder=document.getElementById('folder').value;
+  document.getElementById('more').disabled=true;
+  if(!append){cursor=null;document.getElementById('files').replaceChildren();document.getElementById('preview').replaceChildren();document.getElementById('links').hidden=true;}
+  if(!folder){document.getElementById('status').textContent='No access to folder';return;}
+  try {
+    const data=await mmivPortal.api('/files?folder='+encodeURIComponent(folder)+(cursor?'&cursor='+encodeURIComponent(cursor):''));
+    if(current!==generation)return;
+    for(const file of data.files){const row=document.createElement('tr'),name=document.createElement('td'),size=document.createElement('td'),actions=document.createElement('td');
+      const button=document.createElement('button');button.textContent=file.name;button.addEventListener('click',()=>previewFile(file.fileId,current));name.append(button);size.textContent=file.sizeBytes+' bytes';
+      const download=document.createElement('a');download.textContent='Download';download.href='/api/v1/files/'+encodeURIComponent(file.fileId)+'/download';actions.append(download);row.append(name,size,actions);document.getElementById('files').append(row);}
+    cursor=data.nextCursor;document.getElementById('more').hidden=!cursor;document.getElementById('status').textContent=document.getElementById('files').children.length?'':'This folder is empty.';
+  }catch(error){if(current===generation){document.getElementById('status').textContent=error.message;document.getElementById('files').replaceChildren();document.getElementById('more').hidden=true;}}
+  finally{if(current===generation)document.getElementById('more').disabled=false;}
+}
+mmivPortal.profile.then(user=>{const select=document.getElementById('folder');for(const folder of user.destinations)mmivPortal.option(select,folder.destination,folder.destination);const requested=new URLSearchParams(location.search).get('folder');if(user.destinations.some(f=>f.destination===requested))select.value=requested;listFiles();}).catch(()=>{});
+document.getElementById('folder').addEventListener('change',()=>listFiles());document.getElementById('more').addEventListener('click',()=>listFiles(true));
+async function previewFile(id,folderGeneration) {
+  const currentPreview=++previewGeneration;
   const status = document.querySelector('#status');
   const preview = document.querySelector('#preview');
   preview.replaceChildren(); document.querySelector('#links').hidden = true;
-  if (!/^[A-Za-z0-9_-]+$/.test(id)) { status.textContent = 'fileId 格式不正确'; return; }
+  if (!/^[A-Za-z0-9_-]+$/.test(id)) { status.textContent = 'Invalid file ID format.'; return; }
   const url = '/api/v1/files/' + encodeURIComponent(id) + '/content';
-  status.textContent = '正在读取文件信息……';
+  status.textContent = 'Loading file information…';
   try {
     const response = await mmivAuth.fetch(url, {method: 'HEAD'});
-    if (!response.ok) throw new Error('无法读取文件，HTTP ' + response.status);
+    if (response.status === 403) throw new Error('No access to folder');
+    if (!response.ok) throw new Error('Unable to read the file. HTTP ' + response.status);
+    if(folderGeneration!==generation || currentPreview!==previewGeneration)return;
     const type = response.headers.get('Content-Type') || '';
     const size = Number(response.headers.get('Content-Length'));
     status.textContent = type + ' · ' + size + ' bytes';
@@ -36,18 +54,21 @@ document.querySelector('#form').addEventListener('submit', async event => {
     document.querySelector('#download').href = '/api/v1/files/' + encodeURIComponent(id) + '/download';
     document.querySelector('#links').hidden = false;
     let element;
-    if (type.startsWith('image/')) { element = document.createElement('img'); element.alt = '已上传的图片'; }
+    if (type.startsWith('image/')) { element = document.createElement('img'); element.alt = 'Uploaded image'; }
     else if (type.startsWith('video/')) { element = document.createElement('video'); element.controls = true; element.preload = 'metadata'; }
     else if (type.startsWith('text/plain')) {
-      if (size > 1048576) { status.textContent += ' · 文本超过 1 MiB，请下载查看'; return; }
-      const content = await mmivAuth.fetch(url); if (!content.ok) throw new Error('文本读取失败');
+      if (size > 1048576) { status.textContent += ' · Text exceeds 1 MiB. Download the file to view it.'; return; }
+      const content = await mmivAuth.fetch(url);
+      if (content.status === 403) throw new Error('No access to folder');
+      if (!content.ok) throw new Error('Unable to read the text file.');
       element = document.createElement('pre'); element.textContent = await content.text();
+      if(folderGeneration!==generation || currentPreview!==previewGeneration)return;
     } else if (type.startsWith('application/pdf')) {
-      element = document.createElement('iframe'); element.title = 'PDF 预览';
-    } else { status.textContent += ' · 此格式请下载查看'; return; }
+      element = document.createElement('iframe'); element.title = 'PDF preview';
+    } else { status.textContent += ' · Download the file to view this format.'; return; }
     if (element.tagName !== 'PRE') element.src = url;
     preview.appendChild(element);
-  } catch (error) { status.textContent = error.message; }
-});
+  } catch (error) { if(folderGeneration===generation && currentPreview===previewGeneration)status.textContent = error.message; }
+}
 </script>
 </html>

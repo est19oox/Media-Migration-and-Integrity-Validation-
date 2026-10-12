@@ -80,7 +80,7 @@ public class TransferSecurityConfig {
 
     private static boolean isPage(HttpServletRequest request) {
         String path = request.getRequestURI().substring(request.getContextPath().length());
-        return "/".equals(path) || "/upload.html".equals(path) || "/files.html".equals(path);
+        return "/".equals(path) || path.endsWith(".html");
     }
 
     @Bean
@@ -123,9 +123,9 @@ public class TransferSecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .dispatcherTypeMatchers(DispatcherType.ERROR).permitAll()
                         .requestMatchers(HttpMethod.GET, "/actuator/health", "/actuator/health/**", "/actuator/info").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/", "/upload.html", "/files.html", "/auth.js").authenticated()
+                        .requestMatchers(HttpMethod.GET, "/", "/home.html", "/upload.html", "/files.html", "/logs.html", "/admin.html", "/invite.html", "/admin.js", "/portal.js", "/portal.css", "/auth.js").authenticated()
                         .requestMatchers("/api/v1/transfers", "/api/v1/transfers/**",
-                                "/api/v1/files", "/api/v1/files/**", "/api/v1/session", "/api/v1/destinations", "/api/v1/verification/**").authenticated()
+                                "/api/v1/files", "/api/v1/files/**", "/api/v1/session", "/api/v1/destinations", "/api/v1/verification/**", "/api/v1/portal/**").authenticated()
                         .anyRequest().denyAll())
                 .exceptionHandling(errors -> errors.authenticationEntryPoint(entryPoint))
                 .oauth2ResourceServer(resource -> resource.bearerTokenResolver(resolver)

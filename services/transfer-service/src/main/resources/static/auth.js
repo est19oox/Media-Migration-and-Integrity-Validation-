@@ -2,7 +2,8 @@
 window.mmivAuth = (() => {
   let session;
   function login() {
-    location.replace('/login.html');
+    const invitation = new URLSearchParams(location.hash.slice(1)).get('invite');
+    location.replace('/login.html' + (invitation && /^[a-f0-9]{64}$/.test(invitation) ? '#invite=' + invitation : ''));
     throw new Error('Please sign in again.');
   }
   async function requestSession() {

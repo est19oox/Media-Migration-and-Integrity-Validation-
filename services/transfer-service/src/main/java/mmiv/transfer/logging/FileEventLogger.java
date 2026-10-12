@@ -49,9 +49,9 @@ public class FileEventLogger {
         if (errorType != null) data.put("errorType",errorType);
         if (bytesServed != null) data.put("bytesServed",bytesServed);
         if (validationResult != null) data.put("validationResult",validationResult);
-        if(key!=null && key.startsWith("migrations/")) {
-            String[] parts=key.split("/",3);
-            try {if(parts.length==3)data.put("migrationId",UUID.fromString(parts[1]).toString());}
+        if(key!=null) {
+            var match=java.util.regex.Pattern.compile("^(?:[^/]+/)?migrations/([0-9a-fA-F-]{36})/").matcher(key);
+            try {if(match.find())data.put("migrationId",UUID.fromString(match.group(1)).toString());}
             catch(IllegalArgumentException ignored) {}
         }
         try {

@@ -20,9 +20,11 @@ import org.springframework.web.server.ResponseStatusException;
 public class AccessController {
 
   private final AccessService accessService;
+  private final mmiv.user_access_service.repository.FolderRepository folders;
 
-  public AccessController(AccessService accessService) {
+  public AccessController(AccessService accessService,mmiv.user_access_service.repository.FolderRepository folders) {
     this.accessService = accessService;
+    this.folders=folders;
   }
 
   @PostMapping("/check")
@@ -44,6 +46,7 @@ public class AccessController {
       throw new ResponseStatusException(HttpStatus.FORBIDDEN);
     }
 
-    return accessService.getAccessibleDestinations(subject);
+    var result=accessService.getAccessibleDestinations(subject);
+    return new AccessibleDestinationsResponse(result.destinations().stream().filter(f->folders.exists(f.destination())).toList());
   }
 }

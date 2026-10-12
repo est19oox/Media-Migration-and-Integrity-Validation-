@@ -28,4 +28,14 @@ public class PermissionClient {
         } catch (RestClientException e) { throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Permission service unavailable"); }
     }
     public record Decision(boolean authorised, String message) {}
+    public void requireFolder(String token,String folder) {
+        try { client.get().uri("/api/access/folders/{name}",folder).header("Authorization","Bearer "+token).retrieve().toBodilessEntity(); }
+        catch(org.springframework.web.client.HttpClientErrorException e) {throw new ResponseStatusException(e.getStatusCode(),"Folder unavailable");}
+        catch(RestClientException e) {throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,"Folder service unavailable");}
+    }
+    public void requireActive(String token) {
+        try {client.get().uri("/api/access/me").header("Authorization","Bearer "+token).retrieve().toBodilessEntity();}
+        catch(org.springframework.web.client.HttpClientErrorException e){throw new ResponseStatusException(HttpStatus.FORBIDDEN,"Account unavailable");}
+        catch(RestClientException e){throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,"Account service unavailable");}
+    }
 }

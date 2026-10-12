@@ -5,6 +5,7 @@ Requires Java 25, Docker, OpenSSL, and `mvn package` for every service. No AWS r
 import base64
 import hashlib
 import http.server
+import http.cookiejar
 import json
 import os
 from pathlib import Path
@@ -94,6 +95,14 @@ class S3Fixture(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
         parsed=urllib.parse.urlsplit(self.path)
         query=urllib.parse.parse_qs(parsed.query,keep_blank_values=True)
+        if query.get('list-type')==['2']:
+            from xml.sax.saxutils import escape
+            bucket=parsed.path.strip('/');prefix=query.get('prefix',[''])[0];entries=[]
+            for path,(content,_) in self.objects.items():
+                if path.startswith('/'+bucket+'/'+prefix):
+                    key=path[len(bucket)+2:];entries.append('<Contents><Key>'+escape(key)+'</Key><LastModified>2026-10-12T00:00:00Z</LastModified><ETag>fixture</ETag><Size>'+str(len(content))+'</Size><StorageClass>STANDARD</StorageClass></Contents>')
+            body=('<ListBucketResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/"><Name>'+escape(bucket)+'</Name><Prefix>'+escape(prefix)+'</Prefix><IsTruncated>false</IsTruncated>'+''.join(entries)+'</ListBucketResult>').encode()
+            self.send_response(200);self.send_header('Content-Type','application/xml');self.send_header('Content-Length',str(len(body)));self.end_headers();self.wfile.write(body);return
         if 'versions' in query:
             from xml.sax.saxutils import escape
             bucket=parsed.path.strip('/')
@@ -139,6 +148,10 @@ def main():
     private = tempfile.TemporaryDirectory(prefix='mmiv-integration-')
     directory = Path(private.name)
     directory.chmod(0o700)
+    jars=directory/'jars';jars.mkdir()
+    # Keep the running classpaths stable if a developer rebuilds target/ during this test.
+    for name in SERVICES:
+        shutil.copy2(ROOT/'services'/name/'target'/(name+'.jar'),jars/(name+'.jar'))
     artifacts = Path(os.environ.get('MMIV_INTEGRATION_REPORT_DIR', str(ROOT / '.ci/reports/integration')))
     artifacts.mkdir(parents=True, exist_ok=True)
     names = {service: 'mmiv-it-' + service + '-' + uuid.uuid4().hex[:8] for service in IMAGES}
@@ -197,10 +210,14 @@ def main():
         for name in SERVICES:
             output = (directory / (name + '.log')).open('w')
             outputs.append(output)
-            process = subprocess.Popen([java, '-jar', str(ROOT / 'services' / name / 'target' / (name + '.jar'))],
+            process = subprocess.Popen([java, '-jar', str(jars / (name + '.jar'))],
                     env={**env, 'SERVER_PORT': str(ports[name]), 'MMIV_EVENTS_OUTBOX_DIRECTORY': str(directory / 'outbox' / name)},
                     stdout=output, stderr=subprocess.STDOUT)
             processes.append(process)
+            if name == 'service-registry':
+                wait(lambda: request(f'http://127.0.0.1:{ports[name]}/actuator/health')[0] == 200, 150)
+        # The applications retry registry/broker connections; wait for functional readiness below.
+        for name in SERVICES:
             wait(lambda: request(f'http://127.0.0.1:{ports[name]}/actuator/health')[0] == 200, 150)
             print('READY ' + name, flush=True)
         gateway = f'http://127.0.0.1:{ports["api-gateway"]}'
@@ -228,8 +245,6 @@ def main():
                 assert response.code == 302, response.code
                 assert response.headers.get('Location') == '/login.html', response.headers.get('Location')
         print('PASS direct Transfer and Gateway redirects use exact /login.html Location', flush=True)
-        assert request(gateway + '/admin.html')[0] == 200
-        assert request(gateway + '/admin.js')[0] == 200
         admin_api = gateway + '/user-access/api/admin'
         assert request(admin_api + '/me')[0] == 401
         assert request(admin_api + '/me', token=token)[0] == 403
@@ -252,16 +267,52 @@ def main():
         assert request(admin_api + '/invitations/accept', 'POST', {'token': invitation}, external_token)[0] == 403
         assert request(admin_api + '/me', token=external_token)[0] == 200
         print('PASS default administrator password login and account-bound single-use delegation', flush=True)
+        # Real cookie session: administrator never has to log in again on the permissions page.
+        cookiejar=http.cookiejar.CookieJar()
+        browser=urllib.request.build_opener(urllib.request.HTTPCookieProcessor(cookiejar))
+        def browser_request(path,method='GET',body=None,csrf=None):
+            headers={}
+            if path=='/api/v1/session' and method=='POST': headers['Authorization']='Bearer '+admin_token
+            if csrf: headers[csrf['csrfHeader']]=csrf['csrfToken']
+            payload=json.dumps(body).encode() if body is not None else None
+            if payload: headers['Content-Type']='application/json'
+            req=urllib.request.Request(gateway+path,data=payload,headers=headers,method=method)
+            try:
+                with browser.open(req,timeout=30) as response:return response.status,response.read()
+            except urllib.error.HTTPError as error:return error.code,error.read()
+        assert browser_request('/api/v1/session','POST')[0]==204
+        csrf=json.loads(browser_request('/api/v1/session')[1])
+        options=json.loads(browser_request('/api/v1/portal/admin/users')[1]);assert any(u['username']=='admin' for u in options)
+        for page in ['/home.html','/admin.html','/files.html','/logs.html']:
+            status,body=browser_request(page);assert status==200 and b'<html lang="en">' in body,(page,status)
+        assert b'Administrator login' not in browser_request('/admin.html')[1]
+        status,body=browser_request('/api/v1/portal/admin/folders','POST',{'name':'SW001'});assert status==403,(status,body)
+        for folder in ['SW001','semester2']:
+            status,body=browser_request('/api/v1/portal/admin/folders','POST',{'name':folder},csrf)
+            if status==403 and json.loads(body).get('error')=='CSRF_INVALID':
+                # Same recovery as auth.js: refresh and replay only a pre-controller CSRF rejection.
+                csrf=json.loads(browser_request('/api/v1/session')[1])
+                status,body=browser_request('/api/v1/portal/admin/folders','POST',{'name':folder},csrf)
+            assert status==200,(status,body)
+            assert '/it-landing/'+folder+'/' in S3Fixture.objects
+        assert request(gateway+'/api/v1/portal/admin/folders','POST',{'name':'unauthorized'},token)[0]==403
+        assert request(gateway+'/api/v1/portal/admin/folders','POST',{'name':'../escape'},admin_token)[0]==400
+        profile=json.loads(request(gateway+'/api/v1/portal/me',token=token)[1]);assert profile['destinations']==[]
+        assert request(gateway+'/api/v1/portal/admin/users',token=token)[0]==403
+        status,body=request(gateway+'/api/v1/portal/logs',token=token);assert status==403,(status,body)
+        assert request(gateway+'/api/metadata/allocations','POST',{'destinationId':'it-landing','fileName':'root.txt','sizeBytes':1},admin_token)[0]==400
+        print('PASS shared cookie session, CSRF, administrator folder creation and hidden bucket-root access',flush=True)
+
         verification_run=str(uuid.uuid4())
         run_header={'X-MMIV-Verification-Run':verification_run}
-        plan_request = {'destinationId': 'it-landing', 'sourcePath': 'test.txt'}
+        plan_request = {'destinationId': 'SW001', 'sourcePath': 'test.txt'}
         assert request(gateway + '/api/metadata/plans', 'POST', plan_request)[0] == 401
         status,body=request(gateway + '/api/metadata/plans', 'POST', plan_request, token, headers=run_header)
         assert status == 403, (status,body)
         status,body=request(gateway + '/api/v1/transfers', 'POST', {'sourcePath': 'test.txt', 'destinationKey': 'evil'}, token)
         assert status == 400, (status,body)
         status, body = request(admin_api + '/users/' + user_id + '/destinations', 'PUT',
-                               {'destination': 'it-landing', 'permission': 'WRITE'}, external_token)
+                               {'destination': 'SW001', 'permission': 'WRITE'}, external_token)
         assert status == 200, (status, body)
         status, body = request(gateway + '/api/metadata/plans', 'POST', plan_request, token, headers=run_header)
         assert status == 200, (status, body)
@@ -284,23 +335,45 @@ def main():
             return report if report.get('status') == 'COMPLETED' else False
         report = wait(completed_report, 90)
         print('PASS metadata -> transfer -> integrity -> RabbitMQ -> report', flush=True)
+        assert plan['destinationKey'].startswith('SW001/migrations/')
+        listed=json.loads(request(gateway+'/api/v1/portal/files?folder=SW001',token=token)[1])
+        assert any(f['fileId']==result['fileId'] and f['name']=='test.txt' for f in listed['files'])
+        assert request(gateway+'/api/v1/portal/files?folder=semester2',token=token)[0]==403
+        profile=json.loads(request(gateway+'/api/v1/portal/me',token=token)[1]);assert [f['destination'] for f in profile['destinations']]==['SW001']
+        viewer={'username':'viewer_'+uuid.uuid4().hex[:12],'password':secrets.token_hex(16)}
+        viewer_id=json.loads(request(native+'/api/auth/signup','POST',viewer)[1])['userId']
+        viewer_token=json.loads(request(native+'/api/auth/login','POST',viewer)[1])['accessToken']
+        assert request(admin_api+'/users/'+viewer_id+'/destinations','PUT',{'destination':'SW001','permission':'READ'},admin_token)[0]==200
+        assert request(gateway+'/api/v1/files/'+result['fileId']+'/download',token=viewer_token)[0]==200
+        assert request(gateway+'/api/reports/'+plan['migrationId'],token=viewer_token)[0]==200
+        assert request(gateway+'/api/metadata/allocations','POST',{'destinationId':'SW001','fileName':'blocked.txt','sizeBytes':1},viewer_token)[0]==403
+        assert request(gateway+'/api/v1/portal/logs?folder=SW001',token=viewer_token)[0]==200
+        assert request(gateway+'/api/v1/portal/logs?folder=semester2',token=viewer_token)[0]==403
+        assert request(gateway+'/api/v1/portal/logs',token=admin_token)[0]==200
+        assert request(gateway+'/api/v1/portal/files?folder=SW001',token=viewer_token)[0]==200
+        # Even a guessed file ID cannot cross the folder boundary.
+        guessed=base64.urlsafe_b64encode(b'semester2/private.txt').decode().rstrip('=')
+        S3Fixture.objects['/it-landing/semester2/private.txt']=(b'private','text/plain')
+        assert request(gateway+'/api/v1/files/'+guessed+'/download',token=viewer_token)[0]==403
+        print('PASS folder browsing, shared READ downloads/reports, WRITE isolation and scoped dashboards',flush=True)
+
         assert request(admin_api + '/users/' + user_id + '/destinations', 'PUT',
-                       {'destination': 'it-landing', 'permission': 'READ'}, external_token)[0] == 200
+                       {'destination': 'SW001', 'permission': 'READ'}, external_token)[0] == 200
         assert request(gateway + '/api/v1/transfers', 'POST', {'metadataId': plan['metadataId']}, token)[0] == 403
-        assert request(admin_api + '/users/' + user_id + '/destinations?destination=it-landing', 'DELETE', token=external_token)[0] == 200
+        assert request(admin_api + '/users/' + user_id + '/destinations?destination=SW001', 'DELETE', token=external_token)[0] == 200
         assert request(gateway + '/api/v1/files/' + result['fileId'] + '/content', token=token)[0] == 403
         assert request(gateway + '/api/reports/' + plan['migrationId'], token=token)[0] == 403
         print('PASS permission revocation applies to existing JWTs', flush=True)
         # Restore WRITE for cleanup, and prove an unrelated plan/object survives.
         assert request(admin_api + '/users/' + user_id + '/destinations', 'PUT',
-                       {'destination': 'it-landing', 'permission': 'WRITE'}, external_token)[0] == 200
+                       {'destination': 'SW001', 'permission': 'WRITE'}, external_token)[0] == 200
         status, body=request(gateway+'/api/metadata/plans','POST',plan_request,token)
         assert status==200
         unrelated=json.loads(body)
         assert request(gateway+'/api/metadata/plans/'+unrelated['metadataId']+'/transfer','POST',{},token)[0]==200
         # The same run ID under another account is a separate scope.
         assert request(admin_api+'/users/'+external_id+'/destinations','PUT',
-                       {'destination':'it-landing','permission':'WRITE'},external_token)[0]==200
+                       {'destination':'SW001','permission':'WRITE'},external_token)[0]==200
         status,body=request(gateway+'/api/metadata/plans','POST',plan_request,external_token,headers=run_header)
         assert status==200
         foreign=json.loads(body)
@@ -352,7 +425,7 @@ def main():
                                    env=test_env, stdout=log, stderr=subprocess.STDOUT, check=True, timeout=240)
             print('PASS User Access and Discovery Oracle integration suites', flush=True)
         (artifacts / 'summary.json').write_text(json.dumps({'passed': True, 'services': SERVICES, 'reportStatus': report['status'],
-                                                         'checks': ['verification-data-cleanup', 'default-admin', 'admin-invitations', 'admin-permission-management', 'login-redirects', 'permission-denial', 'assigned-destination', 'integrity', 'report', 'revocation', 'all-service-logs', 'broker-recovery', 'account-cleanup']}, indent=2) + '\n')
+                                                         'checks': ['folder-browser', 'folder-permissions', 'shared-cookie-session', 'scoped-dashboard', 'verification-data-cleanup', 'default-admin', 'admin-invitations', 'admin-permission-management', 'login-redirects', 'permission-denial', 'assigned-destination', 'integrity', 'report', 'revocation', 'all-service-logs', 'broker-recovery', 'account-cleanup']}, indent=2) + '\n')
     finally:
         for process in reversed(processes):
             process.terminate()

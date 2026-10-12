@@ -35,6 +35,7 @@ class AccessControllerTest {
   @Autowired private MockMvc mockMvc;
 
   @MockitoBean private AccessService accessService;
+  @MockitoBean private mmiv.user_access_service.repository.FolderRepository folders;
 
   @AfterEach
   void clearSecurityContext() {

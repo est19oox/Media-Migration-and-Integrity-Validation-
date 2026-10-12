@@ -53,18 +53,23 @@ test('one folder submission sends one request and restores the button', async ()
 });
 
 
-test('upload controls remain disabled when destination permission is denied', async () => {
+for (const denied of [true, false]) test(denied
+  ? 'upload controls show no access when destination permission is denied'
+  : 'upload controls show no access when no destinations are granted', async () => {
   const page = readFileSync(resolve(__dirname, '../../services/transfer-service/src/main/resources/static/upload.html'), 'utf8');
   const script = page.match(/<script>([\s\S]*?)<\/script>/)[1];
   const elements = new Map();
   const select = selector => {
-    if (!elements.has(selector)) elements.set(selector, { addEventListener() {}, disabled: false, textContent: '' });
+    if (!elements.has(selector)) elements.set(selector, { addEventListener() {}, disabled: false, textContent: '',
+      options: [], replaceChildren(...options) { this.options = options; } });
     return elements.get(selector);
   };
-  vm.runInNewContext(script, { document: { querySelector: select }, FormData: class {},
-    mmivAuth: { fetch: async () => ({ ok: false, status: 403 }) } });
+  vm.runInNewContext(script, { document: { querySelector: select, createElement: () => ({}) }, FormData: class {},
+    mmivAuth: { fetch: async () => ({ ok: !denied, status: denied ? 403 : 200, json: async () => ({destinations: []}) }) } });
   await new Promise(setImmediate);
   assert.equal(select('#submit').disabled, true);
   assert.equal(select('#folderSubmit').disabled, true);
-  assert.match(select('#destinationStatus').textContent, /权限/);
+  assert.equal(select('#destinationStatus').textContent, 'No access to folder');
+  assert.equal(select('#destination').options[0].textContent, 'No access to folder');
+  assert.equal(select('#destination').disabled, true);
 });

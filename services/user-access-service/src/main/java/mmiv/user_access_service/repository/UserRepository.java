@@ -16,6 +16,8 @@ public interface UserRepository {
 
   Optional<User> findByUsername(String username);
 
+  java.util.List<User> searchUsers(String query);
+
   void grantDestinationAccess(String userId, String destination, Permission permission);
 
   void createAdminInvitation(String userId, String tokenHash, java.time.Instant expiresAt, String issuerId);
