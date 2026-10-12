@@ -4,7 +4,7 @@ After Terraform apply, host preparation, and Docker deployment, open:
 
 - http://<EC2-public-IP>:8080/upload.html
 - http://<EC2-public-IP>:8080/files.html
-- http://<EC2-public-IP>:8080/ (routes to upload.html)
+- http://<EC2-public-IP>:8080/ (opens the login page)
 
 Terraform permits public IPv4 TCP 8080. Docker Compose publishes api-gateway at
 0.0.0.0:8080:8080. Backend service and registry host ports bind to 127.0.0.1;
@@ -22,7 +22,7 @@ SSM port forwarding remains optional:
 bash scripts/cd/open-gateway-tunnel.sh i-YOUR_INSTANCE_ID
 ```
 
-Then open http://localhost:8080/upload.html while the session runs.
+Then open http://localhost:8080/ while the session runs. Sign in or create an account; successful login opens /upload.html.
 
 The real Discovery Service from main is preserved, including Oracle configuration,
 CSV processing, repositories and tests. Its automatic CD entry is commented out
@@ -32,4 +32,6 @@ For local Compose, enable it explicitly with --profile discovery after supplying
 the database settings and DISCOVERY_MEDIA_PATH. Other services use the registry.
 
 Folder API: POST /api/v1/transfers/folder with matching files and relativePaths.
-Limit: 500 files and 100 MiB total. Transfer invokes Integrity after upload and requires confirmed integrity success. Redis remains disabled as in the uploaded transfer project.
+Limit: 500 files and 100 MiB total. Transfer invokes Integrity after upload and requires confirmed integrity success. Redis is not part of the active deployment.
+
+Transfer pages and file APIs now require login. See [login setup](login-access.md) for cookie sessions, authenticated CD checks and signup.

@@ -37,6 +37,8 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 @WebMvcTest(AuthController.class)
 @AutoConfigureMockMvc(addFilters = false)
 class AuthControllerTest {
+    @org.springframework.test.context.bean.override.mockito.MockitoBean mmiv.events.EventPublisher auditPublisher;
+
 
   private static final User ACTIVE_USER =
       new User(

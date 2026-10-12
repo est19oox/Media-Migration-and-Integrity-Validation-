@@ -49,7 +49,14 @@ class LocalFileUploadTest {
         var validator = new TransferRequestValidator("/unused-media-root");
         strategy = spy(new S3TransferStrategy(s3, "test-bucket", validator));
         var service = new TransferService(validator, new TransferStrategyFactory(List.of(strategy)), passingIntegrity(), passingCleanup(), mock(mmiv.transfer.logging.FileEventLogger.class));
-        mvc = MockMvcBuilders.standaloneSetup(new TransferController(service))
+        var metadata=mock(mmiv.transfer.integration.MetadataClient.class);
+        when(metadata.allocate(anyString(),anyLong(),nullable(String.class))).thenAnswer(call -> {
+            String name=call.getArgument(0);long size=call.getArgument(1);
+            var id=java.util.UUID.randomUUID();
+            return new mmiv.transfer.integration.MetadataClient.Plan(id,id,java.util.UUID.randomUUID(),"owner","test-bucket","test-bucket",
+                    "migrations/"+id+"/"+name,null,name,validator.uploadContentType(name),size,"UPLOAD",name);
+        });
+        mvc = MockMvcBuilders.standaloneSetup(new TransferController(new mmiv.transfer.integration.MetadataTransferFacade(metadata,service,new mmiv.transfer.service.FolderUploadService(service,validator),mock(mmiv.events.EventPublisher.class),validator)))
                 .setControllerAdvice(new TransferExceptionHandler()).build();
     }
 
@@ -59,7 +66,7 @@ class LocalFileUploadTest {
         when(s3.putObject(any(PutObjectRequest.class), any(RequestBody.class))).thenAnswer(call -> {
             PutObjectRequest put = call.getArgument(0);
             RequestBody body = call.getArgument(1);
-            assertTrue(put.key().matches("uploads/[0-9a-f-]+/notes.txt"));
+            assertTrue(put.key().matches("migrations/[0-9a-f-]+/notes.txt"));
             assertEquals("test-bucket", put.bucket());
             assertEquals("text/plain", put.contentType());
             assertEquals(Base64.getEncoder().encodeToString(digest), put.checksumSHA256());

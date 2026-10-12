@@ -58,6 +58,7 @@ public class TransferRequestValidator {
             case "png" -> "image/png";
             case "jpg", "jpeg" -> "image/jpeg";
             case "mp4" -> "video/mp4";
+            case "mp3" -> "audio/mpeg";
             case "txt" -> "text/plain";
             case "pdf" -> "application/pdf";
             case "ppt" -> "application/vnd.ms-powerpoint";

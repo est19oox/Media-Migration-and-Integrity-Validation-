@@ -12,6 +12,8 @@ READY_PATH="${DAST_READY_PATH:-/actuator/health}"
 SCAN_MODE="${DAST_SCAN_MODE:-baseline}"
 SERVICE_NAME="${DAST_SERVICE_NAME:?DAST_SERVICE_NAME is required}"
 OPENAPI_FILE="${DAST_OPENAPI_FILE:-tests/api/${SERVICE_NAME%-service}-openapi.json}"
+# Transfer functional checks and scans use the Gateway so login shares the tunnel.
+if [[ "$SERVICE_NAME" == transfer-service || "$SERVICE_NAME" == discovery-service || "$SERVICE_NAME" == reporting-service || "$SERVICE_NAME" == integrity-service ]]; then PORT=8080; fi
 [[ "$SCAN_MODE" == baseline || "$SCAN_MODE" == api ]] || {
   echo '::error::DAST_SCAN_MODE must be baseline or api.'; exit 1;
 }
@@ -25,7 +27,7 @@ done
   echo '::error::DAST_LOCAL_PORT must be between 0 and 65535 (0 selects a free port).'; exit 1;
 }
 [[ "$PATH_SUFFIX" == /* && "$READY_PATH" == /* ]] || { echo '::error::DAST_PATH must start with /.'; exit 1; }
-if [[ "${SCANNER_TOOLS_PREPARED:-false}" != true ]]; then
+if [[ "${SCANNER_TOOLS_PREPARED:-false}" != true && "${DAST_CLEANUP_ONLY:-false}" != true ]]; then
   bash scripts/cd/prepare-scanner-tools.sh
 fi
 for COMMAND in aws session-manager-plugin docker curl python3 timeout setsid; do
@@ -49,6 +51,11 @@ cleanup() {
   set +e
   timeout 15s docker rm -f -v "$ZAP_CONTAINER" >/dev/null 2>&1
   if [[ -n "$SCAN_PID" ]]; then kill "$SCAN_PID" 2>/dev/null; wait "$SCAN_PID" 2>/dev/null; fi
+  if [[ "${ACCOUNT_FILE:-}" == "$TEMP_DIR/account.json" && -f "$TEMP_DIR/account.json" ]]; then
+    MMIV_VERIFICATION_ACCOUNT_FILE="$ACCOUNT_FILE" VERIFICATION_AUTH_BASE_PATH="${AUTH_PREFIX-/user-access}" \
+      python3 scripts/cd/login-for-verification.py "http://127.0.0.1:$LOCAL_PORT" "$TEMP_DIR/auth.env" --cleanup \
+        > "$REPORT_DIR/account-cleanup.log" 2>&1 || EXIT_CODE=1
+  fi
   SESSION_ID=$(sed -n 's/.*Starting session with SessionId: \([^[:space:]]*\).*/\1/p' "$REPORT_DIR/tunnel.log" 2>/dev/null | head -n 1)
   if [[ -n "$SESSION_ID" ]]; then
     aws_ssm terminate-session --session-id "$SESSION_ID" >/dev/null 2>&1 || echo "Warning: could not explicitly terminate SSM session $SESSION_ID."
@@ -63,6 +70,9 @@ cleanup() {
     kill -KILL -- "-$TUNNEL_PID" 2>/dev/null
     wait "$TUNNEL_PID" 2>/dev/null
   fi
+  if [[ -n "${API_TEST_TOKEN:-}" ]]; then
+    python3 scripts/cd/redact-verification-token.py "$REPORT_DIR" || true
+  fi
   rm -rf "$TEMP_DIR"
   exit "$EXIT_CODE"
 }
@@ -74,7 +84,7 @@ echo "DAST target: EC2 $INSTANCE_ID port $PORT$PATH_SUFFIX"
 echo '[1/3] Checking SSM connectivity and prepared ZAP image'
 CONNECTION=$(aws_ssm get-connection-status --target "$INSTANCE_ID" --query Status --output text)
 [[ "${CONNECTION,,}" == connected ]] || { echo "::error::SSM target is not connected: $CONNECTION"; exit 1; }
-if [[ "${SCANNER_TOOLS_PREPARED:-false}" == true ]]; then
+if [[ "${SCANNER_TOOLS_PREPARED:-false}" == true && "${DAST_CLEANUP_ONLY:-false}" != true ]]; then
   docker image inspect "$ZAP_IMAGE" >/dev/null || {
     echo '::error::Prepared ZAP image is missing on this runner.'; exit 1;
   }
@@ -134,12 +144,49 @@ fi
 echo "Deployed health endpoint reachable: $READY_URL"
 echo "ZAP target configured: $TARGET_URL"
 
+ACCOUNT_FILE="${MMIV_VERIFICATION_ACCOUNT_FILE:-$TEMP_DIR/account.json}"
+if [[ "${DAST_CLEANUP_ONLY:-false}" == true ]]; then
+  MMIV_VERIFICATION_ACCOUNT_FILE="$ACCOUNT_FILE" VERIFICATION_AUTH_BASE_PATH= \
+    python3 scripts/cd/login-for-verification.py "http://127.0.0.1:$LOCAL_PORT" "$TEMP_DIR/auth.env" --cleanup
+  exit 0
+fi
+AUTH_DOCKER_ARGS=()
+prepare_auth() {
+  if [[ "$SERVICE_NAME" == transfer-service || "$SERVICE_NAME" == api-gateway || "$SERVICE_NAME" == user-access-service || "$SERVICE_NAME" == discovery-service || "$SERVICE_NAME" == reporting-service || "$SERVICE_NAME" == integrity-service ]]; then
+    AUTH_PREFIX=/user-access
+    if [[ "$SERVICE_NAME" == user-access-service && "$PORT" == 8083 ]]; then AUTH_PREFIX=; fi
+    MMIV_VERIFICATION_ACCOUNT_FILE="$ACCOUNT_FILE" VERIFICATION_AUTH_BASE_PATH="$AUTH_PREFIX" \
+      python3 scripts/cd/login-for-verification.py "http://127.0.0.1:$LOCAL_PORT" "$TEMP_DIR/auth.env" \
+        --account-env "$TEMP_DIR/account.env"
+    while IFS='=' read -r NAME VALUE; do
+      MASK_VALUE=${VALUE//%/%25}
+      printf '::add-mask::%s\n' "$MASK_VALUE"
+      export "$NAME=$VALUE"
+    done < "$TEMP_DIR/account.env"
+    API_TEST_TOKEN=$(sed -n 's/^API_TEST_TOKEN=//p' "$TEMP_DIR/auth.env")
+    printf '::add-mask::%s\n' "$API_TEST_TOKEN"
+    export API_TEST_TOKEN
+    printf '%s\n' "$API_TEST_TOKEN" >> "$TEMP_DIR/tokens.txt"
+    chmod 600 "$TEMP_DIR/tokens.txt"
+    export MMIV_VERIFICATION_TOKEN_FILE="$TEMP_DIR/tokens.txt"
+    MMIV_VERIFICATION_ACCOUNT_FILE="$ACCOUNT_FILE" python3 scripts/cd/grant-verification-permission.py
+    AUTH_DOCKER_ARGS=(--env-file "$TEMP_DIR/auth.env")
+  fi
+}
+prepare_auth
+
 echo 'Running functional endpoint tests through the SSM tunnel'
-python3 scripts/cd/test-endpoints.py \
+ENDPOINT_TOKEN="${API_TEST_TOKEN:-}"
+# User Access cases explicitly log in and select their own token. Keep their
+# anonymous/invalid-token requests unauthenticated instead of replacing headers.
+if [[ "$SERVICE_NAME" == user-access-service ]]; then ENDPOINT_TOKEN=; fi
+API_TEST_TOKEN="$ENDPOINT_TOKEN" python3 scripts/cd/test-endpoints.py \
   --service "${DAST_SERVICE_NAME:?DAST_SERVICE_NAME is required}" \
   --base-url "http://127.0.0.1:$LOCAL_PORT" \
   --report "$REPORT_DIR/endpoint-tests.json"
 
+# Do not spend the scanner's token lifetime on earlier functional tests.
+prepare_auth
 echo '[3/3] Running ZAP on GitHub runner; scanner output streams below'
 echo "ZAP scan starts at: $TARGET_URL"
 SCAN_ARGS=(zap-baseline.py -t "$TARGET_URL" -m 1 -T 5 -d -l WARN -I)
@@ -164,7 +211,7 @@ PY
   echo "Active API scan: $SERVICE_NAME using $OPENAPI_FILE; requests may change test data."
 fi
 docker create --user 0:0 --name "$ZAP_CONTAINER" --network host \
-  --volume /zap/wrk -e PYTHONUNBUFFERED=1 "$ZAP_IMAGE" \
+  --volume /zap/wrk -e PYTHONUNBUFFERED=1 "${AUTH_DOCKER_ARGS[@]}" "$ZAP_IMAGE" \
   "${SCAN_ARGS[@]}" \
   -J zap-report.json -r zap-report.html > "$REPORT_DIR/container-id.txt"
 if [[ "$SCAN_MODE" == api ]]; then

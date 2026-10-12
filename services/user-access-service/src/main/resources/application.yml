@@ -1,6 +1,11 @@
 server:
   port: ${SERVER_PORT:8083}
 spring:
+  rabbitmq:
+    host: ${SPRING_RABBITMQ_HOST:localhost}
+    port: ${SPRING_RABBITMQ_PORT:5672}
+    username: ${SPRING_RABBITMQ_USERNAME:guest}
+    password: ${SPRING_RABBITMQ_PASSWORD:guest}
   application:
     name: user-access-service
   datasource:
@@ -34,3 +39,7 @@ eureka:
   instance:
     prefer-ip-address: true
     instance-id: ${spring.application.name}:${spring.cloud.client.ip-address}:${server.port}
+
+# All services publish through the shared durable RabbitMQ outbox.
+mmiv.events.enabled: ${MMIV_EVENTS_ENABLED:true}
+mmiv.events.outbox-directory: ${MMIV_EVENTS_OUTBOX_DIRECTORY:./.mmiv-outbox}

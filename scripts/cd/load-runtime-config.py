@@ -64,8 +64,10 @@ def values(config, mode):
     else:
         smoke = section(config, 'userAccessSmoke')
         if smoke is not None:
-            for key, name in [('username', 'USERNAME'), ('password', 'PASSWORD'), ('userId', 'USER_ID')]:
+            for key, name in [('username', 'USERNAME'), ('password', 'PASSWORD')]:
                 output['USER_ACCESS_TEST_' + name] = text(smoke, key)
+            if smoke.get('userId') is not None:
+                output['USER_ACCESS_TEST_USER_ID'] = text(smoke, 'userId')
     return output
 
 

@@ -102,6 +102,36 @@ public class OracleUserRepository implements UserRepository {
 
   @Override
   @Transactional
+  public void create(User user) {
+    jdbcTemplate.update(
+        """
+        INSERT INTO app_users (user_id, username, role, active, password_hash)
+        VALUES (?, ?, ?, ?, ?)
+        """,
+        user.getUserId(),
+        user.getUsername(),
+        user.getRole(),
+        user.isActive() ? 1 : 0,
+        user.getPasswordHash());
+    for (Permission permission : user.getPermissions()) {
+      jdbcTemplate.update(
+          "INSERT INTO user_permissions (user_id, permission) VALUES (?, ?)",
+          user.getUserId(),
+          permission.name());
+    }
+  }
+
+  @Override
+  @Transactional
+  public boolean deleteVerificationAccount(String userId) {
+    return jdbcTemplate.update(
+        "DELETE FROM app_users WHERE user_id = ? AND role = 'USER' "
+            + "AND REGEXP_LIKE(username, '^mmiv_ci_[0-9a-f]{32}$', 'c')",
+        userId) == 1;
+  }
+
+  @Override
+  @Transactional
   public void save(User user) {
     jdbcTemplate.update(
         """

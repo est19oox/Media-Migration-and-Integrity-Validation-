@@ -15,15 +15,15 @@ class IntegrityControllerContractTest {
         String checksum = "a".repeat(64);
         when(service.validate("bucket", "key", checksum)).thenReturn(
                 new ValidationResponse("bucket", "key", "SHA-256", checksum, checksum, true));
-        var mvc = MockMvcBuilders.standaloneSetup(new IntegrityController(mock(ChecksumService.class), service)).build();
+        var mvc = MockMvcBuilders.standaloneSetup(new IntegrityController(mock(ChecksumService.class), service, mock(mmiv.integration.IntegrityMetadataGuard.class), mock(mmiv.events.EventPublisher.class))).setCustomArgumentResolvers(new org.springframework.security.web.method.annotation.AuthenticationPrincipalArgumentResolver()).build();
         mvc.perform(post("/api/integrity/validate").contentType("application/json")
-                .content("{\"transferId\":\"transfer-1\",\"bucket\":\"bucket\",\"objectKey\":\"key\",\"sourceChecksum\":\"" + checksum + "\"}"))
-                .andExpect(status().isOk()).andExpect(jsonPath("$.transferId").value("transfer-1"))
+                .content("{\"transferId\":\"12345678-1234-4234-8234-123456789012\",\"bucket\":\"bucket\",\"objectKey\":\"key\",\"sourceChecksum\":\"" + checksum + "\"}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.transferId").value("12345678-1234-4234-8234-123456789012"))
                 .andExpect(jsonPath("$.validationResult").value("PASSED"));
     }
     @Test void invalidChecksumIsRejectedBeforeReadingS3() throws Exception {
         var service = mock(IntegrityValidationService.class);
-        var mvc = MockMvcBuilders.standaloneSetup(new IntegrityController(mock(ChecksumService.class), service)).build();
+        var mvc = MockMvcBuilders.standaloneSetup(new IntegrityController(mock(ChecksumService.class), service, mock(mmiv.integration.IntegrityMetadataGuard.class), mock(mmiv.events.EventPublisher.class))).setCustomArgumentResolvers(new org.springframework.security.web.method.annotation.AuthenticationPrincipalArgumentResolver()).build();
         mvc.perform(post("/api/integrity/validate").contentType("application/json")
                 .content("{\"bucket\":\"bucket\",\"objectKey\":\"key\",\"sourceChecksum\":\"invalid\"}"))
                 .andExpect(status().isBadRequest());

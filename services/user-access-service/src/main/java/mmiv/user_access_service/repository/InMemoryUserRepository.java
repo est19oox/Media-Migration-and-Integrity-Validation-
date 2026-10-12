@@ -1,6 +1,6 @@
 package mmiv.user_access_service.repository;
 
-import java.util.HashMap;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.Map;
 import java.util.Optional;
 import mmiv.user_access_service.model.DestinationAccess;
@@ -13,7 +13,15 @@ import org.springframework.stereotype.Repository;
 @Profile("test")
 public class InMemoryUserRepository implements UserRepository {
 
-  private final Map<String, User> users = new HashMap<>();
+  private final Map<String, User> users = new ConcurrentHashMap<>();
+
+  @Override
+  public synchronized void create(User user) {
+    if (users.containsKey(user.getUserId()) || findByUsername(user.getUsername()).isPresent()) {
+      throw new org.springframework.dao.DuplicateKeyException("User already exists");
+    }
+    users.put(user.getUserId(), user);
+  }
 
   @Override
   public void save(User user) {
@@ -38,6 +46,14 @@ public class InMemoryUserRepository implements UserRepository {
   @Override
   public Optional<User> findById(String userId) {
     return Optional.ofNullable(users.get(userId));
+  }
+
+  @Override
+  public boolean deleteVerificationAccount(String userId) {
+    User user = users.get(userId);
+    return user != null && "USER".equals(user.getRole())
+        && user.getUsername() != null && user.getUsername().matches("mmiv_ci_[0-9a-f]{32}")
+        && users.remove(userId, user);
   }
 
   @Override

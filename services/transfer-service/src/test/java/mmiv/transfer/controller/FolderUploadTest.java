@@ -49,7 +49,14 @@ class FolderUploadTest {
         strategy = spy(new S3TransferStrategy(s3, "test-bucket", validator));
         var transfers = new TransferService(validator, new TransferStrategyFactory(List.of(strategy)), passingIntegrity(), passingCleanup(), mock(mmiv.transfer.logging.FileEventLogger.class));
         folders = new FolderUploadService(transfers, validator);
-        mvc = MockMvcBuilders.standaloneSetup(new FolderUploadController(folders))
+        var metadata=mock(mmiv.transfer.integration.MetadataClient.class);
+        when(metadata.allocate(anyString(),anyLong(),nullable(String.class),anyString())).thenAnswer(call -> {
+            String name=call.getArgument(0);long size=call.getArgument(1);String path=call.getArgument(3);
+            var id=java.util.UUID.randomUUID();
+            return new mmiv.transfer.integration.MetadataClient.Plan(id,id,java.util.UUID.randomUUID(),"owner","test-bucket","test-bucket",
+                    "migrations/"+id+"/"+path,null,name,validator.uploadContentType(name),size,"UPLOAD",path);
+        });
+        mvc = MockMvcBuilders.standaloneSetup(new FolderUploadController(new mmiv.transfer.integration.MetadataTransferFacade(metadata,transfers,folders,mock(mmiv.events.EventPublisher.class),validator)))
                 .setControllerAdvice(new TransferExceptionHandler()).build();
     }
     @Test void preservesNestedPathsAndDuplicateBasenamesAndCleansTemporaryFiles() throws Exception {
@@ -65,8 +72,9 @@ class FolderUploadTest {
         verify(strategy, times(2)).transferUploaded(sources.capture());
         var first = sources.getAllValues().get(0);
         var second = sources.getAllValues().get(1);
-        String prefix = first.key().substring(0, first.key().indexOf("album/"));
-        assertEquals(prefix + "album/sub/deep/a.txt", second.key());
+        assertTrue(first.key().matches("migrations/[0-9a-f-]+/album/a.txt"));
+        assertTrue(second.key().matches("migrations/[0-9a-f-]+/album/sub/deep/a.txt"));
+        assertNotEquals(first.key(), second.key());
         assertFalse(Files.exists(first.path()));
         assertFalse(Files.exists(second.path()));
     }

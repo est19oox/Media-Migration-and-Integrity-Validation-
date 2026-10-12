@@ -10,6 +10,10 @@ public interface UserRepository {
 
   void save(User user);
 
+  void create(User user);
+
+  boolean deleteVerificationAccount(String userId);
+
   Optional<User> findByUsername(String username);
 
   void grantDestinationAccess(String userId, String destination, Permission permission);

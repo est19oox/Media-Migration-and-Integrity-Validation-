@@ -1,3 +1,4 @@
+
 package mmiv;
 
 import mmiv.repository.FileMetadataRepository;
@@ -7,17 +8,17 @@ import mmiv.runner.DiscoveryRunner;
 import org.junit.jupiter.api.Test;
 
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
-/**
- * Verifies that the whole application context starts, including the security
- * configuration. The data source is excluded and the Oracle repositories are
- * mocked by the {@code test} profile, so no database is required.
- */
-@SpringBootTest
-@ActiveProfiles("test")
+@SpringBootTest(properties = {
+        "discovery.root=/tmp",
+        "spring.autoconfigure.exclude=org.springframework.boot.jdbc.autoconfigure.DataSourceAutoConfiguration",
+        "spring.main.web-application-type=none",
+        "eureka.client.enabled=false"
+})
 class ApplicationTest {
+
+    @MockitoBean private mmiv.integration.MetadataPlanRepository metadataPlanRepository;
 
     // Mock the metadata repository to avoid Oracle dependency.
     @MockitoBean

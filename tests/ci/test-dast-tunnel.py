@@ -20,6 +20,7 @@ class TunnelTest(unittest.TestCase):
         self.env = {**os.environ, 'PATH': str(self.directory) + os.pathsep + os.environ['PATH'],
                     'INSTANCE_ID': 'i-test', 'DAST_PORT': '8080', 'DAST_SERVICE_NAME': 'api-gateway',
                     'SCANNER_TOOLS_PREPARED': 'true',
+                    'USER_ACCESS_TEST_USERNAME': 'test-user', 'USER_ACCESS_TEST_PASSWORD': 'test-pass',
                     'DAST_REPORT_DIR': str(self.directory / 'report'), 'TEST_DIRECTORY': str(self.directory)}
         self.env.pop('DAST_LOCAL_PORT', None)
         self.tool('docker', '#!/bin/sh\nexit 0\n')
@@ -62,6 +63,15 @@ elif operation == 'start-session':
             self.send_response(200)
             self.end_headers()
             self.wfile.write(b'{{"status":"UP"}}')
+        def do_POST(self):
+            body = json.loads(self.rfile.read(int(self.headers['Content-Length'])))
+            if self.path != '/user-access/api/auth/login' or body != {{'username': 'test-user', 'password': 'test-pass'}}:
+                self.send_response(401)
+                self.end_headers()
+                return
+            self.send_response(200)
+            self.end_headers()
+            self.wfile.write(b'{{"accessToken":"test.eyJzdWIiOiJ0ZXN0LXVzZXItaWQifQ.signature","tokenType":"Bearer"}}')
         def log_message(self, *args):
             pass
     server = http.server.HTTPServer(('127.0.0.1', port), Handler)

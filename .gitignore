@@ -26,5 +26,6 @@ __pycache__/
 # Local runtime state and reports
 .ci/
 jenkins/.env
-services/reporting-service/.env
 jenkins_home/
+
+**/.mmiv-outbox/

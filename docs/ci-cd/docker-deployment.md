@@ -1,3 +1,7 @@
+# Current integration
+
+RabbitMQ, MongoDB, and all seven services are now enabled. See [the integration guide](../integration/services.md) for the current logging and destination authorization contracts. The SQS sections below describe the retained legacy infrastructure only.
+
 # Docker release deployment
 
 The GitHub pipeline builds all enabled images in parallel and deploys one Compose
@@ -52,7 +56,7 @@ the GitHub verification runner with separate SSM tunnels for each service port.
 | API Gateway | 8080 | Last |
 
 Reporting 8084 and Discovery 8085 remain commented out until their owners complete the services.
-User Access uses a private immutable Oracle/JWT configuration bundle. The log service owner will implement the SQS consumer.
+User Access uses a private immutable Oracle/JWT configuration bundle. Reporting now consumes RabbitMQ events; retained SQS queues are legacy storage.
 Gateway readiness checks its Transfer routes; each enabled backend must also pass
 its health and current-instance Eureka registration checks.
 

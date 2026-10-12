@@ -11,7 +11,7 @@ import uuid
 import base64
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
-from urllib.request import Request, urlopen
+from urllib.request import Request, urlopen, build_opener, HTTPRedirectHandler
 
 
 def expand(value, variables):
@@ -76,12 +76,18 @@ def run_case(case, base_url, token):
     headers = {"Content-Type": "application/json", **case.get("headers", {})}
     if "multipart" in case:
         data, headers["Content-Type"] = multipart_body(case["multipart"])
-    if token:
+    if token and not case.get("anonymous"):
         headers["Authorization"] = "Bearer " + token
     request = Request(base_url + path, data=data,
                       method=case.get("method", "GET"), headers=headers)
     try:
-        with urlopen(request, timeout=case.get("timeout", 60)) as response:
+        opener = urlopen
+        if case.get("follow_redirects") is False:
+            class NoRedirect(HTTPRedirectHandler):
+                def redirect_request(self, *args):
+                    return None
+            opener = build_opener(NoRedirect()).open
+        with opener(request, timeout=case.get("timeout", 60)) as response:
             status, content = response.status, response.read()
             response_headers = response.headers
     except HTTPError as error:

@@ -75,6 +75,16 @@
     </dependencyManagement>
 
     <dependencies>
+    <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-amqp</artifactId></dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-security-oauth2-resource-server</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-security-test</artifactId>
+            <scope>test</scope>
+        </dependency>
         <dependency>
             <groupId>org.springframework.cloud</groupId>
             <artifactId>spring-cloud-starter-netflix-eureka-client</artifactId>
@@ -101,10 +111,6 @@
             <artifactId>s3</artifactId>
         </dependency>
         <dependency>
-            <groupId>software.amazon.awssdk</groupId>
-            <artifactId>sqs</artifactId>
-        </dependency>
-        <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-webmvc-test</artifactId>
             <scope>test</scope>
@@ -114,6 +120,13 @@
     <build>
         <finalName>transfer-service</finalName>
         <plugins>
+      <plugin><groupId>org.codehaus.mojo</groupId><artifactId>build-helper-maven-plugin</artifactId><version>3.6.1</version>
+        <executions><execution><id>shared-events</id><phase>generate-sources</phase><goals><goal>add-source</goal><goal>add-resource</goal></goals>
+          <configuration><sources><source>${project.basedir}/../../common/src/main/java</source></sources>
+            <resources><resource><directory>${project.basedir}/../../common/src/main/resources</directory></resource></resources></configuration>
+        </execution></executions></plugin>
+      <plugin><groupId>org.apache.maven.plugins</groupId><artifactId>maven-surefire-plugin</artifactId>
+        <configuration><systemPropertyVariables><mmiv.events.enabled>false</mmiv.events.enabled><management.health.rabbit.enabled>false</management.health.rabbit.enabled></systemPropertyVariables></configuration></plugin>
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>

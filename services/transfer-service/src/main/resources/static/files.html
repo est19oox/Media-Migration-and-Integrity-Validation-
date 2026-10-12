@@ -7,6 +7,7 @@
 body{font:16px system-ui;max-width:850px;margin:40px auto;padding:24px;background:#f4f6fa;color:#162033}main{background:white;padding:30px;border-radius:16px}input{width:95%;padding:10px}button{margin:16px 0;padding:10px 20px}img,video{max-width:100%;max-height:65vh}iframe{width:100%;height:65vh;border:0}pre{white-space:pre-wrap;overflow-wrap:anywhere}#status{overflow-wrap:anywhere}
 </style>
 <main>
+<button id="logout" type="button" style="float:right">退出登录 / Sign out</button>
 <h1>查看云上的文件</h1>
 <p>输入上传结果中的 fileId。<a href="/upload.html">上传新文件</a></p>
 <form id="form"><label for="fileId">fileId</label><input id="fileId" required><button>查看文件</button></form>
@@ -14,6 +15,7 @@ body{font:16px system-ui;max-width:850px;margin:40px auto;padding:24px;backgroun
 <p id="links" hidden><a id="open" target="_blank" rel="noopener">独立窗口打开</a> · <a id="download">下载原文件</a></p>
 <div id="preview"></div>
 </main>
+<script src="/auth.js"></script>
 <script>
 document.querySelector('#form').addEventListener('submit', async event => {
   event.preventDefault();
@@ -25,7 +27,7 @@ document.querySelector('#form').addEventListener('submit', async event => {
   const url = '/api/v1/files/' + encodeURIComponent(id) + '/content';
   status.textContent = '正在读取文件信息……';
   try {
-    const response = await fetch(url, {method: 'HEAD'});
+    const response = await mmivAuth.fetch(url, {method: 'HEAD'});
     if (!response.ok) throw new Error('无法读取文件，HTTP ' + response.status);
     const type = response.headers.get('Content-Type') || '';
     const size = Number(response.headers.get('Content-Length'));
@@ -38,7 +40,7 @@ document.querySelector('#form').addEventListener('submit', async event => {
     else if (type.startsWith('video/')) { element = document.createElement('video'); element.controls = true; element.preload = 'metadata'; }
     else if (type.startsWith('text/plain')) {
       if (size > 1048576) { status.textContent += ' · 文本超过 1 MiB，请下载查看'; return; }
-      const content = await fetch(url); if (!content.ok) throw new Error('文本读取失败');
+      const content = await mmivAuth.fetch(url); if (!content.ok) throw new Error('文本读取失败');
       element = document.createElement('pre'); element.textContent = await content.text();
     } else if (type.startsWith('application/pdf')) {
       element = document.createElement('iframe'); element.title = 'PDF 预览';

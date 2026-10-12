@@ -13,6 +13,30 @@
   "services": {
     "transfer-service": [
       {
+        "name": "anonymous upload rejected",
+        "method": "POST",
+        "path": "/api/v1/transfers",
+        "body": {},
+        "status": 401,
+        "anonymous": true
+      },
+      {
+        "name": "anonymous file read rejected",
+        "path": "/api/v1/files/invalid!/content",
+        "status": 401,
+        "anonymous": true
+      },
+      {
+        "name": "anonymous transfer page redirects to login",
+        "path": "/upload.html",
+        "status": 302,
+        "anonymous": true,
+        "follow_redirects": false,
+        "header_equals": {
+          "Location": "/login.html"
+        }
+      },
+      {
         "name": "missing source",
         "method": "POST",
         "path": "/api/v1/transfers",
@@ -359,7 +383,27 @@
         ]
       }
     ],
-    "integrity-service": [],
+    "integrity-service": [
+      {
+        "name": "anonymous validation rejected",
+        "path": "/api/integrity/validate",
+        "method": "POST",
+        "body": {},
+        "status": 401,
+        "anonymous": true
+      },
+      {
+        "name": "invalid checksum rejected before object access",
+        "path": "/api/integrity/validate",
+        "method": "POST",
+        "body": {
+          "bucket": "invalid",
+          "objectKey": "invalid",
+          "sourceChecksum": "bad"
+        },
+        "status": 400
+      }
+    ],
     "user-access-service": [
       {
         "name": "public JWKS",
@@ -472,10 +516,52 @@
         "json_equals": {
           "authorised": false
         }
+      },
+      {
+        "name": "invalid signup rejected",
+        "method": "POST",
+        "path": "/api/auth/signup",
+        "body": {
+          "username": "ab",
+          "password": "short"
+        },
+        "status": 400,
+        "anonymous": true
+      },
+      {
+        "name": "signup page available",
+        "method": "GET",
+        "path": "/signup.html",
+        "status": 200,
+        "anonymous": true
       }
     ],
-    "reporting-service": [],
-    "discovery-service": [],
+    "reporting-service": [
+      {
+        "name": "anonymous report read rejected",
+        "path": "/api/reports/00000000-0000-0000-0000-000000000000",
+        "status": 401,
+        "anonymous": true
+      },
+      {
+        "name": "global report listing is denied",
+        "path": "/api/reports",
+        "status": 403
+      }
+    ],
+    "discovery-service": [
+      {
+        "name": "anonymous metadata read rejected",
+        "path": "/api/metadata/plans/00000000-0000-0000-0000-000000000000",
+        "status": 401,
+        "anonymous": true
+      },
+      {
+        "name": "metadata lookup is scoped to the account",
+        "path": "/api/metadata/plans/00000000-0000-0000-0000-000000000000",
+        "status": 404
+      }
+    ],
     "service-registry": [
       {
         "name": "Eureka dashboard",
@@ -495,6 +581,30 @@
       }
     ],
     "api-gateway": [
+      {
+        "name": "anonymous upload rejected",
+        "method": "POST",
+        "path": "/api/v1/transfers",
+        "body": {},
+        "status": 401,
+        "anonymous": true
+      },
+      {
+        "name": "anonymous file read rejected",
+        "path": "/api/v1/files/invalid!/content",
+        "status": 401,
+        "anonymous": true
+      },
+      {
+        "name": "anonymous transfer page redirects to login",
+        "path": "/upload.html",
+        "status": 302,
+        "anonymous": true,
+        "follow_redirects": false,
+        "header_equals": {
+          "Location": "/login.html"
+        }
+      },
       {
         "name": "gateway info endpoint",
         "path": "/actuator/info",
@@ -517,9 +627,10 @@
         "status": 200
       },
       {
-        "name": "gateway routes home to upload page",
+        "name": "gateway routes home to login page",
         "path": "/",
-        "status": 200
+        "status": 200,
+        "anonymous": true
       },
       {
         "name": "missing source",
@@ -866,6 +977,30 @@
           "failed",
           "files"
         ]
+      },
+      {
+        "name": "gateway login page",
+        "path": "/login.html",
+        "status": 200,
+        "anonymous": true
+      },
+      {
+        "name": "invalid signup rejected",
+        "method": "POST",
+        "path": "/user-access/api/auth/signup",
+        "body": {
+          "username": "ab",
+          "password": "short"
+        },
+        "status": 400,
+        "anonymous": true
+      },
+      {
+        "name": "signup page available",
+        "method": "GET",
+        "path": "/signup.html",
+        "status": 200,
+        "anonymous": true
       }
     ]
   }

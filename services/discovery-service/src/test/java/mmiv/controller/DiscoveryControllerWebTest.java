@@ -13,7 +13,6 @@ import mmiv.service.ManifestProcessingService;
 import org.junit.jupiter.api.Test;
 
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.MediaType;
@@ -28,13 +27,6 @@ import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
-/**
- * Controller-level behaviour of the Discovery REST API.
- *
- * <p>Security filters are disabled here: this test covers response bodies and
- * error mapping, while bearer-token rules are covered separately by
- * {@code mmiv.security.DiscoverySecurityIntegrationTest}.
- */
 @WebMvcTest(
         controllers = DiscoveryController.class,
         properties = {
@@ -42,8 +34,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
                 "discovery.manifest-path=/test/manifest.csv"
         }
 )
-@AutoConfigureMockMvc(addFilters = false)
 class DiscoveryControllerWebTest {
+    @org.springframework.test.context.bean.override.mockito.MockitoBean mmiv.events.EventPublisher auditPublisher;
+
 
     @Autowired
     private MockMvc mockMvc;

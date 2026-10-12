@@ -78,6 +78,11 @@ public class TransferService {
         return uploadToKey(file, fileName, "uploads/" + UUID.randomUUID() + "/" + fileName, startedAt);
     }
 
+    public UploadResponse uploadAssigned(MultipartFile file, String fileName, String key) {
+        validator.validateUpload(file, maxUploadBytes);
+        return uploadToKey(file, fileName, key);
+    }
+
     UploadResponse uploadToKey(MultipartFile file, String fileName, String key) {
         return uploadToKey(file, fileName, key, Instant.now());
     }

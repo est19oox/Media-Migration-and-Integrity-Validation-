@@ -6,6 +6,10 @@ import java.util.Map;
 
 @RestControllerAdvice
 public class TransferExceptionHandler {
+    @ExceptionHandler(org.springframework.web.server.ResponseStatusException.class)
+    public ResponseEntity<Map<String,String>> integrationFailure(org.springframework.web.server.ResponseStatusException e) {
+        return ResponseEntity.status(e.getStatusCode()).body(Map.of("error", e.getReason()==null?"Request rejected":e.getReason()));
+    }
     @ExceptionHandler(mmiv.transfer.files.FileRangeException.class)
     public ResponseEntity<Map<String, String>> invalidRange(mmiv.transfer.files.FileRangeException e) {
         return ResponseEntity.status(HttpStatus.REQUESTED_RANGE_NOT_SATISFIABLE)

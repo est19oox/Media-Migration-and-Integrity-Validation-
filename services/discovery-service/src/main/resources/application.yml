@@ -3,37 +3,33 @@ server:
   port: ${SERVER_PORT:8085}
 
 spring:
+  rabbitmq:
+    host: ${SPRING_RABBITMQ_HOST:localhost}
+    port: ${SPRING_RABBITMQ_PORT:5672}
+    username: ${SPRING_RABBITMQ_USERNAME:guest}
+    password: ${SPRING_RABBITMQ_PASSWORD:guest}
   application:
     name: discovery-service
 
   datasource:
-    url: ${DB_URL}
-    username: ${DB_USERNAME}
-    password: ${DB_PASSWORD}
+    url: ${DB_URL:${ORACLE_JDBC_URL}}
+    username: ${DB_USERNAME:${ORACLE_USER}}
+    password: ${DB_PASSWORD:${ORACLE_PASSWORD}}
     driver-class-name: oracle.jdbc.OracleDriver
 
 eureka:
+  instance:
+    prefer-ip-address: true
+    instance-id: ${spring.application.name}:${spring.cloud.client.ip-address}:${server.port}
   client:
     enabled: ${EUREKA_CLIENT_ENABLED:true}
     service-url:
       defaultZone: ${EUREKA_DEFAULT_ZONE:http://localhost:8761/eureka/}
     register-with-eureka: true
     fetch-registry: true
-    healthcheck:
-      enabled: true
-  instance:
-    prefer-ip-address: true
-    instance-id: ${spring.application.name}:${spring.cloud.client.ip-address}:${server.port}
-
-# Bearer tokens are issued by the User Access Service. This service only
-# verifies them, using that service's published JWKS endpoint. The issuer
-# default matches the User Access Service configuration.
-jwt:
-  issuer: ${JWT_ISSUER:https://auth.mmiv.example}
-  jwk-set-uri: ${JWT_JWKS_URI:http://localhost:8083/.well-known/jwks.json}
 
 discovery:
-  root: ${DISCOVERY_ROOT}
+  root: ${DISCOVERY_ROOT:/media}
   run-on-startup: false
   manifest-path: ${DISCOVERY_MANIFEST_PATH:}
   supported-file-types:
@@ -43,6 +39,11 @@ discovery:
     - PPT
     - PPTX
     - PNG
+    - JPG
+    - JPEG
+    - TXT
+    - DOC
+    - DOCX
 
 management:
   endpoints:
@@ -53,3 +54,14 @@ management:
     health:
       probes:
         enabled: true
+
+# All services publish through the shared durable RabbitMQ outbox.
+mmiv.events.enabled: ${MMIV_EVENTS_ENABLED:true}
+mmiv.events.outbox-directory: ${MMIV_EVENTS_OUTBOX_DIRECTORY:./.mmiv-outbox}
+
+mmiv.s3.bucket: ${MMIV_BUCKET_NAME:media-migration-dev-landing}
+mmiv.metadata.destination-id: ${MMIV_DESTINATION_ID:${MMIV_BUCKET_NAME:media-migration-dev-landing}}
+mmiv.auth.issuer: ${USER_ACCESS_JWT_ISSUER:https://auth.mmiv.example}
+mmiv.auth.jwk-set-uri: ${USER_ACCESS_JWK_SET_URI:http://user-access-service:8083/.well-known/jwks.json}
+mmiv.access.url: ${USER_ACCESS_URL:http://user-access-service:8083}
+mmiv.transfer.url: ${TRANSFER_URL:http://transfer-service:8081}

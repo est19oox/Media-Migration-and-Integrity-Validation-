@@ -29,13 +29,14 @@
               }
             }
           }
-        }
+        },
+        "security": []
       }
     },
     "/api/v1/transfers": {
       "post": {
         "operationId": "transferMedia",
-        "summary": "Upload a local file to S3",
+        "summary": "Upload a local file to its metadata-assigned destination",
         "requestBody": {
           "required": true,
           "content": {
@@ -49,6 +50,24 @@
                   "file": {
                     "type": "string",
                     "format": "binary"
+                  },
+                  "destinationId": {
+                    "type": "string",
+                    "description": "Configured destination ID; permission is checked by metadata"
+                  }
+                }
+              }
+            },
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "metadataId"
+                ],
+                "properties": {
+                  "metadataId": {
+                    "type": "string",
+                    "format": "uuid"
                   }
                 }
               }
@@ -270,5 +289,19 @@
         }
       }
     }
-  }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
+    }
+  },
+  "security": [
+    {
+      "bearerAuth": []
+    }
+  ]
 }

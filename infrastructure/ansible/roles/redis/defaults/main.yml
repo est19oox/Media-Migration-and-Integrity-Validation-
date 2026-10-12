@@ -1,7 +1,0 @@
-# Redis is temporarily disabled. Restore this file before enabling Redis.
-# ---
-# mmiv_redis_image: redis:8.10.1
-# mmiv_redis_name: mmiv-redis
-# mmiv_redis_volume: mmiv-redis-data
-# mmiv_redis_maxmemory: 128mb
-# mmiv_redis_container_memory: 256M
