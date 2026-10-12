@@ -26,6 +26,9 @@ public class BrowserSessionController {
     public ResponseEntity<Void> establish(@AuthenticationPrincipal Jwt jwt) {
         // The filter chain verifies this token before this method can issue a cookie.
         long remaining = Math.max(0, Duration.between(Instant.now(), jwt.getExpiresAt()).getSeconds());
+        if (remaining == 0) {
+            return ResponseEntity.status(401).header(HttpHeaders.CACHE_CONTROL, "no-store").build();
+        }
         return ResponseEntity.noContent().header(HttpHeaders.SET_COOKIE,
                 cookie(jwt.getTokenValue(), Math.min(1800, remaining)).toString())
                 .header(HttpHeaders.CACHE_CONTROL, "no-store").build();

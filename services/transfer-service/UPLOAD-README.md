@@ -4,7 +4,7 @@ Open the Gateway root on port 8080 to log in. Login establishes an HttpOnly cook
 
 POST /api/v1/transfers accepts multipart/form-data with one part named file. Users send actual local bytes; no EC2 sourcePath is required. Existing JSON path migration remains available with Content-Type application/json.
 
-For deployed browser access, run bash scripts/cd/open-gateway-tunnel.sh <instance-id> and open http://localhost:8080/upload.html while the tunnel is running. Requests go through API Gateway. See docs/ci-cd/gateway-access.md for PowerShell instructions. Deployed host ports bind to loopback and EC2 has no public inbound rules. For a local Spring Boot run, open http://localhost:8081/upload.html.
+For deployed browser access, run bash scripts/cd/open-gateway-tunnel.sh <instance-id> and open http://localhost:8080/ while the tunnel is running and sign in. Requests go through API Gateway. See docs/ci-cd/gateway-access.md for PowerShell instructions. Only the Gateway is exposed publicly on TCP 8080; backend ports bind to loopback. For local browser login, run the Gateway and User Access alongside Transfer and open http://localhost:8080/.
 
 Postman: POST /api/v1/transfers -> Body -> form-data -> file (type File) -> choose your file. Do not set Content-Type manually. Example from your own terminal:
 
@@ -38,8 +38,8 @@ The upload response now includes `fileId`. Keep this value to reopen the file. T
 Example after uploading (replace FILE_ID with the response value):
 
 ```bash
-curl -H "Authorization: Bearer $TOKEN" -o downloaded.png http://EC2_PUBLIC_IP:8081/api/v1/files/FILE_ID/download
-curl -i -H "Authorization: Bearer $TOKEN" -H 'Range: bytes=0-1023' http://EC2_PUBLIC_IP:8081/api/v1/files/FILE_ID/content
+curl -H "Authorization: Bearer $TOKEN" -o downloaded.png http://EC2_PUBLIC_IP:8080/api/v1/files/FILE_ID/download
+curl -i -H "Authorization: Bearer $TOKEN" -H 'Range: bytes=0-1023' http://EC2_PUBLIC_IP:8080/api/v1/files/FILE_ID/content
 ```
 
 Single byte ranges support MP4 seeking: closed, open-ended and suffix forms return 206. Unsupported, multiple or unsatisfiable ranges return 416 and `Content-Range: bytes */SIZE`. HEAD ignores Range. If-Range accepts the exact ETag; other values return the full file. Reads use the configured bucket and `If-Match` to prevent a HEAD/GET version race. S3 failures map to 403/404/412/502; no temporary download file is created.

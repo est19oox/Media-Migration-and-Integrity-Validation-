@@ -120,6 +120,10 @@ form.addEventListener('submit', async event => {
       signal: controller.signal
     });
     if (!session.ok) throw new Error('Could not establish your login session. Please try again.');
+    const confirmation = await fetch('/api/v1/session', {
+      credentials: 'same-origin', cache: 'no-store', signal: controller.signal
+    });
+    if (!confirmation.ok) throw new Error('Your login cookie could not be verified. Enable cookies and try again.');
     password.value = '';
     password.type = 'password';
     toggle.textContent = 'Show';

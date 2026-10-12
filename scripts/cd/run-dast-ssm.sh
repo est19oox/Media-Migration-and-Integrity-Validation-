@@ -140,13 +140,16 @@ echo "Deployed health endpoint reachable: $READY_URL"
 echo "ZAP target configured: $TARGET_URL"
 
 AUTH_DOCKER_ARGS=()
-if [[ "$SERVICE_NAME" == transfer-service || "$SERVICE_NAME" == api-gateway ]]; then
-  python3 scripts/cd/login-for-verification.py "http://127.0.0.1:$LOCAL_PORT" "$TEMP_DIR/auth.env"
-  API_TEST_TOKEN=$(sed -n 's/^API_TEST_TOKEN=//p' "$TEMP_DIR/auth.env")
-  printf '::add-mask::%s\n' "$API_TEST_TOKEN"
-  export API_TEST_TOKEN
-  AUTH_DOCKER_ARGS=(--env-file "$TEMP_DIR/auth.env")
-fi
+prepare_auth() {
+  if [[ "$SERVICE_NAME" == transfer-service || "$SERVICE_NAME" == api-gateway ]]; then
+    python3 scripts/cd/login-for-verification.py "http://127.0.0.1:$LOCAL_PORT" "$TEMP_DIR/auth.env"
+    API_TEST_TOKEN=$(sed -n 's/^API_TEST_TOKEN=//p' "$TEMP_DIR/auth.env")
+    printf '::add-mask::%s\n' "$API_TEST_TOKEN"
+    export API_TEST_TOKEN
+    AUTH_DOCKER_ARGS=(--env-file "$TEMP_DIR/auth.env")
+  fi
+}
+prepare_auth
 
 echo 'Running functional endpoint tests through the SSM tunnel'
 python3 scripts/cd/test-endpoints.py \
@@ -154,7 +157,9 @@ python3 scripts/cd/test-endpoints.py \
   --base-url "http://127.0.0.1:$LOCAL_PORT" \
   --report "$REPORT_DIR/endpoint-tests.json"
 
-echo '[3/3] Running ZAP on GitHub runner; scanner output streams below'
+# Do not spend the scanner's token lifetime on earlier functional tests.
+prepare_auth
+echo '[3/3] Running ZAP on GitHub runner; scanner output streams below' 
 echo "ZAP scan starts at: $TARGET_URL"
 SCAN_ARGS=(zap-baseline.py -t "$TARGET_URL" -m 1 -T 5 -d -l WARN -I)
 SCAN_TIMEOUT=600s

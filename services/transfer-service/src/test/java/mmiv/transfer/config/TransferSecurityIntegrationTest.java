@@ -19,7 +19,7 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
-import org.springframework.context.annotation.Import;
+import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
@@ -29,7 +29,11 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @WebMvcTest(controllers = {BrowserSessionController.class, TransferSecurityIntegrationTest.ProtectedProbe.class})
-@Import(TransferSecurityConfig.class)
+@ContextConfiguration(classes = {
+        TransferSecurityConfig.class,
+        BrowserSessionController.class,
+        TransferSecurityIntegrationTest.ProtectedProbe.class
+})
 class TransferSecurityIntegrationTest {
     static final String ISSUER = "https://auth.mmiv.example";
     static final KeyPair KEYS;
@@ -97,7 +101,7 @@ class TransferSecurityIntegrationTest {
         int signatureStart = signed.lastIndexOf('.') + 1;
         String forged = signed.substring(0, signatureStart)
                 + (signed.charAt(signatureStart) == 'A' ? 'B' : 'A') + signed.substring(signatureStart + 1);
-        for (String jwt : new String[] {token(ISSUER, Instant.now().minusSeconds(120)),
+        for (String jwt : new String[] {token(ISSUER, Instant.now().minusSeconds(1)),
                 token("https://wrong.example", Instant.now().plusSeconds(600)),
                 forged}) {
             mvc.perform(get("/api/v1/files/test/content").header("Authorization", "Bearer " + jwt))

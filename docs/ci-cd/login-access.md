@@ -7,7 +7,7 @@ This complete project includes the earlier login-page update. Rebuild and redepl
 1. Open http://EC2_PUBLIC_IP:8080/ or http://localhost:8080/ through the Gateway tunnel.
 2. Sign in using a User Access account, or select Create an account to register. Signup returns to login before opening Transfer.
 3. Login calls /user-access/api/auth/login, then sends the returned Bearer token to POST /api/v1/session. Transfer verifies its signature, issuer, subject and expiry before setting the MMIV_SESSION cookie.
-4. The browser redirects to /upload.html. Uploads and file previews/downloads use the HttpOnly SameSite=Strict cookie. The token is no longer stored in sessionStorage.
+4. Login confirms the browser cookie with GET /api/v1/session before redirecting to /upload.html. Uploads and file previews/downloads use the HttpOnly SameSite=Strict cookie. The token is no longer stored in sessionStorage.
 5. Sign out clears the browser cookie and returns to /login.html. Expired sessions return to login. Clearing a cookie does not revoke a separately retained JWT; it remains valid until expiry.
 
 Anonymous /upload.html and /files.html requests redirect to /login.html. Anonymous file APIs and uploads are rejected. Cookie-authenticated mutations require a CSRF token from GET /api/v1/session; auth.js handles this. Direct backend API access also checks JWTs. Health endpoints remain available for deployment checks.
@@ -47,3 +47,5 @@ Open /signup.html using the Create an account link on login. POST /user-access/a
 New accounts are active with role USER and no global or destination permissions. Clients cannot select roles or privileges. As documented above, the current Transfer gate checks login only, so these accounts can use Transfer; destination/ownership checks are a separate integration. Accounts persist in Oracle using the existing APP_USERS schema. Unique username constraints and an INSERT-only repository method prevent duplicate requests from overwriting existing credentials. No new migration or signup secret is needed.
 
 Signup does not include email verification or password reset. It returns to login after successful creation.
+
+The scanner obtains a fresh JWT after functional checks, so those checks do not consume its 30-minute authentication window. JWTs past their expiration time are rejected by Transfer even within the default validator clock-skew allowance.

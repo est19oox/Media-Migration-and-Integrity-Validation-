@@ -4,7 +4,7 @@ const {readFileSync} = require('node:fs');
 const {resolve} = require('node:path');
 const vm = require('node:vm');
 
-function loginHarness(loginOk = true, sessionOk = true) {
+function loginHarness(loginOk = true, sessionOk = true, confirmationOk = true) {
   const html = readFileSync(resolve(__dirname,
     '../../services/user-access-service/src/main/resources/static/login.html'), 'utf8');
   const nodes = {};
@@ -24,7 +24,8 @@ function loginHarness(loginOk = true, sessionOk = true) {
       return requests.length === 1
         ? {ok: loginOk, status: loginOk ? 200 : 401,
           json: async () => ({accessToken: 'test-token', tokenType: 'Bearer'})}
-        : {ok: sessionOk, status: sessionOk ? 204 : 401};
+        : requests.length === 2 ? {ok: sessionOk, status: sessionOk ? 204 : 401}
+        : {ok: confirmationOk, status: confirmationOk ? 200 : 401};
     }
   });
   return {nodes, requests, navigations,
@@ -38,12 +39,14 @@ test('login redirects only after the server establishes the browser cookie', asy
   assert.equal(JSON.parse(app.requests[0].options.body).username, 'alice');
   assert.equal(app.requests[1].url, '/api/v1/session');
   assert.equal(app.requests[1].options.headers.Authorization, 'Bearer test-token');
+  assert.equal(app.requests[2].url, '/api/v1/session');
+  assert.equal(app.requests[2].options.headers, undefined);
   assert.deepEqual(app.navigations, ['http://localhost:8080/upload.html']);
   assert.equal(app.nodes.password.value, '');
 });
 
 test('invalid credentials and failed cookie establishment never redirect', async () => {
-  for (const app of [loginHarness(false), loginHarness(true, false)]) {
+  for (const app of [loginHarness(false), loginHarness(true, false), loginHarness(true, true, false)]) {
     await app.submit();
     assert.equal(app.navigations.length, 0);
     assert.equal(app.nodes.submit.disabled, false);
