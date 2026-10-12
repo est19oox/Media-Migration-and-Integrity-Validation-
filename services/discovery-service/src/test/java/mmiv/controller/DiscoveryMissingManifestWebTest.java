@@ -1,6 +1,6 @@
-
 package mmiv.controller;
 
+import mmiv.events.DiscoveryEventPublisher;
 import mmiv.service.DiscoveryService;
 import mmiv.service.ManifestProcessingService;
 
@@ -18,11 +18,14 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * The unconfigured-manifest path returns 503.
+ * The unconfigured-manifest path returns HTTP 503.
  *
  * <p>Security filters are disabled here: this test covers the missing
  * configuration response, while bearer-token rules are covered separately by
  * {@code mmiv.security.DiscoverySecurityIntegrationTest}.
+ *
+ * <p>The DiscoveryEventPublisher is mocked so the controller can be
+ * instantiated without requiring a real RabbitMQ connection.
  */
 @WebMvcTest(
         controllers = DiscoveryController.class,
@@ -42,6 +45,10 @@ class DiscoveryMissingManifestWebTest {
 
     @MockitoBean
     private ManifestProcessingService manifestProcessingService;
+
+    // Mock RabbitMQ publisher to satisfy controller dependency.
+    @MockitoBean
+    private DiscoveryEventPublisher eventPublisher;
 
     @Test
     void missingManifestConfigurationShouldReturnHttp503()

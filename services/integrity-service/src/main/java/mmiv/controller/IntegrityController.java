@@ -7,15 +7,21 @@ import mmiv.dto.ValidationResponse;
 import mmiv.service.ChecksumService;
 import mmiv.service.IntegrityValidationService;
 
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.io.IOException;
+import java.util.regex.Pattern;
 
 @RestController
 @RequestMapping("/api/integrity")
 public class IntegrityController {
+
+    private static final Pattern SHA256_PATTERN =
+            Pattern.compile("^[a-fA-F0-9]{64}$");
 
     private final ChecksumService checksumService;
     private final IntegrityValidationService integrityValidationService;
@@ -48,21 +54,47 @@ public class IntegrityController {
     public ResponseEntity<ValidationResponse> validate(
             @RequestBody ValidationRequest request) throws IOException {
 
-        if (request.bucket() == null || request.bucket().isBlank()
-                || request.objectKey() == null || request.objectKey().isBlank()
-                || request.sourceChecksum() == null || !request.sourceChecksum().matches("(?i)[0-9a-f]{64}")
-                || (request.transferId() != null && (request.transferId().isBlank() || request.transferId().length() > 128))) {
-            return ResponseEntity.badRequest().build();
+        if (request == null
+                || request.bucket() == null
+                || request.bucket().isBlank()
+                || request.objectKey() == null
+                || request.objectKey().isBlank()
+                || request.sourceChecksum() == null
+                || !SHA256_PATTERN.matcher(request.sourceChecksum()).matches()) {
+
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Invalid validation request"
+            );
         }
-        ValidationResponse response =
+
+        ValidationResponse result =
                 integrityValidationService.validate(
                         request.bucket(),
                         request.objectKey(),
                         request.sourceChecksum()
                 );
 
-        return ResponseEntity.ok(new ValidationResponse(response.bucket(), response.objectKey(),
-                response.algorithm(), response.sourceChecksum(), response.destinationChecksum(), response.valid(),
-                request.transferId(), response.valid() ? "PASSED" : "FAILED"));
+        if (result == null) {
+            throw new IllegalStateException(
+                    "Integrity validation returned no result"
+            );
+        }
+
+        String validationResult =
+                result.valid() ? "PASSED" : "FAILED";
+
+        ValidationResponse response = new ValidationResponse(
+                result.bucket(),
+                result.objectKey(),
+                result.algorithm(),
+                result.sourceChecksum(),
+                result.destinationChecksum(),
+                result.valid(),
+                request.transferId(),
+                validationResult
+        );
+
+        return ResponseEntity.ok(response);
     }
 }

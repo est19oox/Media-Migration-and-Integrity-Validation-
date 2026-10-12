@@ -10,6 +10,12 @@ import org.springframework.stereotype.Service;
 
 import java.io.IOException;
 import java.time.LocalDateTime;
+import java.time.Instant;
+import java.time.Duration;
+import java.util.UUID;
+import java.util.Map;
+import java.util.HashMap;
+import mmiv.events.IntegrityEventPublisher;
 
 @Service
 public class IntegrityValidationService {
@@ -19,19 +25,27 @@ public class IntegrityValidationService {
 
     private final S3ChecksumService s3ChecksumService;
     private final IntegrityValidationLogRepository validationLogRepository;
+    private final IntegrityEventPublisher events;
 
     public IntegrityValidationService(
             S3ChecksumService s3ChecksumService,
-            IntegrityValidationLogRepository validationLogRepository) {
+            IntegrityValidationLogRepository validationLogRepository,
+            IntegrityEventPublisher events) {
 
         this.s3ChecksumService = s3ChecksumService;
         this.validationLogRepository = validationLogRepository;
+        this.events = events;
     }
 
     public ValidationResponse validate(
             String bucket,
             String objectKey,
             String sourceChecksum) throws IOException {
+        return validate(bucket, objectKey, sourceChecksum, null);
+    }
+
+    public ValidationResponse validate(String bucket, String objectKey, String sourceChecksum, String transferId) throws IOException {
+        Instant startedAt = Instant.now();
 
         logger.info(
                 "Starting integrity validation: bucket={}, objectKey={}",
@@ -79,6 +93,7 @@ public class IntegrityValidationService {
                     status
             );
 
+            publishResult(transferId, status, startedAt);
             return new ValidationResponse(
                     bucket,
                     objectKey,
@@ -109,7 +124,25 @@ public class IntegrityValidationService {
                     e
             );
 
+            publishResult(transferId, "ERROR", startedAt);
             throw e;
         }
+    }
+    private void publishResult(String transferId, String status, Instant startedAt) {
+        if (transferId == null) return;
+        UUID id;
+        try { id = UUID.fromString(transferId); }
+        catch (IllegalArgumentException e) { return; }
+        Map<String, Object> data = new HashMap<>();
+        data.put("transferId", transferId);
+        data.put("status", status);
+        data.put("checksumAlgorithm", "SHA-256");
+        data.put("durationMs", Math.max(0L, Duration.between(startedAt, Instant.now()).toMillis()));
+        if (!"PASSED".equals(status)) {
+            data.put("failure", Map.of("code", "FAILED".equals(status) ? "CHECKSUM_MISMATCH" : "VALIDATION_IO_ERROR",
+                    "message", "Integrity validation did not pass", "retryable", "ERROR".equals(status)));
+        }
+        events.publish("INTEGRITY_VALIDATION_COMPLETED", "integrity.validation.completed",
+                "integrity-service", id, IntegrityEventPublisher.fileId(id), data);
     }
 }

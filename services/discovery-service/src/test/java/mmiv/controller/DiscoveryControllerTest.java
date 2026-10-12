@@ -1,8 +1,8 @@
-
 package mmiv.controller;
 
 import mmiv.dto.DiscoveryResponse;
 import mmiv.dto.ManifestResponse;
+import mmiv.events.DiscoveryEventPublisher;
 import mmiv.model.DiscoveryRunResult;
 import mmiv.model.ManifestMatchResult;
 import mmiv.model.MigrationFileInventory;
@@ -12,6 +12,7 @@ import mmiv.service.ManifestProcessingService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.io.IOException;
 import java.nio.file.Path;
@@ -24,6 +25,7 @@ class DiscoveryControllerTest {
 
     private DiscoveryService discoveryService;
     private ManifestProcessingService manifestProcessingService;
+    private DiscoveryEventPublisher eventPublisher;
     private DiscoveryController controller;
 
     private final Path rootPath = Path.of("/test/media");
@@ -33,12 +35,16 @@ class DiscoveryControllerTest {
     void setUp() {
 
         discoveryService = mock(DiscoveryService.class);
+
         manifestProcessingService =
                 mock(ManifestProcessingService.class);
+
+        eventPublisher = mock(DiscoveryEventPublisher.class);
 
         controller = new DiscoveryController(
                 discoveryService,
                 manifestProcessingService,
+                eventPublisher,
                 rootPath.toString(),
                 csvPath.toString()
         );
@@ -65,7 +71,8 @@ class DiscoveryControllerTest {
         assertEquals(0, response.getBody().discovered());
         assertEquals(0, response.getBody().inserted());
 
-        verify(discoveryService).discoverAndSaveWithResult(rootPath);
+        verify(discoveryService)
+                .discoverAndSaveWithResult(rootPath);
     }
 
     @Test
@@ -118,54 +125,61 @@ class DiscoveryControllerTest {
         );
     }
 
-@Test
-void processManifestShouldCountMatchesAndMismatches()
-        throws IOException {
+    @Test
+    void processManifestShouldCountMatchesAndMismatches()
+            throws IOException {
 
-    ManifestMatchResult success =
-            ManifestMatchResult.success(null, null);
+        ManifestMatchResult success =
+                ManifestMatchResult.success(null, null);
 
-    ManifestMatchResult mismatch =
-            ManifestMatchResult.mismatch(
-                    null, null, "FILE_SIZE", "100"
-            );
+        ManifestMatchResult mismatch =
+                ManifestMatchResult.mismatch(
+                        null,
+                        null,
+                        "FILE_SIZE",
+                        "100"
+                );
 
-    when(manifestProcessingService.processManifest(
-            csvPath, rootPath
-    )).thenReturn(List.of(success, mismatch));
+        when(manifestProcessingService.processManifest(
+                csvPath,
+                rootPath
+        )).thenReturn(List.of(success, mismatch));
 
-    ResponseEntity<ManifestResponse> response =
-            controller.processManifest();
+        ResponseEntity<ManifestResponse> response =
+                controller.processManifest();
 
-    assertNotNull(response.getBody());
-    assertEquals(2, response.getBody().total());
-    assertEquals(1, response.getBody().matched());
-    assertEquals(1, response.getBody().mismatched());
-}
+        assertNotNull(response.getBody());
+        assertEquals(2, response.getBody().total());
+        assertEquals(1, response.getBody().matched());
+        assertEquals(1, response.getBody().mismatched());
 
-@Test
-void processManifestShouldRejectMissingConfiguration() {
+        verify(manifestProcessingService)
+                .processManifest(csvPath, rootPath);
+    }
 
-    DiscoveryController unconfiguredController =
-            new DiscoveryController(
-                    discoveryService,
-                    manifestProcessingService,
-                    rootPath.toString(),
-                    ""
-            );
+    @Test
+    void processManifestShouldRejectMissingConfiguration() {
 
-    org.springframework.web.server.ResponseStatusException exception =
-            assertThrows(
-                    org.springframework.web.server.ResponseStatusException.class,
-                    unconfiguredController::processManifest
-            );
+        DiscoveryController unconfiguredController =
+                new DiscoveryController(
+                        discoveryService,
+                        manifestProcessingService,
+                        eventPublisher,
+                        rootPath.toString(),
+                        ""
+                );
 
-    assertEquals(
-            503,
-            exception.getStatusCode().value()
-    );
+        ResponseStatusException exception =
+                assertThrows(
+                        ResponseStatusException.class,
+                        unconfiguredController::processManifest
+                );
 
-    verifyNoInteractions(manifestProcessingService);
-}
+        assertEquals(
+                503,
+                exception.getStatusCode().value()
+        );
 
+        verifyNoInteractions(manifestProcessingService);
+    }
 }

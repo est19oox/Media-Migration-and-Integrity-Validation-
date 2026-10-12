@@ -18,6 +18,9 @@ import org.springframework.web.bind.annotation.RestController;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+import mmiv.events.DiscoveryEventPublisher;
 
 @RestController
 @RequestMapping("/api/discovery")
@@ -25,16 +28,19 @@ public class DiscoveryController {
 
     private final DiscoveryService discoveryService;
     private final ManifestProcessingService manifestProcessingService;
+    private final DiscoveryEventPublisher events;
     private final Path rootDirectory;
     private final Path manifestPath;
 
     public DiscoveryController(
             DiscoveryService discoveryService,
             ManifestProcessingService manifestProcessingService,
+            DiscoveryEventPublisher events,
             @Value("${discovery.root}") String rootDirectory,
             @Value("${discovery.manifest-path}") String manifestPath) {
 
         this.discoveryService = discoveryService;
+        this.events = events;
         this.manifestProcessingService = manifestProcessingService;
         this.rootDirectory = Path.of(rootDirectory);
         this.manifestPath =
@@ -50,6 +56,10 @@ public class DiscoveryController {
     public ResponseEntity<DiscoveryResponse> scanDirectory()
             throws IOException {
 
+        UUID migrationId = UUID.randomUUID();
+        events.publish("MIGRATION_STARTED", "migration.started", "discovery-service", migrationId, null,
+                Map.of("initiatedBy", "discovery-api", "source",
+                        Map.of("type", "DIRECT_UPLOAD", "rootId", "configured-discovery-root")));
         DiscoveryRunResult result =
                 discoveryService.discoverAndSaveWithResult(rootDirectory);
 
@@ -64,6 +74,10 @@ public class DiscoveryController {
                 result.getInsertedCount()
         );
 
+        events.publish("MIGRATION_DISCOVERY_COMPLETED", "discovery.migration.completed", "discovery-service",
+                migrationId, null, Map.of("status", "COMPLETED",
+                        "totalFiles", summary.getDiscovered(), "acceptedFiles", summary.getAccepted(),
+                        "rejectedFiles", summary.getSkipped() + summary.getFailed()));
         return ResponseEntity.ok(response);
     }
 

@@ -1,116 +1,288 @@
 name: Validate without deployment
+
 on:
   pull_request:
   workflow_dispatch:
+
 permissions:
   contents: read
+
 jobs:
   validate:
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-java@v5
+      # ============================================================
+      # CHECKOUT AND JAVA
+      # ============================================================
+
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '25'
           cache: maven
-      - uses: hashicorp/setup-terraform@v4
+
+      # ============================================================
+      # MAVEN DEPENDENCY PREFETCH
+      # ============================================================
+
+      - name: Prefetch Maven dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          for service in services/*; do
+            if [ -f "$service/pom.xml" ]; then
+              echo "Resolving dependencies for $service"
+
+              for attempt in 1 2 3; do
+                if mvn -B -ntp \
+                  -Dmaven.wagon.http.retryHandler.count=3 \
+                  -f "$service/pom.xml" \
+                  dependency:go-offline; then
+                  break
+                fi
+
+                if [ "$attempt" -eq 3 ]; then
+                  echo "::error::Maven dependency resolution failed for $service"
+                  exit 1
+                fi
+
+                echo "Dependency resolution failed. Retrying..."
+                sleep $((attempt * 30))
+              done
+            fi
+          done
+
+      # ============================================================
+      # TRIVY VULNERABILITY DATABASE CACHE
+      # ============================================================
+
+      - name: Cache Trivy vulnerability database
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/trivy
+          key: trivy-db-${{ runner.os }}-${{ github.run_id }}
+          restore-keys: |
+            trivy-db-${{ runner.os }}-
+
+      # ============================================================
+      # TERRAFORM
+      # ============================================================
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v4
         with:
           terraform_version: 1.15.8
+
+      # ============================================================
+      # PYTHON
+      # ============================================================
 
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
           python-version: '3.12'
 
+      # ============================================================
+      # SEMGREP AND CHECKOV
+      # ============================================================
+
       - name: Install isolated Semgrep and Checkov
+        shell: bash
         run: |
           set -euo pipefail
+
           SEMGREP_ENV="$RUNNER_TEMP/mmiv-semgrep"
           CHECKOV_ENV="$RUNNER_TEMP/mmiv-checkov"
           SCANNER_BIN="$RUNNER_TEMP/mmiv-scanner-bin"
+
           python -m venv "$SEMGREP_ENV"
           python -m venv "$CHECKOV_ENV"
+
           "$SEMGREP_ENV/bin/python" -m pip install --upgrade pip
           "$CHECKOV_ENV/bin/python" -m pip install --upgrade pip
-          # MCP 1.12.2 (pinned by Semgrep) uses a Pydantic API removed in 2.14.
-          "$SEMGREP_ENV/bin/python" -m pip install "semgrep==1.138.0" "pydantic==2.13.5"
-          "$CHECKOV_ENV/bin/python" -m pip install "checkov==3.2.489"
+
+          # Maintain compatibility with Semgrep's pinned MCP dependency.
+          "$SEMGREP_ENV/bin/python" -m pip install \
+            "semgrep==1.138.0" \
+            "pydantic==2.13.5"
+
+          "$CHECKOV_ENV/bin/python" -m pip install \
+            "checkov==3.2.489"
+
           "$SEMGREP_ENV/bin/python" -m pip check
           "$CHECKOV_ENV/bin/python" -m pip check
-          "$SEMGREP_ENV/bin/python" -c "from mcp.server.fastmcp import FastMCP"
+
+          "$SEMGREP_ENV/bin/python" \
+            -c "from mcp.server.fastmcp import FastMCP"
+
           "$SEMGREP_ENV/bin/semgrep" --version
           "$CHECKOV_ENV/bin/checkov" --version
-          # Expose only scanner commands, preserving setup-python for Ansible.
+
+          # Expose scanner commands without changing the Python environment.
           mkdir -p "$SCANNER_BIN"
-          printf '#!/usr/bin/env bash\nexec "%s/bin/semgrep" "$@"\n' "$SEMGREP_ENV" > "$SCANNER_BIN/semgrep"
-          printf '#!/usr/bin/env bash\nexec "%s/bin/checkov" "$@"\n' "$CHECKOV_ENV" > "$SCANNER_BIN/checkov"
-          chmod +x "$SCANNER_BIN/semgrep" "$SCANNER_BIN/checkov"
+
+          printf '#!/usr/bin/env bash\nexec "%s/bin/semgrep" "$@"\n' \
+            "$SEMGREP_ENV" > "$SCANNER_BIN/semgrep"
+
+          printf '#!/usr/bin/env bash\nexec "%s/bin/checkov" "$@"\n' \
+            "$CHECKOV_ENV" > "$SCANNER_BIN/checkov"
+
+          chmod +x \
+            "$SCANNER_BIN/semgrep" \
+            "$SCANNER_BIN/checkov"
+
           echo "$SCANNER_BIN" >> "$GITHUB_PATH"
 
+      # ============================================================
+      # TRIVY INSTALLATION
+      # ============================================================
+
       - name: Install Trivy
+        shell: bash
         env:
           TRIVY_VERSION: 0.74.0
           TRIVY_SHA256: cf1e32ec8d4d8823e023096a28cadb14f5b5123ce03f201fb633c5b76aa712dd
         run: |
+          set -euo pipefail
+
           PACKAGE="trivy_${TRIVY_VERSION}_Linux-64bit.deb"
+
           curl -fsSLo "/tmp/${PACKAGE}" \
             "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/${PACKAGE}"
-          echo "${TRIVY_SHA256}  /tmp/${PACKAGE}" | sha256sum --check --strict
+
+          echo "${TRIVY_SHA256}  /tmp/${PACKAGE}" \
+            | sha256sum --check --strict
+
           sudo apt-get install --yes "/tmp/${PACKAGE}"
+
+          rm -f "/tmp/${PACKAGE}"
+
+      # ============================================================
+      # VERIFY SECURITY TOOLS
+      # ============================================================
 
       - name: Verify security tools
         run: |
           semgrep --version
           trivy --version
           checkov --version
+
+      # ============================================================
+      # REPOSITORY VALIDATION
+      # ============================================================
+
       - name: Validate repository
         run: bash scripts/ci/validate-repository.sh .
+
+      # ============================================================
+      # CI/CD CONTRACT TESTS
+      # ============================================================
 
       - name: Check CD dependency order and upload page
         run: |
           python3 -m pip install PyYAML
+
           python3 tests/ci/test-cd-contract.py
           python3 tests/ci/test-reporting-runtime.py
           python3 tests/ci/test-stack-lifecycle.py
+
           node --test tests/ci/test-upload-page.cjs
+
+      # ============================================================
+      # BUILD AND UNIT TESTS
+      # ============================================================
 
       - name: Build and test services
         run: bash scripts/ci/run-tests.sh .
 
+      # ============================================================
+      # STATIC APPLICATION SECURITY TESTING
+      # ============================================================
+
       - name: Run Semgrep SAST
         run: bash scripts/ci/run-sast.sh .
+
+      # ============================================================
+      # SOFTWARE COMPOSITION ANALYSIS
+      # ============================================================
 
       - name: Run Trivy SCA
         run: bash scripts/ci/run-sca.sh .
 
+      # ============================================================
+      # TERRAFORM VALIDATION
+      # ============================================================
+
       - name: Validate Terraform
         run: bash scripts/ci/run-terraform-checks.sh .
 
+      # ============================================================
+      # INFRASTRUCTURE SECURITY SCANNING
+      # ============================================================
+
       - name: Run Checkov IaC scan
         run: bash scripts/ci/run-iac-scan.sh .
+
+      # ============================================================
+      # ANSIBLE VALIDATION
+      # ============================================================
 
       - name: Ansible validation
         working-directory: infrastructure/ansible
         run: |
           python -m pip install ansible requests boto3 botocore
+
           ansible-galaxy collection install -r requirements.yml
-          ansible-playbook -i inventory/ci.ini playbook.yml --syntax-check
-          ansible-playbook -i inventory/ci.ini rollback.yml --syntax-check
-          ansible-playbook -i inventory/ci.ini setup-host.yml --syntax-check
-          ansible-playbook -i inventory/ci.ini stage-integrity.yml --syntax-check
+
+          ansible-playbook \
+            -i inventory/ci.ini \
+            playbook.yml --syntax-check
+
+          ansible-playbook \
+            -i inventory/ci.ini \
+            rollback.yml --syntax-check
+
+          ansible-playbook \
+            -i inventory/ci.ini \
+            setup-host.yml --syntax-check
+
+          ansible-playbook \
+            -i inventory/ci.ini \
+            stage-integrity.yml --syntax-check
+
           python ../../tests/ci/test-deployment-config.py
           python ../../tests/ci/test-compose-runtime.py
+
+      # ============================================================
+      # DOCKER IMAGE BUILD VALIDATION
+      # ============================================================
+
       - name: Docker build
         shell: bash
         run: |
-          set -e
+          set -euo pipefail
+
           for service in services/*; do
             if [ -f "$service/Dockerfile" ]; then
               name="$(basename "$service")"
-              docker build -t "mmiv:${name}-validation" "$service"
+
+              echo "Building Docker image for $name"
+
+              docker build \
+                -t "mmiv:${name}-validation" \
+                "$service"
             fi
           done
+
+      # ============================================================
+      # CI EVIDENCE COLLECTION
+      # ============================================================
 
       - name: Upload CI evidence
         if: always()

@@ -5,6 +5,7 @@
 
     <modelVersion>4.0.0</modelVersion>
 
+    <!-- Spring Boot Parent -->
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
@@ -12,13 +13,17 @@
         <relativePath/>
     </parent>
 
+    <!-- Project Information -->
     <groupId>mmiv</groupId>
     <artifactId>discovery-service</artifactId>
     <version>1.0.0-SNAPSHOT</version>
     <name>Discovery Service</name>
 
+    <!-- Properties -->
     <properties>
         <java.version>25</java.version>
+
+        <!-- Security-patched dependency versions -->
         <tomcat.version>11.0.26</tomcat.version>
         <spring-framework.version>7.0.9</spring-framework.version>
         <jackson-2-bom.version>2.21.7</jackson-2-bom.version>
@@ -26,8 +31,12 @@
 
         <!-- Spring Cloud -->
         <spring-cloud.version>2025.1.3</spring-cloud.version>
+
+        <!-- RabbitMQ Java Client -->
+        <rabbitmq-client.version>5.34.0</rabbitmq-client.version>
     </properties>
 
+    <!-- Dependency Management -->
     <dependencyManagement>
         <dependencies>
             <dependency>
@@ -40,23 +49,41 @@
         </dependencies>
     </dependencyManagement>
 
+    <!-- Application Dependencies -->
     <dependencies>
 
+        <!-- RabbitMQ / Spring AMQP -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-amqp</artifactId>
+        </dependency>
+
+        <!-- Override vulnerable transitive RabbitMQ client -->
+        <dependency>
+            <groupId>com.rabbitmq</groupId>
+            <artifactId>amqp-client</artifactId>
+            <version>${rabbitmq-client.version}</version>
+        </dependency>
+
+        <!-- Spring Boot REST API -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-webmvc</artifactId>
         </dependency>
 
+        <!-- Spring Boot Actuator -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-actuator</artifactId>
         </dependency>
 
+        <!-- Spring JDBC -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-jdbc</artifactId>
         </dependency>
 
+        <!-- Oracle JDBC Driver -->
         <dependency>
             <groupId>com.oracle.database.jdbc</groupId>
             <artifactId>ojdbc11</artifactId>
@@ -70,21 +97,22 @@
         </dependency>
 
         <!--
-            Bearer JWT validation, matching the User Access Service conventions
-            (RS256 signatures verified against that service's JWKS endpoint).
+            Bearer JWT validation, matching the User Access Service conventions.
+            RS256 signatures are verified against the service's JWKS endpoint.
         -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-oauth2-resource-server</artifactId>
         </dependency>
 
+        <!-- Spring Boot MVC Tests -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-webmvc-test</artifactId>
             <scope>test</scope>
         </dependency>
 
-        <!-- Metadata CSV generation and parsing -->
+        <!-- Metadata CSV Generation and Parsing -->
         <dependency>
             <groupId>org.apache.commons</groupId>
             <artifactId>commons-csv</artifactId>
@@ -93,10 +121,12 @@
 
     </dependencies>
 
+    <!-- Build Configuration -->
     <build>
         <finalName>discovery-service</finalName>
 
         <plugins>
+            <!-- Spring Boot Maven Plugin -->
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
