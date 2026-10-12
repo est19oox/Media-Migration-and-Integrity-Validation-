@@ -3,11 +3,15 @@ package mmiv.user_access_service.service;
 import java.util.Optional;
 import mmiv.user_access_service.dto.AccessCheckRequest;
 import mmiv.user_access_service.dto.AccessCheckResponse;
+import mmiv.user_access_service.dto.AccessibleDestinationsResponse;
 import mmiv.user_access_service.model.Action;
 import mmiv.user_access_service.model.DestinationAccess;
 import mmiv.user_access_service.model.User;
 import mmiv.user_access_service.repository.UserRepository;
+import org.springframework.dao.DataAccessException;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.web.server.ResponseStatusException;
 
 @Service
 public class AccessService {
@@ -65,5 +69,29 @@ public class AccessService {
     }
 
     return new AccessCheckResponse(false, "Insufficient permission");
+  }
+
+  public AccessibleDestinationsResponse getAccessibleDestinations(String userId) {
+    try {
+      User user =
+          userRepository
+              .findById(userId)
+              .orElseThrow(() -> new ResponseStatusException(HttpStatus.FORBIDDEN));
+      if (!user.isActive()) {
+        throw new ResponseStatusException(HttpStatus.FORBIDDEN);
+      }
+
+      return new AccessibleDestinationsResponse(
+          user.getDestinationAccesses().stream()
+              .sorted(java.util.Comparator.comparing(DestinationAccess::getDestination))
+              .map(
+                  access ->
+                      new AccessibleDestinationsResponse.Destination(
+                          access.getDestination(), access.getPermission()))
+              .toList());
+    } catch (DataAccessException exception) {
+      throw new ResponseStatusException(
+          HttpStatus.INTERNAL_SERVER_ERROR, "Unable to retrieve destinations", exception);
+    }
   }
 }
