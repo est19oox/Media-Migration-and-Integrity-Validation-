@@ -1,0 +1,16 @@
+{
+  "eventId": "5bd98576-0707-4b83-850d-945dfe33e606",
+  "eventType": "MIGRATION_STARTED",
+  "schemaVersion": 2,
+  "sourceService": "discovery-service",
+  "migrationId": "c49f2f8f-ad97-45a8-8867-f3ca8a971d80",
+  "occurredAt": "2026-10-11T10:00:00Z",
+  "data": {
+    "initiatedBy": "user-123",
+    "source": {
+      "type": "MANIFEST",
+      "rootId": "legacy-media",
+      "manifestName": "semester-1-media.csv"
+    }
+  }
+}

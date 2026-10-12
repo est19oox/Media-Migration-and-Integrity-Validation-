@@ -12,6 +12,22 @@ management:
 spring:
   application:
     name: reporting-service
+  mongodb:
+    uri: ${MONGODB_URI:mongodb://localhost:27017/mmiv_reporting}
+  rabbitmq:
+    host: ${SPRING_RABBITMQ_HOST:localhost}
+    port: ${SPRING_RABBITMQ_PORT:5672}
+    username: ${SPRING_RABBITMQ_USERNAME:guest}
+    password: ${SPRING_RABBITMQ_PASSWORD:guest}
+mmiv:
+  reporting:
+    exchange-name: ${REPORTING_EXCHANGE:mmiv.events}
+    queue-name: ${REPORTING_QUEUE:reporting.events}
+    dead-letter-exchange: ${REPORTING_DLX:mmiv.events.dlx}
+    dead-letter-queue: ${REPORTING_DLQ:reporting.events.dlq}
+    retry-attempts: ${REPORTING_RETRY_ATTEMPTS:3}
+    retry-initial-delay: ${REPORTING_RETRY_INITIAL_DELAY:500ms}
+    migration-timeout: ${REPORTING_MIGRATION_TIMEOUT:30m}
 eureka:
   client:
     enabled: ${EUREKA_CLIENT_ENABLED:true}

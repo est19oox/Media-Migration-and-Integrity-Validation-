@@ -1,0 +1,286 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mmiv.example/contracts/events/v2/mmiv-event.schema.json",
+  "title": "MMIV Event Contract v2",
+  "description": "Immutable audit events published by Discovery, Transfer and Integrity for Reporting.",
+  "type": "object",
+  "required": ["eventId", "eventType", "schemaVersion", "sourceService", "migrationId", "occurredAt", "data"],
+  "properties": {
+    "eventId": { "$ref": "#/$defs/uuid" },
+    "eventType": { "enum": ["MIGRATION_STARTED", "FILE_DISCOVERY_COMPLETED", "MIGRATION_DISCOVERY_COMPLETED", "FILE_TRANSFER_COMPLETED", "INTEGRITY_VALIDATION_COMPLETED"] },
+    "schemaVersion": { "const": 2 },
+    "sourceService": { "enum": ["discovery-service", "transfer-service", "integrity-service"] },
+    "migrationId": { "$ref": "#/$defs/uuid" },
+    "fileId": { "$ref": "#/$defs/uuid" },
+    "occurredAt": { "type": "string", "format": "date-time" },
+    "data": { "type": "object" }
+  },
+  "oneOf": [
+    { "$ref": "#/$defs/migrationStarted" },
+    { "$ref": "#/$defs/fileDiscoveryCompleted" },
+    { "$ref": "#/$defs/migrationDiscoveryCompleted" },
+    { "$ref": "#/$defs/fileTransferCompleted" },
+    { "$ref": "#/$defs/integrityValidationCompleted" }
+  ],
+  "$defs": {
+    "uuid": { "type": "string", "format": "uuid" },
+    "nonBlank": { "type": "string", "minLength": 1, "pattern": ".*\\S.*" },
+    "nonNegativeInteger": { "type": "integer", "minimum": 0 },
+    "relativePath": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?!/)(?![A-Za-z]:)(?!.*\\\\)(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*//).+$"
+    },
+    "failure": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "message", "retryable"],
+      "properties": {
+        "code": { "$ref": "#/$defs/nonBlank" },
+        "message": { "$ref": "#/$defs/nonBlank" },
+        "retryable": { "type": "boolean" }
+      }
+    },
+    "source": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "rootId", "manifestName"],
+          "properties": {
+            "type": { "const": "MANIFEST" },
+            "rootId": { "$ref": "#/$defs/nonBlank" },
+            "manifestName": { "$ref": "#/$defs/nonBlank" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "rootId"],
+          "properties": {
+            "type": { "const": "DIRECT_UPLOAD" },
+            "rootId": { "$ref": "#/$defs/nonBlank" }
+          }
+        }
+      ]
+    },
+    "migrationStarted": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["eventId", "eventType", "schemaVersion", "sourceService", "migrationId", "occurredAt", "data"],
+      "properties": {
+        "eventId": { "$ref": "#/$defs/uuid" },
+        "eventType": { "const": "MIGRATION_STARTED" },
+        "schemaVersion": { "const": 2 },
+        "sourceService": { "const": "discovery-service" },
+        "migrationId": { "$ref": "#/$defs/uuid" },
+        "occurredAt": { "type": "string", "format": "date-time" },
+        "data": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["initiatedBy", "source"],
+          "properties": {
+            "initiatedBy": { "$ref": "#/$defs/nonBlank" },
+            "source": { "$ref": "#/$defs/source" }
+          }
+        }
+      }
+    },
+    "fileDiscoveryCompleted": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["eventId", "eventType", "schemaVersion", "sourceService", "migrationId", "fileId", "occurredAt", "data"],
+      "properties": {
+        "eventId": { "$ref": "#/$defs/uuid" },
+        "eventType": { "const": "FILE_DISCOVERY_COMPLETED" },
+        "schemaVersion": { "const": 2 },
+        "sourceService": { "const": "discovery-service" },
+        "migrationId": { "$ref": "#/$defs/uuid" },
+        "fileId": { "$ref": "#/$defs/uuid" },
+        "occurredAt": { "type": "string", "format": "date-time" },
+        "data": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["status", "fileName", "relativePath", "mediaType", "format", "sizeBytes"],
+              "properties": {
+                "status": { "const": "ACCEPTED" },
+                "manifestMediaId": { "$ref": "#/$defs/nonBlank" },
+                "fileName": { "$ref": "#/$defs/nonBlank" },
+                "relativePath": { "$ref": "#/$defs/relativePath" },
+                "mediaType": { "$ref": "#/$defs/nonBlank" },
+                "format": { "$ref": "#/$defs/nonBlank" },
+                "sizeBytes": { "$ref": "#/$defs/nonNegativeInteger" }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["status", "fileName", "failure"],
+              "properties": {
+                "status": { "enum": ["REJECTED", "ERROR"] },
+                "manifestMediaId": { "$ref": "#/$defs/nonBlank" },
+                "fileName": { "$ref": "#/$defs/nonBlank" },
+                "relativePath": { "$ref": "#/$defs/relativePath" },
+                "mediaType": { "$ref": "#/$defs/nonBlank" },
+                "format": { "$ref": "#/$defs/nonBlank" },
+                "sizeBytes": { "$ref": "#/$defs/nonNegativeInteger" },
+                "failure": { "$ref": "#/$defs/discoveryFailure" }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "migrationDiscoveryCompleted": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["eventId", "eventType", "schemaVersion", "sourceService", "migrationId", "occurredAt", "data"],
+      "properties": {
+        "eventId": { "$ref": "#/$defs/uuid" },
+        "eventType": { "const": "MIGRATION_DISCOVERY_COMPLETED" },
+        "schemaVersion": { "const": 2 },
+        "sourceService": { "const": "discovery-service" },
+        "migrationId": { "$ref": "#/$defs/uuid" },
+        "occurredAt": { "type": "string", "format": "date-time" },
+        "data": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["status", "totalFiles", "acceptedFiles", "rejectedFiles"],
+              "properties": {
+                "status": { "const": "COMPLETED" },
+                "totalFiles": { "$ref": "#/$defs/nonNegativeInteger" },
+                "acceptedFiles": { "$ref": "#/$defs/nonNegativeInteger" },
+                "rejectedFiles": { "$ref": "#/$defs/nonNegativeInteger" }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["status", "failure"],
+              "properties": {
+                "status": { "const": "FAILED" },
+                "totalFiles": { "$ref": "#/$defs/nonNegativeInteger" },
+                "acceptedFiles": { "$ref": "#/$defs/nonNegativeInteger" },
+                "rejectedFiles": { "$ref": "#/$defs/nonNegativeInteger" },
+                "failure": { "$ref": "#/$defs/migrationDiscoveryFailure" }
+              },
+              "dependentRequired": {
+                "totalFiles": ["acceptedFiles", "rejectedFiles"],
+                "acceptedFiles": ["totalFiles", "rejectedFiles"],
+                "rejectedFiles": ["totalFiles", "acceptedFiles"]
+              }
+            }
+          ]
+        }
+      }
+    },
+    "fileTransferCompleted": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["eventId", "eventType", "schemaVersion", "sourceService", "migrationId", "fileId", "occurredAt", "data"],
+      "properties": {
+        "eventId": { "$ref": "#/$defs/uuid" },
+        "eventType": { "const": "FILE_TRANSFER_COMPLETED" },
+        "schemaVersion": { "const": 2 },
+        "sourceService": { "const": "transfer-service" },
+        "migrationId": { "$ref": "#/$defs/uuid" },
+        "fileId": { "$ref": "#/$defs/uuid" },
+        "occurredAt": { "type": "string", "format": "date-time" },
+        "data": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["transferId", "status", "durationMs"],
+              "properties": {
+                "transferId": { "$ref": "#/$defs/uuid" },
+                "status": { "const": "STORED" },
+                "durationMs": { "$ref": "#/$defs/nonNegativeInteger" }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["transferId", "status", "durationMs", "failure"],
+              "properties": {
+                "transferId": { "$ref": "#/$defs/uuid" },
+                "status": { "const": "FAILED" },
+                "durationMs": { "$ref": "#/$defs/nonNegativeInteger" },
+                "failure": { "$ref": "#/$defs/transferFailure" }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "integrityValidationCompleted": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["eventId", "eventType", "schemaVersion", "sourceService", "migrationId", "fileId", "occurredAt", "data"],
+      "properties": {
+        "eventId": { "$ref": "#/$defs/uuid" },
+        "eventType": { "const": "INTEGRITY_VALIDATION_COMPLETED" },
+        "schemaVersion": { "const": 2 },
+        "sourceService": { "const": "integrity-service" },
+        "migrationId": { "$ref": "#/$defs/uuid" },
+        "fileId": { "$ref": "#/$defs/uuid" },
+        "occurredAt": { "type": "string", "format": "date-time" },
+        "data": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["transferId", "status", "checksumAlgorithm", "durationMs"],
+              "properties": {
+                "transferId": { "$ref": "#/$defs/uuid" },
+                "status": { "const": "PASSED" },
+                "checksumAlgorithm": { "$ref": "#/$defs/nonBlank" },
+                "durationMs": { "$ref": "#/$defs/nonNegativeInteger" }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["transferId", "status", "checksumAlgorithm", "durationMs", "failure"],
+              "properties": {
+                "transferId": { "$ref": "#/$defs/uuid" },
+                "status": { "enum": ["FAILED", "ERROR"] },
+                "checksumAlgorithm": { "$ref": "#/$defs/nonBlank" },
+                "durationMs": { "$ref": "#/$defs/nonNegativeInteger" },
+                "failure": { "$ref": "#/$defs/integrityFailure" }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "discoveryFailure": {
+      "allOf": [
+        { "$ref": "#/$defs/failure" },
+        { "properties": { "code": { "enum": ["FILE_NOT_FOUND", "AMBIGUOUS_FILE_NAME", "UNSUPPORTED_FILE_TYPE", "FILE_SIZE_MISMATCH", "FILE_TYPE_MISMATCH", "INACCESSIBLE_FILE", "INVALID_FILE_METADATA", "DISCOVERY_ERROR"] } } }
+      ]
+    },
+    "migrationDiscoveryFailure": {
+      "allOf": [
+        { "$ref": "#/$defs/failure" },
+        { "properties": { "code": { "enum": ["INVALID_MANIFEST", "SOURCE_DIRECTORY_NOT_FOUND", "SOURCE_DIRECTORY_INACCESSIBLE", "DISCOVERY_JOB_ERROR"] } } }
+      ]
+    },
+    "transferFailure": {
+      "allOf": [
+        { "$ref": "#/$defs/failure" },
+        { "properties": { "code": { "enum": ["SOURCE_NOT_FOUND", "SOURCE_NOT_READABLE", "INVALID_DESTINATION", "S3_UPLOAD_FAILED", "TRANSFER_TIMEOUT", "TRANSFER_ERROR"] } } }
+      ]
+    },
+    "integrityFailure": {
+      "allOf": [
+        { "$ref": "#/$defs/failure" },
+        { "properties": { "code": { "enum": ["CHECKSUM_MISMATCH", "DESTINATION_OBJECT_NOT_FOUND", "DESTINATION_READ_FAILED", "INVALID_SOURCE_CHECKSUM", "VALIDATION_TIMEOUT", "VALIDATION_ERROR"] } } }
+      ]
+    }
+  }
+}

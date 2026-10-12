@@ -1,0 +1,18 @@
+{
+  "eventId": "d8a74831-65e7-41d0-9072-efac30acf67d",
+  "eventType": "FILE_DISCOVERY_COMPLETED",
+  "schemaVersion": 2,
+  "sourceService": "discovery-service",
+  "migrationId": "c49f2f8f-ad97-45a8-8867-f3ca8a971d80",
+  "fileId": "9eceb6d4-8a39-48da-8abe-1238ba8c7a67",
+  "occurredAt": "2026-10-11T10:01:00Z",
+  "data": {
+    "status": "ACCEPTED",
+    "manifestMediaId": "MEDIA-001",
+    "fileName": "report.pdf",
+    "relativePath": "department-a/report.pdf",
+    "mediaType": "DOCUMENT",
+    "format": "PDF",
+    "sizeBytes": 204800
+  }
+}
