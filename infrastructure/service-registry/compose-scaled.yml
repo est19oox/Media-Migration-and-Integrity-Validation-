@@ -14,6 +14,8 @@ services:
         condition: service_started
       user-access-service:
         condition: service_started
+      reporting-service:
+        condition: service_started
       integrity-service:
         condition: service_started
     environment:
@@ -108,10 +110,17 @@ services:
     depends_on:
       service-registry:
         condition: service_healthy
+      mongodb:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
     environment:
       EUREKA_DEFAULT_ZONE: http://service-registry:8761/eureka/
-    profiles:
-    - reporting
+      MONGODB_URI: mongodb://${MONGO_ROOT_USERNAME:-mmiv}:${MONGO_ROOT_PASSWORD:-mmiv-local}@mongodb:27017/mmiv_reporting?authSource=admin
+      SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_PORT: 5672
+      SPRING_RABBITMQ_USERNAME: ${RABBITMQ_DEFAULT_USER:-mmiv}
+      SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_DEFAULT_PASS:-mmiv-local}
   integrity-service:
     build:
       context: ../../services/integrity-service
@@ -128,7 +137,47 @@ services:
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
       AWS_SESSION_TOKEN: ${AWS_SESSION_TOKEN:-}
+  mongodb:
+    image: mongo:8.0.14-noble
+    restart: unless-stopped
+    networks:
+    - registry
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USERNAME:-mmiv}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD:-mmiv-local}
+    volumes:
+    - mongo-data:/data/db
+    healthcheck:
+      test:
+      - CMD-SHELL
+      - 'mongosh --quiet --username "$${MONGO_INITDB_ROOT_USERNAME}" --password "$${MONGO_INITDB_ROOT_PASSWORD}" --authenticationDatabase admin --eval "db.adminCommand({ ping: 1 }).ok" | grep 1'
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+  rabbitmq:
+    image: rabbitmq:4.1.4-management-alpine
+    restart: unless-stopped
+    networks:
+    - registry
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER:-mmiv}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS:-mmiv-local}
+    volumes:
+    - rabbit-data:/var/lib/rabbitmq
+    healthcheck:
+      test:
+      - CMD
+      - rabbitmq-diagnostics
+      - -q
+      - ping
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
 networks:
   registry: null
 volumes:
+  mongo-data:
+  rabbit-data:
   transfer-service-logs: {}

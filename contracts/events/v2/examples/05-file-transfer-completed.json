@@ -1,0 +1,14 @@
+{
+  "eventId": "4f2daf80-2da3-4e40-a151-c23cd591e678",
+  "eventType": "FILE_TRANSFER_COMPLETED",
+  "schemaVersion": 2,
+  "sourceService": "transfer-service",
+  "migrationId": "c49f2f8f-ad97-45a8-8867-f3ca8a971d80",
+  "fileId": "9eceb6d4-8a39-48da-8abe-1238ba8c7a67",
+  "occurredAt": "2026-10-11T10:20:00Z",
+  "data": {
+    "transferId": "344cd216-dac8-4bd2-a350-1dc891c9f4cb",
+    "status": "STORED",
+    "durationMs": 2300
+  }
+}
