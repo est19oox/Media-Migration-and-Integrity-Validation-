@@ -11,7 +11,7 @@ import uuid
 import base64
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
-from urllib.request import Request, urlopen
+from urllib.request import Request, urlopen, build_opener, HTTPRedirectHandler
 
 
 def expand(value, variables):
@@ -74,14 +74,22 @@ def run_case(case, base_url, token):
     elif "raw_body" in case:
         data = case["raw_body"].encode()
     headers = {"Content-Type": "application/json", **case.get("headers", {})}
+    if os.getenv("MMIV_VERIFICATION_RUN_ID"):
+        headers["X-MMIV-Verification-Run"] = str(uuid.UUID(os.environ["MMIV_VERIFICATION_RUN_ID"]))
     if "multipart" in case:
         data, headers["Content-Type"] = multipart_body(case["multipart"])
-    if token:
+    if token and not case.get("anonymous"):
         headers["Authorization"] = "Bearer " + token
     request = Request(base_url + path, data=data,
                       method=case.get("method", "GET"), headers=headers)
     try:
-        with urlopen(request, timeout=case.get("timeout", 60)) as response:
+        opener = urlopen
+        if case.get("follow_redirects") is False:
+            class NoRedirect(HTTPRedirectHandler):
+                def redirect_request(self, *args):
+                    return None
+            opener = build_opener(NoRedirect()).open
+        with opener(request, timeout=case.get("timeout", 60)) as response:
             status, content = response.status, response.read()
             response_headers = response.headers
     except HTTPError as error:
@@ -92,6 +100,9 @@ def run_case(case, base_url, token):
     # Retain only configured diagnostic fields, even when an assertion fails.
     # Never record arbitrary response bodies or request authentication headers.
     case["_http_status"] = status
+    # Redirect diagnostics only: do not capture cookies or authentication headers.
+    if any(name.lower() == "location" for name in case.get("header_equals", {})):
+        case["_reported_headers"] = {"Location": response_headers.get("Location")}
     body = None
     if any(key.startswith("json_") for key in case) or case.get("save_fields") or case.get("report_fields"):
         try:
@@ -182,6 +193,8 @@ def main():
                 result["http_status"] = case["_http_status"]
             if case.get("_reported_fields"):
                 result["response"] = case["_reported_fields"]
+            if case.get("_reported_headers"):
+                result["response_headers"] = case["_reported_headers"]
         result["elapsed_seconds"] = round(time.monotonic() - started, 3)
         results.append(result)
         print(f"{result['status']}: {args.service} / {result['name']} "

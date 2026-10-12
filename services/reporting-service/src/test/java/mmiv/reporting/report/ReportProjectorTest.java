@@ -39,6 +39,7 @@ class ReportProjectorTest {
     private MigrationReportRepository repository;
 
     private ReportProjector projector;
+    private VerificationCleanupGuard cleanup;
 
     @BeforeEach
     void setUp() {
@@ -75,10 +76,27 @@ class ReportProjectorTest {
             return report;
         });
 
+        cleanup = mock(VerificationCleanupGuard.class);
         projector = new ReportProjector(
                 repository,
-                new ReportStateCalculator()
+                new ReportStateCalculator(), cleanup
         );
+    }
+
+    @Test
+    void ignoresDelayedEventsForDeletedTestReports() throws Exception {
+        var event=event("01-migration-started.json");
+        when(cleanup.isDeleted(event.envelope().migrationId())).thenReturn(true);
+        projector.apply(event);
+        org.mockito.Mockito.verifyNoInteractions(repository);
+    }
+
+    @Test
+    void removesReportIfCleanupRacesWithProjection() throws Exception {
+        var event=event("01-migration-started.json");
+        when(cleanup.isDeleted(event.envelope().migrationId())).thenReturn(false,true);
+        projector.apply(event);
+        org.mockito.Mockito.verify(repository).deleteById(event.envelope().migrationId().toString());
     }
 
     @Test

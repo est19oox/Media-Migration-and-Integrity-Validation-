@@ -79,7 +79,7 @@ public class DiscoveryController {
             "CSV manifest path is not configured"
      );
     }
-        
+
 
         List<ManifestMatchResult> results =
                 manifestProcessingService.processManifest(

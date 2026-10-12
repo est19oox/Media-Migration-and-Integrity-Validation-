@@ -26,6 +26,26 @@ public class FolderUploadService {
     }
 
     public FolderUploadResponse upload(List<MultipartFile> files, List<String> relativePaths) {
+        validate(files, relativePaths);
+        String prefix = "uploads/" + UUID.randomUUID() + "/";
+        List<String> names = files.stream().map(f -> validator.validateUpload(f, maxFileBytes)).toList();
+        List<FileResult> results = new ArrayList<>();
+        int succeeded = 0;
+        for (int i = 0; i < files.size(); i++) {
+            String path = relativePaths.get(i);
+            try {
+                var uploaded = transfers.uploadToKey(files.get(i), names.get(i), prefix + path);
+                results.add(new FileResult(path, uploaded.validationResult(), uploaded,
+                        uploaded.success() ? null : uploaded.message()));
+                if (uploaded.success()) succeeded++;
+            } catch (IllegalStateException | IllegalArgumentException e) {
+                results.add(new FileResult(path, "FAILED", null, "File transfer failed"));
+            }
+        }
+        return new FolderUploadResponse(prefix, succeeded, files.size() - succeeded, List.copyOf(results));
+    }
+
+    public void validate(List<MultipartFile> files, List<String> relativePaths) {
         if (files == null || relativePaths == null || files.isEmpty() || files.size() != relativePaths.size()
                 || files.size() > maxFiles) {
             throw new IllegalArgumentException("Provide matching files and relativePaths within the folder file limit");
@@ -53,20 +73,6 @@ public class FolderUploadService {
             total += files.get(i).getSize();
             names.add(name);
         }
-        List<FileResult> results = new ArrayList<>();
-        int succeeded = 0;
-        for (int i = 0; i < files.size(); i++) {
-            String path = relativePaths.get(i);
-            try {
-                var uploaded = transfers.uploadToKey(files.get(i), names.get(i), prefix + path);
-                results.add(new FileResult(path, uploaded.validationResult(), uploaded,
-                        uploaded.success() ? null : uploaded.message()));
-                if (uploaded.success()) succeeded++;
-            } catch (IllegalStateException | IllegalArgumentException e) {
-                results.add(new FileResult(path, "FAILED", null, "File transfer failed"));
-            }
-        }
-        return new FolderUploadResponse(prefix, succeeded, files.size() - succeeded, List.copyOf(results));
     }
 
     private static void validatePath(String path, String prefix) {

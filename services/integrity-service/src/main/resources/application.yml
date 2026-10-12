@@ -10,6 +10,11 @@ management:
       probes:
         enabled: true
 spring:
+  rabbitmq:
+    host: ${SPRING_RABBITMQ_HOST:localhost}
+    port: ${SPRING_RABBITMQ_PORT:5672}
+    username: ${SPRING_RABBITMQ_USERNAME:guest}
+    password: ${SPRING_RABBITMQ_PASSWORD:guest}
   application:
     name: integrity-service
   datasource:
@@ -36,3 +41,13 @@ eureka:
   instance:
     prefer-ip-address: true
     instance-id: ${spring.application.name}:${spring.cloud.client.ip-address}:${server.port}
+
+# All services publish through the shared durable RabbitMQ outbox.
+mmiv.events.enabled: ${MMIV_EVENTS_ENABLED:true}
+mmiv.events.outbox-directory: ${MMIV_EVENTS_OUTBOX_DIRECTORY:./.mmiv-outbox}
+
+mmiv.s3.endpoint: ${MMIV_S3_ENDPOINT:}
+
+mmiv.auth.issuer: ${USER_ACCESS_JWT_ISSUER:https://auth.mmiv.example}
+mmiv.auth.jwk-set-uri: ${USER_ACCESS_JWK_SET_URI:http://user-access-service:8083/.well-known/jwks.json}
+mmiv.metadata.url: ${METADATA_URL:http://discovery-service:8085}

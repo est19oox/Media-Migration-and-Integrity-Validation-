@@ -16,7 +16,7 @@ public class FileReadService {
     }
     public StoredFile describe(String fileId) {
         String key = FileIds.decode(fileId);
-        // Future: enforce the authenticated user's ownership/permission before accessing S3.
+        // TransferSecurityConfig checks current destination READ permission before accessing S3.
         try {
             HeadObjectResponse head = s3.headObject(HeadObjectRequest.builder().bucket(bucket).key(key).build());
             String name = key.substring(key.lastIndexOf('/') + 1);

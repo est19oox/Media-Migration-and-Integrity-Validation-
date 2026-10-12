@@ -3,6 +3,7 @@
 set -eu
 
 ROOT=${1:-$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)}
+ROOT=$(CDPATH= cd -- "$ROOT" && pwd)
 FIXTURE_ROOT=$(mktemp -d)
 trap 'rm -rf "$FIXTURE_ROOT"' EXIT
 

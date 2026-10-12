@@ -14,11 +14,13 @@ public class ReportProjector {
     private final MigrationReportRepository repository;
 
     private final ReportStateCalculator stateCalculator;
+    private final VerificationCleanupGuard cleanup;
 
     public ReportProjector(
             MigrationReportRepository repository,
-            ReportStateCalculator stateCalculator
+            ReportStateCalculator stateCalculator, VerificationCleanupGuard cleanup
     ) {
+        this.cleanup = Objects.requireNonNull(cleanup);
         this.repository = Objects.requireNonNull(
                 repository,
                 "repository must not be null"
@@ -37,6 +39,7 @@ public class ReportProjector {
         );
 
         EventEnvelope event = validatedEvent.envelope();
+        if(cleanup.isDeleted(event.migrationId())) return;
 
         MigrationReportDocument report =
                 repository.findById(
@@ -66,6 +69,7 @@ public class ReportProjector {
         }
 
         repository.save(report);
+        if(cleanup.isDeleted(event.migrationId())) repository.deleteById(event.migrationId().toString());
     }
 
     private void applyEvent(

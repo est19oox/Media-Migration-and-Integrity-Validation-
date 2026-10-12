@@ -9,8 +9,8 @@ import java.util.UUID;
 
 @Component
 public class FileEventLogger {
-    private final SqsLogOutbox outbox;
-    public FileEventLogger(SqsLogOutbox outbox) { this.outbox = outbox; }
+    private final mmiv.events.EventPublisher outbox;
+    public FileEventLogger(mmiv.events.EventPublisher outbox) { this.outbox = outbox; }
 
     public void upload(UploadResponse result, Instant startedAt) {
         emit("UPLOAD", result.transferId(), result.fileId(), result.fileName(), result.bucket(),
@@ -42,8 +42,29 @@ public class FileEventLogger {
             String bucket, String key, Long sizeBytes, Long bytesServed, String sha256,
             String validationResult, String cleanupStatus, boolean success,
             String errorType, Instant startedAt) {
-        outbox.enqueue(new FileLogEvent(1, UUID.randomUUID().toString(), operation, transferId,
-                fileId, fileName, bucket, key, sizeBytes, bytesServed, sha256, validationResult,
-                cleanupStatus, success, errorType, startedAt.toString(), Instant.now().toString()));
+        var data = new java.util.LinkedHashMap<String,Object>();
+        data.put("operation",operation); data.put("success",success);
+        if (transferId != null) data.put("transferId",transferId);
+        if (fileName != null) data.put("fileName",fileName);
+        if (errorType != null) data.put("errorType",errorType);
+        if (bytesServed != null) data.put("bytesServed",bytesServed);
+        if (validationResult != null) data.put("validationResult",validationResult);
+        if(key!=null && key.startsWith("migrations/")) {
+            String[] parts=key.split("/",3);
+            try {if(parts.length==3)data.put("migrationId",UUID.fromString(parts[1]).toString());}
+            catch(IllegalArgumentException ignored) {}
+        }
+        try {
+        outbox.audit("FILE_OPERATION",data);
+        var plan=mmiv.transfer.integration.MigrationContext.get();
+        if(plan!=null && ("TRANSFER".equals(operation)||"UPLOAD".equals(operation))) {
+            String id=transferId==null?UUID.randomUUID().toString():transferId;
+            var payload=new java.util.LinkedHashMap<String,Object>();
+            payload.put("transferId",id);payload.put("durationMs",Math.max(0,java.time.Duration.between(startedAt,Instant.now()).toMillis()));
+            boolean stored=transferId!=null; payload.put("status",stored?"STORED":"FAILED");
+            if(!stored) payload.put("failure",java.util.Map.of("code","TRANSFER_ERROR","message","Transfer failed","retryable",true));
+            outbox.migration("FILE_TRANSFER_COMPLETED","transfer.file.completed",plan.migrationId(),plan.fileId(),payload);
+        }
+        } catch(RuntimeException error) { org.slf4j.LoggerFactory.getLogger(FileEventLogger.class).error("File event could not be persisted"); }
     }
 }

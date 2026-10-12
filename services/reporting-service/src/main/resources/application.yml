@@ -40,3 +40,11 @@ eureka:
   instance:
     prefer-ip-address: true
     instance-id: ${spring.application.name}:${spring.cloud.client.ip-address}:${server.port}
+
+# All services publish through the shared durable RabbitMQ outbox.
+mmiv.events.enabled: ${MMIV_EVENTS_ENABLED:true}
+mmiv.events.outbox-directory: ${MMIV_EVENTS_OUTBOX_DIRECTORY:./.mmiv-outbox}
+
+mmiv.auth.issuer: ${USER_ACCESS_JWT_ISSUER:https://auth.mmiv.example}
+mmiv.auth.jwk-set-uri: ${USER_ACCESS_JWK_SET_URI:http://user-access-service:8083/.well-known/jwks.json}
+mmiv.metadata.url: ${METADATA_URL:http://discovery-service:8085}

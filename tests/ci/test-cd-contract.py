@@ -26,7 +26,7 @@ class CDContractTest(unittest.TestCase):
         self.assertIn('terraform', jobs['setup-host']['needs'])
         self.assertIn('build-images', jobs['setup-host']['needs'])
         self.assertEqual({s['name'] for s in jobs['build-images']['strategy']['matrix']['service']},
-                         {'service-registry', 'transfer-service', 'integrity-service', 'user-access-service', 'api-gateway'})
+                         {'service-registry', 'transfer-service', 'integrity-service', 'user-access-service', 'api-gateway', 'discovery-service', 'reporting-service'})
         self.assertGreater(jobs['build-images']['strategy']['max-parallel'], 1)
         self.assertEqual(set(jobs['deploy-stack']['needs']), {'setup-host', 'build-images'})
         self.assertIn('deploy-stack', jobs['verify-services']['needs'])

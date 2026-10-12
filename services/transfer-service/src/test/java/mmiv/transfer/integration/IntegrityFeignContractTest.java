@@ -42,6 +42,11 @@ class IntegrityFeignContractTest {
     }
     @Autowired IntegrityValidationGateway gateway;
     @AfterAll static void stop() { server.stop(0); }
+    @org.junit.jupiter.api.BeforeEach void authenticate() {
+        var jwt=org.springframework.security.oauth2.jwt.Jwt.withTokenValue("fixture-token").header("alg","RS256").subject("fixture-user").build();
+        org.springframework.security.core.context.SecurityContextHolder.getContext().setAuthentication(new org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken(jwt));
+    }
+    @org.junit.jupiter.api.AfterEach void clearIdentity() { org.springframework.security.core.context.SecurityContextHolder.clearContext(); }
     @Test void callsIntegrityUsingDiscoveredServiceNameAndJsonContract() {
         var result = gateway.validate("transfer-1", "bucket", "folder/key", checksum);
         assertTrue(result.success());

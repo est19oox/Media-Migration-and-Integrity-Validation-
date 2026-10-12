@@ -13,32 +13,28 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 class TransferControllerTest {
-    TransferService service;
+    mmiv.transfer.integration.MetadataTransferFacade service;
     MockMvc mvc;
     @BeforeEach void setUp() {
-        service = mock(TransferService.class);
+        service = mock(mmiv.transfer.integration.MetadataTransferFacade.class);
         mvc = MockMvcBuilders.standaloneSetup(new TransferController(service))
                 .setControllerAdvice(new TransferExceptionHandler()).build();
     }
-    @Test void returnsSuccessfulTransferAndPassesRequestFields() throws Exception {
-        when(service.transfer(any())).thenReturn(new TransferResponse("bucket", "archive/photo.png", "image/png", 123));
+    @Test void resolvesOnlyTheMetadataIdAndNeverAcceptsClientDestination() throws Exception {
+        var id=java.util.UUID.randomUUID();
+        when(service.transfer(id)).thenReturn(new TransferResponse("bucket","metadata/photo.png","image/png",123));
         mvc.perform(post("/api/v1/transfers").contentType("application/json")
-                .content("{\"sourcePath\":\"photo.png\",\"destinationKey\":\"archive/photo.png\",\"contentType\":\"image/png\"}"))
-                .andExpect(status().isOk()).andExpect(jsonPath("$.bucket").value("bucket"))
-                .andExpect(jsonPath("$.key").value("archive/photo.png"))
-                .andExpect(jsonPath("$.mediaType").value("image/png"))
-                .andExpect(jsonPath("$.sizeBytes").value(123));
-        var request = ArgumentCaptor.forClass(TransferRequest.class);
-        verify(service).transfer(request.capture());
-        assertEquals(new TransferRequest("photo.png", "archive/photo.png", "image/png"), request.getValue());
+            .content("{\"metadataId\":\""+id+"\",\"destinationKey\":\"evil/key\"}"))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.key").value("metadata/photo.png"));
+        verify(service).transfer(id);
     }
     @Test void returns400ForValidationFailure() throws Exception {
-        when(service.transfer(any())).thenThrow(new IllegalArgumentException("sourcePath is required"));
+        when(service.transfer(nullable(java.util.UUID.class))).thenThrow(new IllegalArgumentException("sourcePath is required"));
         mvc.perform(post("/api/v1/transfers").contentType("application/json").content("{}"))
                 .andExpect(status().isBadRequest()).andExpect(jsonPath("$.error").value("sourcePath is required"));
     }
     @Test void returns502WithoutLeakingStorageDetails() throws Exception {
-        when(service.transfer(any())).thenThrow(new IllegalStateException("secret internal storage details"));
+        when(service.transfer(nullable(java.util.UUID.class))).thenThrow(new IllegalStateException("secret internal storage details"));
         mvc.perform(post("/api/v1/transfers").contentType("application/json").content("{}"))
                 .andExpect(status().isBadGateway()).andExpect(jsonPath("$.error").value("Storage transfer failed"));
     }

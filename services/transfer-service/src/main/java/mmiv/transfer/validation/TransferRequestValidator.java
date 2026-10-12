@@ -14,12 +14,12 @@ public class TransferRequestValidator {
     public TransferRequestValidator(@Value("${mmiv.media.root:/media}") String root) {
         mediaRoot = Path.of(root).toAbsolutePath().normalize();
     }
-    public void validate(TransferRequest request) {
+    public Path validate(TransferRequest request) {
         if (request == null) throw new IllegalArgumentException("Request is required");
         if (request.sourcePath() == null || request.sourcePath().isBlank()) throw new IllegalArgumentException("sourcePath is required");
         if (request.destinationKey() == null || request.destinationKey().isBlank()) throw new IllegalArgumentException("destinationKey is required");
         if (request.destinationKey().startsWith("/")) throw new IllegalArgumentException("destinationKey must be relative");
-        resolveSource(request.sourcePath());
+        return resolveSource(request.sourcePath());
     }
     public Path resolveSource(String sourcePath) {
         try {
@@ -58,6 +58,7 @@ public class TransferRequestValidator {
             case "png" -> "image/png";
             case "jpg", "jpeg" -> "image/jpeg";
             case "mp4" -> "video/mp4";
+            case "mp3" -> "audio/mpeg";
             case "txt" -> "text/plain";
             case "pdf" -> "application/pdf";
             case "ppt" -> "application/vnd.ms-powerpoint";

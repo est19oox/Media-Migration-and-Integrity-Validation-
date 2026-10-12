@@ -25,12 +25,15 @@ public class EventProcessor {
 
     private final Clock clock;
 
+    private final mmiv.reporting.report.VerificationCleanupGuard cleanup;
+
     public EventProcessor(
             EventContractValidator validator,
             AuditEventRepository auditRepository,
             ReportProjector projector,
-            Clock clock
+            Clock clock, mmiv.reporting.report.VerificationCleanupGuard cleanup
     ) {
+        this.cleanup = Objects.requireNonNull(cleanup);
         this.validator = Objects.requireNonNull(
                 validator,
                 "validator must not be null"
@@ -51,6 +54,7 @@ public class EventProcessor {
 
     public EventProcessingResult process(byte[] body) {
         ValidatedEvent event = validator.validate(body);
+        if(cleanup.isDeleted(event.envelope().migrationId())) return EventProcessingResult.IGNORED_CLEANED;
         String eventId =
                 event.envelope().eventId().toString();
 
@@ -72,6 +76,7 @@ public class EventProcessor {
         }
 
         projector.apply(event);
+        if(cleanup.isDeleted(event.envelope().migrationId())) {cleanup.clean(event.envelope().migrationId());return EventProcessingResult.IGNORED_CLEANED;}
 
         AuditEventDocument stored =
                 auditRepository.findById(eventId)
@@ -85,6 +90,7 @@ public class EventProcessor {
         assertSamePayload(stored, event);
         stored.markApplied(clock.instant());
         auditRepository.save(stored);
+        if(cleanup.isDeleted(event.envelope().migrationId())) {cleanup.clean(event.envelope().migrationId());return EventProcessingResult.IGNORED_CLEANED;}
 
         return EventProcessingResult.APPLIED;
     }

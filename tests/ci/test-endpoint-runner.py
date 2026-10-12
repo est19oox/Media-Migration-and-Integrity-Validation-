@@ -18,11 +18,13 @@ spec.loader.exec_module(runner)
 
 
 class EndpointRunnerTest(unittest.TestCase):
-    def run_fixture(self, response, case, http_status=200):
+    def run_fixture(self, response, case, http_status=200, headers=None):
         class Handler(BaseHTTPRequestHandler):
             def do_GET(self):
                 self.send_response(http_status)
                 self.send_header('Content-Type', 'application/json')
+                for name, value in (headers or {}).items():
+                    self.send_header(name, value)
                 self.end_headers()
                 self.wfile.write(json.dumps(response).encode())
 
@@ -47,6 +49,25 @@ class EndpointRunnerTest(unittest.TestCase):
             server.shutdown()
             server.server_close()
             thread.join()
+
+    def test_redirect_mismatch_records_location_without_sensitive_headers(self):
+        result, report = self.run_fixture({}, {
+            'name': 'redirect', 'path': '/upload.html', 'status': 302,
+            'follow_redirects': False, 'header_equals': {'Location': '/login.html'}
+        }, http_status=302, headers={'Location': 'http://public.example/login.html',
+                                    'Set-Cookie': 'private-session'})
+        self.assertEqual(result.returncode, 1)
+        self.assertEqual(report['results'][0]['response_headers'],
+                         {'Location': 'http://public.example/login.html'})
+        self.assertNotIn('private-session', json.dumps(report))
+
+    def test_origin_relative_redirect_passes(self):
+        result, report = self.run_fixture({}, {
+            'name': 'redirect', 'path': '/upload.html', 'status': 302,
+            'follow_redirects': False, 'header_equals': {'Location': '/login.html'}
+        }, http_status=302, headers={'Location': '/login.html'})
+        self.assertEqual(result.returncode, 0)
+        self.assertEqual(report['results'][0]['response_headers']['Location'], '/login.html')
 
     def test_partial_folder_failure_retains_per_file_evidence(self):
         response = {'succeeded': 1, 'failed': 1, 'files': [

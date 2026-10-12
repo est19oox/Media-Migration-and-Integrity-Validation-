@@ -56,7 +56,6 @@ def prepare(directory, instance, commit, release_id):
     state = {'INSTANCE_ID': instance, 'GITHUB_SHA': commit, 'RELEASE_ID': release_id,
              'ECR_REGISTRY': registry, 'AWS_REGION': os.getenv('AWS_REGION', 'ap-southeast-1'),
              'MMIV_BUCKET_NAME': os.getenv('MMIV_BUCKET_NAME', 'media-migration-dev-landing'),
-             'MMIV_LOG_QUEUE_URL': os.getenv('MMIV_LOG_QUEUE_URL', ''),
              'ORACLE_CONFIG_STAGED': os.getenv('ORACLE_CONFIG_STAGED', 'false') == 'true',
              'MANAGED_USER_ACCESS_ORACLE': os.getenv('MANAGED_USER_ACCESS_ORACLE', 'true') == 'true',
              'USER_ACCESS_JWT_ISSUER': os.getenv('USER_ACCESS_JWT_ISSUER', 'https://auth.mmiv.example'),

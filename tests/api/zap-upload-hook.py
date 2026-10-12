@@ -1,6 +1,7 @@
 """Seed ZAP history with a real multipart upload before the API active scan."""
 import hashlib
 import json
+import os
 from pathlib import Path
 from urllib.parse import urlsplit
 import uuid
@@ -12,6 +13,11 @@ def zap_started(zap, target):
     parsed = urlsplit(root)
     if parsed.scheme != 'http' or parsed.hostname != '127.0.0.1':
         raise ValueError('Upload fixture must target the local SSM tunnel')
+    token = os.environ.get('API_TEST_TOKEN', '')
+    if not token: raise RuntimeError('Authenticated Transfer scan requires a login token')
+    run=str(uuid.UUID(os.environ['MMIV_VERIFICATION_RUN_ID']))
+    zap.replacer.add_rule('mmiv-verification-run',True,'REQ_HEADER',False,'X-MMIV-Verification-Run',run)
+    authorization = 'Authorization: Bearer ' + token + '\r\nX-MMIV-Verification-Run: ' + run + '\r\n'
     content = 'MMIV ZAP upload fixture\n'
     boundary = 'mmiv-' + uuid.uuid4().hex
     body = (f'--{boundary}\r\n'
@@ -19,12 +25,12 @@ def zap_started(zap, target):
             'Content-Type: text/plain\r\n\r\n' + content +
             f'\r\n--{boundary}--\r\n')
     request = (f'POST {root}/api/v1/transfers HTTP/1.1\r\n'
-               f'Host: {parsed.netloc}\r\n'
+               f'Host: {parsed.netloc}\r\n' + authorization +
                f'Content-Type: multipart/form-data; boundary={boundary}\r\n'
                f'Content-Length: {len(body.encode())}\r\n\r\n' + body)
     messages = zap.core.send_request(request, followredirects=False)
     evidence = {'method': 'POST', 'path': '/api/v1/transfers', 'messages': messages}
-    Path('/zap/wrk/upload-seed.json').write_text(json.dumps(evidence, indent=2) + '\n')
+    Path('/zap/wrk/upload-seed.json').write_text(json.dumps(evidence, indent=2).replace(token, "[REDACTED]") + '\n')
     if not messages or len(messages) != 1:
         raise RuntimeError('ZAP did not return the upload seed response')
     message = messages[0]
@@ -53,14 +59,14 @@ def zap_started(zap, target):
             ('download', '', content, '200'),
             ('content', 'Range: bytes=0-3\r\n', 'MMIV', '206')]:
         read = (f'GET {root}/api/v1/files/{file_id}/{suffix} HTTP/1.1\r\n'
-                f'Host: {parsed.netloc}\r\n' + range_header + '\r\n')
+                f'Host: {parsed.netloc}\r\n' + authorization + range_header + '\r\n')
         result = zap.core.send_request(read, followredirects=False)
         evidence['read_requests'].append(result)
-        Path('/zap/wrk/upload-seed.json').write_text(json.dumps(evidence, indent=2) + '\n')
+        Path('/zap/wrk/upload-seed.json').write_text(json.dumps(evidence, indent=2).replace(token, "[REDACTED]") + '\n')
         if (len(result) != 1 or
                 result[0].get('responseHeader', '').splitlines()[0].split()[1] != status or
                 result[0].get('responseBody') != expected):
             raise RuntimeError('ZAP file read seed failed; see upload-seed.json')
     evidence['validated'] = True
-    Path('/zap/wrk/upload-seed.json').write_text(json.dumps(evidence, indent=2) + '\n')
+    Path('/zap/wrk/upload-seed.json').write_text(json.dumps(evidence, indent=2).replace(token, "[REDACTED]") + '\n')
     print('ZAP captured successful multipart POST /api/v1/transfers', flush=True)

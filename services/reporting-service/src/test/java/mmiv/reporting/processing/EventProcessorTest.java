@@ -49,6 +49,7 @@ class EventProcessorTest {
     private ReportProjector projector;
 
     private EventProcessor processor;
+    private mmiv.reporting.report.VerificationCleanupGuard cleanup;
 
     @BeforeEach
     void setUp() {
@@ -79,12 +80,20 @@ class EventProcessorTest {
             return audit;
         });
 
+        cleanup=mock(mmiv.reporting.report.VerificationCleanupGuard.class);
         processor = new EventProcessor(
                 validator,
                 auditRepository,
                 projector,
-                Clock.fixed(NOW, ZoneOffset.UTC)
+                Clock.fixed(NOW, ZoneOffset.UTC), cleanup
         );
+    }
+
+    @Test
+    void cleanedMigrationEventsAreAcknowledgedWithoutRecreatingAuditData() {
+        when(cleanup.isDeleted(any(java.util.UUID.class))).thenReturn(true);
+        assertEquals(EventProcessingResult.IGNORED_CLEANED,processor.process(eventBody()));
+        org.mockito.Mockito.verifyNoInteractions(auditRepository,projector);
     }
 
     @Test

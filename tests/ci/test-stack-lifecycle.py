@@ -139,25 +139,31 @@ class StackLifecycleTest(unittest.TestCase):
         self.assertEqual(self.configs['user-access-service']['memswap_limit'], '512m')
         self.assertIn('-Xmx256m', self.configs['user-access-service']['environment']['JAVA_TOOL_OPTIONS'])
         self.assertEqual(self.configs['user-access-service']['environment']['SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE'], '4')
-        self.assertNotIn('mem_limit', self.configs['integrity-service'])
+        self.assertEqual(self.configs['integrity-service']['mem_limit'], '384m')
         self.assertEqual(self.configs['oracle']['image'], 'gvenzl/oracle-free:23.26.3-slim-faststart')
         self.assertEqual(self.configs['oracle']['logging'],
                          {'driver': 'json-file', 'options': {'max-size': '10m', 'max-file': '3'}})
         self.assertEqual(self.configs['oracle']['healthcheck']['start_period'], '180s')
         self.assertEqual(self.volumes, {remote.ORACLE_VOLUME})
-        environment = (self.root / self.configs['user-access-service']['env_file'][0]['path'].lstrip('/')).read_text()
+        environment = (self.root / self.configs['user-access-service']['env_file'][-1]['path'].lstrip('/')).read_text()
         self.assertIn('ORACLE_JDBC_URL=jdbc:oracle:thin:@//oracle:1521/FREEPDB1', environment)
         self.assertIn('ORACLE_USER=USER_ACCESS', environment)
         self.assertIn('JWT_PRIVATE_KEY_PATH=file:/run/mmiv-jwt/private.pem', environment)
         self.assertIn('JWT_PUBLIC_KEY_PATH=file:/run/mmiv-jwt/public.pem', environment)
+        bootstrap_environment = (secrets_dir / 'bootstrap-admin.env').read_text()
+        self.assertIn('MMIV_BOOTSTRAP_ADMIN_ENABLED=true', bootstrap_environment)
+        self.assertIn('MMIV_BOOTSTRAP_ADMIN_USERNAME=admin', bootstrap_environment)
+        self.assertIn({'path': '/etc/mmiv/managed-oracle/bootstrap-admin.env', 'format': 'raw'}, self.configs['user-access-service']['env_file'])
+        self.assertNotIn('MMIV_BOOTSTRAP_ADMIN_PASSWORD', environment)
         self.assertNotIn('oracle', self.configs['integrity-service'].get('depends_on', {}))
         self.assertEqual((self.root / 'etc/mmiv/integrity.env').read_text(),
                          '# Embedded H2 mode: no Oracle secrets required.\n')
         self.assertTrue(all((secrets_dir / n).stat().st_mode & 0o777 == 0o600
-                            for n in ('credentials.json', 'private.pem', 'public.pem', 'oracle.env')))
+                            for n in ('credentials.json', 'bootstrap-admin.json', 'bootstrap-admin.env', 'private.pem', 'public.pem', 'oracle.env')))
         state_text = json.dumps(first)
         compose_text = (self.root / 'opt/mmiv/stack/compose.yaml').read_text()
         self.assertNotIn(json.loads((secrets_dir / 'credentials.json').read_text())['user_access'], state_text + compose_text)
+        self.assertNotIn(json.loads((secrets_dir / 'bootstrap-admin.json').read_text())['password'], state_text + compose_text)
         self.update(['user-access-service'])
         second = remote.run('deploy', dict(self.state))
         self.assertTrue(second['READY'])
@@ -236,10 +242,19 @@ class StackLifecycleTest(unittest.TestCase):
         with patch.object(remote, 'registered', side_effect=RuntimeError('not registered')):
             failed = remote.run('deploy', dict(self.state))
         self.assertTrue(failed['ROLLED_BACK'])
-        self.assertEqual(set(self.containers), {'oracle'})
+        self.assertEqual(set(self.containers), {'oracle', 'rabbitmq'})
         self.assertEqual(self.volumes, {remote.ORACLE_VOLUME})
         self.state['RELEASE_ID'] = 'retry-2'
         self.assertTrue(remote.run('deploy', dict(self.state))['READY'])
+
+    def test_missing_default_admin_credentials_are_not_silently_replaced(self):
+        self.managed()
+        remote.managed_access(dict(self.state))
+        credentials = self.root / 'etc/mmiv/managed-oracle/bootstrap-admin.json'
+        credentials.unlink()
+        with self.assertRaisesRegex(RuntimeError, 'restore their private backup'):
+            remote.managed_access(dict(self.state))
+        self.assertFalse(credentials.exists())
 
     def test_missing_volume_uses_listing_and_reuses_credentials_on_retry(self):
         self.managed()
@@ -301,12 +316,15 @@ class StackLifecycleTest(unittest.TestCase):
         self.assertTrue(result['READY'])
         launches = [c for c in self.calls if c[:2] == ('docker', 'compose') and 'up' in c]
         self.assertEqual(len(launches), 1)
-        self.assertEqual(set(self.configs['api-gateway']['depends_on']), set(self.state['services']) - {'api-gateway'})
+        self.assertEqual(set(self.configs['api-gateway']['depends_on']), (set(self.state['services']) - {'api-gateway'}) | {'rabbitmq'})
         service = self.configs['user-access-service']
         keys = [v for v in service['volumes'] if v['target'].startswith('/run/mmiv-jwt')]
         self.assertEqual(len(keys), 2)
         self.assertTrue(all(v['read_only'] for v in keys))
-        self.assertEqual(self.configs['transfer-service']['environment']['MMIV_LOG_QUEUE_URL'], self.state['MMIV_LOG_QUEUE_URL'])
+        self.assertEqual(self.configs['transfer-service']['environment']['SPRING_RABBITMQ_HOST'], 'rabbitmq')
+        self.assertEqual(self.configs['transfer-service']['environment']['MMIV_EVENTS_ENABLED'], 'true')
+        self.assertNotIn('RABBITMQ_VM_MEMORY_HIGH_WATERMARK', self.configs['rabbitmq']['environment'])
+        self.assertIn('mmiv-rabbitmq-data', self.configs['rabbitmq']['volumes'][0]['source'].replace('rabbit-data', 'mmiv-rabbitmq-data'))
 
     def test_same_bundle_is_a_noop_and_rotation_rolls_back(self):
         self.stage_access()
@@ -321,9 +339,9 @@ class StackLifecycleTest(unittest.TestCase):
         self.stage_access('b' * 64)
         result = remote.run('deploy', dict(self.state))
         self.assertTrue(result['changes']['user-access-service']['changed'])
-        self.assertIn('b' * 64, self.configs['user-access-service']['env_file'][0]['path'])
+        self.assertIn('b' * 64, self.configs['user-access-service']['env_file'][-1]['path'])
         remote.run('rollback', dict(self.state))
-        self.assertIn('a' * 64, self.configs['user-access-service']['env_file'][0]['path'])
+        self.assertIn('a' * 64, self.configs['user-access-service']['env_file'][-1]['path'])
         self.assertTrue((self.root / 'etc/mmiv/user-access/versions' / ('b' * 64) / 'private.pem').exists())
 
     def test_incomplete_access_bundle_changes_no_containers(self):
@@ -339,7 +357,7 @@ class StackLifecycleTest(unittest.TestCase):
         groups = [[n for n in c if n in self.state['services']] for c in launches]
         self.assertEqual(len(groups), 1)
         self.assertEqual(set(groups[0]), set(self.state['services']))
-        self.assertEqual(set(self.configs['api-gateway']['depends_on']), set(self.state['services']) - {'api-gateway'})
+        self.assertEqual(set(self.configs['api-gateway']['depends_on']), (set(self.state['services']) - {'api-gateway'}) | {'rabbitmq'})
         self.assertEqual(list(self.configs)[-1], 'api-gateway')
         self.assertTrue(all(c[c.index('-p') + 1] == 'mmiv-stack' for c in launches))
         self.assertEqual(sum(c[:3] == ('aws', 'ecr', 'get-login-password') for c in self.calls), 1)
@@ -382,13 +400,14 @@ class StackLifecycleTest(unittest.TestCase):
         self.assertEqual(result['failure_phase'], 'compose_startup')
         self.assertIn('integrity-service', result['container_states'])
         self.assertEqual(self.containers['api-gateway']['Id'], gateway_id)
-        self.assertTrue(all(c['Config']['Image'].endswith('-first') for c in self.containers.values()))
+        self.assertTrue(all(c['Config']['Image'].endswith('-first') for n,c in self.containers.items() if n in self.state['services']))
 
     def test_first_failed_release_removes_new_containers(self):
         with patch.object(remote, 'registered', side_effect=RuntimeError('not registered')):
             result = remote.run('deploy', dict(self.state))
         self.assertTrue(result['ROLLED_BACK'])
-        self.assertFalse(self.containers)
+        self.assertFalse(set(self.containers) & set(self.state['services']))
+        self.assertIn('rabbitmq', self.containers)
         self.assertTrue(all(value == 'REMOVED_NEW_SERVICE' for value in result['recovery'].values()))
 
     def test_gateway_failure_restores_all_changed_images(self):
@@ -400,7 +419,7 @@ class StackLifecycleTest(unittest.TestCase):
         with patch.object(remote, 'registered', side_effect=register):
             result = remote.run('deploy', dict(self.state))
         self.assertTrue(result['ROLLED_BACK'])
-        self.assertTrue(all(c['Config']['Image'].endswith('-first') for c in self.containers.values()))
+        self.assertTrue(all(c['Config']['Image'].endswith('-first') for n,c in self.containers.items() if n in self.state['services']))
         self.assertEqual(list(result['recovery'])[0], 'api-gateway')
 
     def test_oracle_env_update_recreates_only_integrity_and_restores_secret(self):
@@ -451,7 +470,7 @@ class StackLifecycleTest(unittest.TestCase):
         recovered = remote.run('rollback', failed)
         self.assertTrue(recovered['ROLLED_BACK'])
         self.assertNotIn('recovery_error', recovered)
-        self.assertTrue(all(c['Config']['Image'].endswith('-first') for c in self.containers.values()))
+        self.assertTrue(all(c['Config']['Image'].endswith('-first') for n,c in self.containers.items() if n in self.state['services']))
 
     def test_next_release_recovers_interrupted_update_before_capturing_baseline(self):
         remote.run('deploy', dict(self.state))
@@ -468,7 +487,7 @@ class StackLifecycleTest(unittest.TestCase):
         with patch.object(remote, 'healthy', side_effect=health):
             result = remote.run('deploy', dict(self.state))
         self.assertTrue(result['ROLLED_BACK'])
-        self.assertTrue(all(c['Config']['Image'].endswith('-first') for c in self.containers.values()))
+        self.assertTrue(all(c['Config']['Image'].endswith('-first') for n,c in self.containers.items() if n in self.state['services']))
 
     def test_migrates_earlier_service_projects(self):
         remote.run('deploy', dict(self.state))
@@ -478,7 +497,7 @@ class StackLifecycleTest(unittest.TestCase):
         result = remote.run('deploy', dict(self.state))
         self.assertTrue(result['READY'])
         self.assertTrue(all(c['Config']['Labels']['com.docker.compose.project'] == 'mmiv-stack'
-                            for c in self.containers.values()))
+                            for n,c in self.containers.items() if n in self.state['services']))
 
     def test_rejects_foreign_compose_owner(self):
         remote.run('deploy', dict(self.state))
@@ -493,7 +512,7 @@ class StackLifecycleTest(unittest.TestCase):
         remote.run('deploy', dict(self.state))
         with self.assertRaises(RuntimeError):
             remote.run('rollback', old)
-        self.assertTrue(all(c['Config']['Image'].endswith('-second') for c in self.containers.values()))
+        self.assertTrue(all(c['Config']['Image'].endswith('-second') for n,c in self.containers.items() if n in self.state['services']))
 
 class RemoteReadinessTest(unittest.TestCase):
     def test_gateway_retries_routes_until_transfer_is_discovered(self):
@@ -508,8 +527,8 @@ class RemoteReadinessTest(unittest.TestCase):
                 return io.BytesIO(json.dumps({'application': {'instance': {'status': 'UP'}}}).encode())
             if attempts == 1:
                 raise HTTPError(url, 503, 'not discovered', {}, None)
-            if url.endswith('/content'):
-                raise HTTPError(url, 400, 'invalid id', {}, None)
+            if url.endswith('/content') or '/api/metadata/' in url or '/api/reports/' in url:
+                raise HTTPError(url, 401, 'login required', {}, None)
             result = io.BytesIO(b'page')
             result.status = 200
             return result
@@ -517,8 +536,10 @@ class RemoteReadinessTest(unittest.TestCase):
             remote.registered('api-gateway')
             self.assertEqual(attempts, 2)
             sleep.assert_called_once_with(5)
-        self.assertTrue(any('/files.html' in url for url in calls))
+        self.assertTrue(any('/login.html' in url for url in calls))
         self.assertTrue(any('/content' in url for url in calls))
+        self.assertTrue(any('/api/metadata/' in url for url in calls))
+        self.assertTrue(any('/api/reports/' in url for url in calls))
 
     def test_backend_not_up_fails_after_retries(self):
         with patch.object(remote, 'urlopen', side_effect=lambda *a, **k: io.BytesIO(
@@ -607,6 +628,25 @@ class RunnerAndBarrierTest(unittest.TestCase):
             self.assertEqual(names[-1], 'api-gateway')
             self.assertEqual(set(names), ssm.expected_services())
             restore.assert_not_called()
+
+    def test_generated_account_cleanup_runs_after_success_and_failure(self):
+        for scan_code, cleanup_code in [(0, 0), (1, 0), (0, 1)]:
+            account_paths = set()
+            def launch(*args, **kwargs):
+                account = Path(kwargs['env']['MMIV_VERIFICATION_ACCOUNT_FILE'])
+                account.write_text('{}')
+                account_paths.add(str(account))
+                return SimpleNamespace(stdout=['scanner output\n'], wait=lambda: scan_code)
+            with tempfile.TemporaryDirectory() as directory, \
+                    patch.object(verification.subprocess, 'Popen', side_effect=launch), \
+                    patch.object(verification.subprocess, 'run', return_value=SimpleNamespace(returncode=cleanup_code)) as cleanup:
+                self.assertEqual(verification.verify(self.state(), Path(directory)), int(bool(scan_code or cleanup_code)))
+                self.assertEqual(len(account_paths), 1)
+                self.assertEqual(cleanup.call_count,2)
+                self.assertEqual(cleanup.call_args_list[0].kwargs['env']['DAST_DATA_CLEANUP_ONLY'],'true')
+                self.assertNotIn('DAST_DATA_CLEANUP_ONLY',cleanup.call_args_list[1].kwargs['env'])
+                self.assertEqual(cleanup.call_args.kwargs['env']['DAST_CLEANUP_ONLY'], 'true')
+                self.assertFalse(Path(next(iter(account_paths))).exists())
 
     def test_rollback_uses_one_ssm_command_and_skips_already_restored(self):
         state = self.state()

@@ -14,9 +14,13 @@ services:
         condition: service_started
       user-access-service:
         condition: service_started
+      integrity-service:
+        condition: service_started
+      rabbitmq:
+        condition: service_healthy
       reporting-service:
         condition: service_started
-      integrity-service:
+      discovery-service:
         condition: service_started
     environment:
       EUREKA_DEFAULT_ZONE: http://service-registry:8761/eureka/
@@ -25,6 +29,17 @@ services:
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
       AWS_SESSION_TOKEN: ${AWS_SESSION_TOKEN:-}
+      SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_USERNAME: mmiv
+      SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:?Set RABBITMQ_PASSWORD}
+      MMIV_EVENTS_ENABLED: 'true'
+      MMIV_EVENTS_OUTBOX_DIRECTORY: /var/lib/mmiv/event-outbox
+      METADATA_URL: http://discovery-service:8085
+      USER_ACCESS_URL: http://user-access-service:8083
+      USER_ACCESS_JWK_SET_URI: http://user-access-service:8083/.well-known/jwks.json
+      USER_ACCESS_JWT_ISSUER: ${USER_ACCESS_JWT_ISSUER:-https://auth.mmiv.example}
+    volumes:
+    - api-gateway-events:/var/lib/mmiv/event-outbox
   service-registry:
     build:
       context: ../../services/service-registry
@@ -45,6 +60,21 @@ services:
       timeout: 3s
       retries: 30
       start_period: 30s
+    environment:
+      SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_USERNAME: mmiv
+      SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:?Set RABBITMQ_PASSWORD}
+      MMIV_EVENTS_ENABLED: 'true'
+      MMIV_EVENTS_OUTBOX_DIRECTORY: /var/lib/mmiv/event-outbox
+      METADATA_URL: http://discovery-service:8085
+      USER_ACCESS_URL: http://user-access-service:8083
+      USER_ACCESS_JWK_SET_URI: http://user-access-service:8083/.well-known/jwks.json
+      USER_ACCESS_JWT_ISSUER: ${USER_ACCESS_JWT_ISSUER:-https://auth.mmiv.example}
+    volumes:
+    - service-registry-events:/var/lib/mmiv/event-outbox
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
   transfer-service:
     build:
       context: ../../services/transfer-service
@@ -56,6 +86,8 @@ services:
     depends_on:
       service-registry:
         condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
     environment:
       EUREKA_DEFAULT_ZONE: http://service-registry:8761/eureka/
       AWS_REGION: ${AWS_REGION:-ap-southeast-1}
@@ -63,10 +95,19 @@ services:
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
       AWS_SESSION_TOKEN: ${AWS_SESSION_TOKEN:-}
-      MMIV_LOG_QUEUE_URL: ${MMIV_LOG_QUEUE_URL:-}
-      MMIV_LOG_OUTBOX_DIRECTORY: /var/lib/mmiv/log-outbox
+      USER_ACCESS_JWT_ISSUER: ${USER_ACCESS_JWT_ISSUER:-https://auth.mmiv.example}
+      USER_ACCESS_JWK_SET_URI: http://user-access-service:8083/.well-known/jwks.json
+      JWT_COOKIE_SECURE: ${JWT_COOKIE_SECURE:-false}
+      SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_USERNAME: mmiv
+      SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:?Set RABBITMQ_PASSWORD}
+      MMIV_EVENTS_ENABLED: 'true'
+      MMIV_EVENTS_OUTBOX_DIRECTORY: /var/lib/mmiv/event-outbox
+      METADATA_URL: http://discovery-service:8085
+      USER_ACCESS_URL: http://user-access-service:8083
     volumes:
-    - transfer-service-logs:/var/lib/mmiv/log-outbox
+    - transfer-service-events:/var/lib/mmiv/event-outbox
+    - ${DISCOVERY_MEDIA_PATH:-../../media}:/media:ro
   discovery-service:
     build:
       context: ../../services/discovery-service
@@ -76,18 +117,29 @@ services:
     depends_on:
       service-registry:
         condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
     environment:
       EUREKA_DEFAULT_ZONE: http://service-registry:8761/eureka/
-      DB_URL: ${DB_URL:-}
-      DB_USERNAME: ${DB_USERNAME:-}
-      DB_PASSWORD: ${DB_PASSWORD:-}
+      DB_URL: ${DB_URL:?Set DB_URL}
+      DB_USERNAME: ${DB_USERNAME:?Set DB_USERNAME}
+      DB_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD}
       DISCOVERY_ROOT: ${DISCOVERY_ROOT:-/media}
+      SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_USERNAME: mmiv
+      SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:?Set RABBITMQ_PASSWORD}
+      MMIV_EVENTS_ENABLED: 'true'
+      MMIV_EVENTS_OUTBOX_DIRECTORY: /var/lib/mmiv/event-outbox
+      METADATA_URL: http://discovery-service:8085
+      USER_ACCESS_URL: http://user-access-service:8083
+      USER_ACCESS_JWK_SET_URI: http://user-access-service:8083/.well-known/jwks.json
+      USER_ACCESS_JWT_ISSUER: ${USER_ACCESS_JWT_ISSUER:-https://auth.mmiv.example}
+      MMIV_BUCKET_NAME: ${MMIV_BUCKET_NAME:-media-migration-dev-landing}
     ports:
     - 127.0.0.1:8085:8085
-    profiles:
-    - discovery
     volumes:
     - ${DISCOVERY_MEDIA_PATH:-../../media}:/media:ro
+    - discovery-service-events:/var/lib/mmiv/event-outbox
   user-access-service:
     build:
       context: ../../services/user-access-service
@@ -97,8 +149,19 @@ services:
     depends_on:
       service-registry:
         condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
     environment:
       EUREKA_DEFAULT_ZONE: http://service-registry:8761/eureka/
+      SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_USERNAME: mmiv
+      SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:?Set RABBITMQ_PASSWORD}
+      MMIV_EVENTS_ENABLED: 'true'
+      MMIV_EVENTS_OUTBOX_DIRECTORY: /var/lib/mmiv/event-outbox
+      METADATA_URL: http://discovery-service:8085
+      USER_ACCESS_URL: http://user-access-service:8083
+      USER_ACCESS_JWK_SET_URI: http://user-access-service:8083/.well-known/jwks.json
+      USER_ACCESS_JWT_ISSUER: ${USER_ACCESS_JWT_ISSUER:-https://auth.mmiv.example}
     ports:
     - 127.0.0.1:8083:8083
     env_file:
@@ -107,6 +170,7 @@ services:
       format: raw
     volumes:
     - ${USER_ACCESS_JWT_DIRECTORY:?Set USER_ACCESS_JWT_DIRECTORY}:/run/mmiv-jwt:ro
+    - user-access-service-events:/var/lib/mmiv/event-outbox
   reporting-service:
     build:
       context: ../../services/reporting-service
@@ -116,19 +180,26 @@ services:
     depends_on:
       service-registry:
         condition: service_healthy
-      mongodb:
-        condition: service_healthy
       rabbitmq:
+        condition: service_healthy
+      mongodb:
         condition: service_healthy
     environment:
       EUREKA_DEFAULT_ZONE: http://service-registry:8761/eureka/
-      MONGODB_URI: mongodb://${MONGO_ROOT_USERNAME:-mmiv}:${MONGO_ROOT_PASSWORD:-mmiv-local}@mongodb:27017/mmiv_reporting?authSource=admin
       SPRING_RABBITMQ_HOST: rabbitmq
-      SPRING_RABBITMQ_PORT: 5672
-      SPRING_RABBITMQ_USERNAME: ${RABBITMQ_DEFAULT_USER:-mmiv}
-      SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_DEFAULT_PASS:-mmiv-local}
+      SPRING_RABBITMQ_USERNAME: mmiv
+      SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:?Set RABBITMQ_PASSWORD}
+      MMIV_EVENTS_ENABLED: 'true'
+      MMIV_EVENTS_OUTBOX_DIRECTORY: /var/lib/mmiv/event-outbox
+      METADATA_URL: http://discovery-service:8085
+      USER_ACCESS_URL: http://user-access-service:8083
+      USER_ACCESS_JWK_SET_URI: http://user-access-service:8083/.well-known/jwks.json
+      USER_ACCESS_JWT_ISSUER: ${USER_ACCESS_JWT_ISSUER:-https://auth.mmiv.example}
+      MONGODB_URI: mongodb://mmiv:${MONGODB_PASSWORD:?Set MONGODB_PASSWORD}@mongodb:27017/mmiv_reporting?authSource=admin
     ports:
     - 127.0.0.1:8084:8084
+    volumes:
+    - reporting-service-events:/var/lib/mmiv/event-outbox
   integrity-service:
     build:
       context: ../../services/integrity-service
@@ -138,6 +209,8 @@ services:
     depends_on:
       service-registry:
         condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
     environment:
       EUREKA_DEFAULT_ZONE: http://service-registry:8761/eureka/
       AWS_REGION: ${AWS_REGION:-ap-southeast-1}
@@ -145,34 +218,28 @@ services:
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
       AWS_SESSION_TOKEN: ${AWS_SESSION_TOKEN:-}
+      SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_USERNAME: mmiv
+      SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:?Set RABBITMQ_PASSWORD}
+      MMIV_EVENTS_ENABLED: 'true'
+      MMIV_EVENTS_OUTBOX_DIRECTORY: /var/lib/mmiv/event-outbox
+      METADATA_URL: http://discovery-service:8085
+      USER_ACCESS_URL: http://user-access-service:8083
+      USER_ACCESS_JWK_SET_URI: http://user-access-service:8083/.well-known/jwks.json
+      USER_ACCESS_JWT_ISSUER: ${USER_ACCESS_JWT_ISSUER:-https://auth.mmiv.example}
     ports:
     - 127.0.0.1:8082:8082
-  mongodb:
-    image: mongo:8.0.14-noble
-    restart: unless-stopped
-    networks:
-    - registry
-    environment:
-      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USERNAME:-mmiv}
-      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD:-mmiv-local}
     volumes:
-    - mongo-data:/data/db
-    healthcheck:
-      test:
-      - CMD-SHELL
-      - 'mongosh --quiet --username "$${MONGO_INITDB_ROOT_USERNAME}" --password "$${MONGO_INITDB_ROOT_PASSWORD}" --authenticationDatabase admin --eval "db.adminCommand({ ping: 1 }).ok" | grep 1'
-      interval: 5s
-      timeout: 5s
-      retries: 30
-      start_period: 20s
+    - integrity-service-events:/var/lib/mmiv/event-outbox
   rabbitmq:
-    image: rabbitmq:4.1.4-management-alpine
+    image: rabbitmq:4.1.4-management-alpine@sha256:5cbd7145b0306399ad68422c3350b6cbd1bb95704b39f5896480e5b6d4238a04
+    hostname: mmiv-local-rabbitmq
     restart: unless-stopped
     networks:
     - registry
     environment:
-      RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER:-mmiv}
-      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS:-mmiv-local}
+      RABBITMQ_DEFAULT_USER: mmiv
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:?Set RABBITMQ_PASSWORD}
     volumes:
     - rabbit-data:/var/lib/rabbitmq
     healthcheck:
@@ -181,13 +248,38 @@ services:
       - rabbitmq-diagnostics
       - -q
       - ping
-      interval: 5s
+      interval: 10s
       timeout: 5s
       retries: 30
-      start_period: 20s
+      start_period: 30s
+  mongodb:
+    image: mongo:8.0.14-noble@sha256:877fa303326645cd0e50a3833fce2f3c03d6eb4aac82c97a02e98879f51126d3
+    restart: unless-stopped
+    networks:
+    - registry
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: mmiv
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGODB_PASSWORD:?Set MONGODB_PASSWORD}
+    volumes:
+    - mongo-data:/data/db
+    healthcheck:
+      test:
+      - CMD-SHELL
+      - mongosh --quiet --username mmiv --password "$$MONGO_INITDB_ROOT_PASSWORD"
+        --authenticationDatabase admin --eval 'quit(db.adminCommand({ping:1}).ok?0:1)'
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
 networks:
   registry: null
 volumes:
-  mongo-data:
-  rabbit-data:
-  transfer-service-logs: {}
+  api-gateway-events: {}
+  service-registry-events: {}
+  transfer-service-events: {}
+  discovery-service-events: {}
+  user-access-service-events: {}
+  reporting-service-events: {}
+  integrity-service-events: {}
+  rabbit-data: {}
+  mongo-data: {}

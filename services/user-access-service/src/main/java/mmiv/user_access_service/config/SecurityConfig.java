@@ -3,6 +3,8 @@ package mmiv.user_access_service.config;
 import jakarta.servlet.DispatcherType;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
+import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -10,6 +12,8 @@ import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
 
 @Configuration
+@EnableWebSecurity
+@ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
 public class SecurityConfig {
 
   @Bean
@@ -22,7 +26,9 @@ public class SecurityConfig {
             auth ->
                 auth.dispatcherTypeMatchers(DispatcherType.ERROR)
                     .permitAll()
-                    .requestMatchers(HttpMethod.POST, "/api/auth/login")
+                    .requestMatchers(HttpMethod.GET, "/login.html", "/signup.html", "/admin.html", "/admin.js")
+                    .permitAll()
+                    .requestMatchers(HttpMethod.POST, "/api/auth/login", "/api/auth/signup")
                     .permitAll()
                     .requestMatchers(HttpMethod.GET, "/.well-known/jwks.json")
                     .permitAll()
@@ -30,7 +36,9 @@ public class SecurityConfig {
                     .permitAll()
                     .requestMatchers(HttpMethod.GET, "/api/health")
                     .permitAll()
-                    .requestMatchers("/api/users/**")
+                    .requestMatchers(HttpMethod.DELETE, "/api/auth/verification-account")
+                    .authenticated()
+                    .requestMatchers("/api/admin/**")
                     .authenticated()
                     .requestMatchers("/api/access/**")
                     .authenticated()

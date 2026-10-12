@@ -198,11 +198,15 @@ jobs:
       - name: Check CD dependency order and upload page
         run: |
           python3 -m pip install PyYAML
+          python3 tests/ci/test-verification-login.py
           python3 tests/ci/test-runtime-config.py
           python3 tests/ci/test-cd-contract.py
           python3 tests/ci/test-terraform-sqs-policy.py
+          python3 tests/ci/test-verification-permission.py
+          python3 tests/ci/test-verification-data-cleanup.py
+          python3 tests/ci/test-admin-bootstrap.py
           python3 tests/ci/test-stack-lifecycle.py
-          node --test tests/ci/test-upload-page.cjs
+          node --test tests/ci/test-upload-page.cjs tests/ci/test-transfer-auth-pages.cjs tests/ci/test-session-recovery.cjs tests/ci/test-admin-page.cjs
 
       - name: Reclaim and verify User Access Oracle database storage
         env:
@@ -233,7 +237,6 @@ jobs:
           ansible-galaxy collection install -r requirements.yml
           ansible-playbook -i inventory/ci.ini playbook.yml --syntax-check
           ansible-playbook -i inventory/ci.ini rollback.yml --syntax-check
-          # Redis playbook is temporarily disabled.
           ansible-playbook -i inventory/ci.ini setup-host.yml --syntax-check
           ansible-playbook -i inventory/ci.ini stage-integrity.yml --syntax-check
           ansible-playbook -i inventory/ci.ini stage-user-access.yml --syntax-check
@@ -438,14 +441,12 @@ jobs:
           - name: user-access-service
             path: services/user-access-service
             port: '8083'
-          # Log / Reporting service is owned by another developer; enable when ready.
-#          - name: reporting-service
-#            path: services/reporting-service
-#            port: '8084'
-          # Configure Oracle/media settings and Eureka before enabling Discovery.
-#          - name: discovery-service
-#            path: services/discovery-service
-#            port: '8085'
+          - name: reporting-service
+            path: services/reporting-service
+            port: '8084'
+          - name: discovery-service
+            path: services/discovery-service
+            port: '8085'
           - name: api-gateway
             path: services/api-gateway
             port: '8080'
@@ -482,7 +483,6 @@ jobs:
           MANAGED_USER_ACCESS_ORACLE: ${{ needs.setup-host.outputs.managed_user_access_oracle }}
           USER_ACCESS_JWT_ISSUER: ${{ vars.USER_ACCESS_JWT_ISSUER || 'https://auth.mmiv.example' }}
           USER_ACCESS_JWT_KEY_ID: ${{ vars.USER_ACCESS_JWT_KEY_ID || 'mmiv-user-access-key-1' }}
-          MMIV_LOG_QUEUE_URL: ${{ needs.setup-host.outputs.log_queue_url }}
         run: |
           python3 scripts/cd/docker-stack-ssm.py prepare
           python3 scripts/cd/docker-stack-ssm.py deploy

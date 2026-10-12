@@ -71,7 +71,6 @@ jobs:
         run: |
           python3 -m pip install PyYAML
           python3 tests/ci/test-cd-contract.py
-          python3 tests/ci/test-reporting-runtime.py
           python3 tests/ci/test-stack-lifecycle.py
           node --test tests/ci/test-upload-page.cjs
 

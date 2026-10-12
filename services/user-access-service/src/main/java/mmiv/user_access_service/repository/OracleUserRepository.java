@@ -102,6 +102,36 @@ public class OracleUserRepository implements UserRepository {
 
   @Override
   @Transactional
+  public void create(User user) {
+    jdbcTemplate.update(
+        """
+        INSERT INTO app_users (user_id, username, role, active, password_hash)
+        VALUES (?, ?, ?, ?, ?)
+        """,
+        user.getUserId(),
+        user.getUsername(),
+        user.getRole(),
+        user.isActive() ? 1 : 0,
+        user.getPasswordHash());
+    for (Permission permission : user.getPermissions()) {
+      jdbcTemplate.update(
+          "INSERT INTO user_permissions (user_id, permission) VALUES (?, ?)",
+          user.getUserId(),
+          permission.name());
+    }
+  }
+
+  @Override
+  @Transactional
+  public boolean deleteVerificationAccount(String userId) {
+    return jdbcTemplate.update(
+        "DELETE FROM app_users WHERE user_id = ? AND role = 'USER' "
+            + "AND REGEXP_LIKE(username, '^mmiv_ci_[0-9a-f]{32}$', 'c')",
+        userId) == 1;
+  }
+
+  @Override
+  @Transactional
   public void save(User user) {
     jdbcTemplate.update(
         """
@@ -187,6 +217,27 @@ public class OracleUserRepository implements UserRepository {
                 """,
         userId,
         destination);
+  }
+
+  @Override
+  public void createAdminInvitation(String userId, String tokenHash, java.time.Instant expiresAt, String issuerId) {
+    jdbcTemplate.update("INSERT INTO ADMIN_INVITATIONS (TOKEN_HASH,USER_ID,EXPIRES_AT,ISSUER_USER_ID) VALUES (?,?,?,?)",
+        tokenHash, userId, java.sql.Timestamp.from(expiresAt), issuerId);
+  }
+
+  @Override
+  @Transactional
+  public boolean acceptAdminInvitation(String userId, String tokenHash, java.time.Instant now) {
+    // Serialize role transitions for this account before consuming any invitation.
+    var roles = jdbcTemplate.queryForList("SELECT ROLE FROM APP_USERS WHERE USER_ID=? AND ACTIVE=1 FOR UPDATE", String.class, userId);
+    if (roles.size() != 1 || !"USER".equals(roles.get(0))) return false;
+    int consumed = jdbcTemplate.update("UPDATE ADMIN_INVITATIONS SET CONSUMED_AT=? WHERE TOKEN_HASH=? AND USER_ID=? AND CONSUMED_AT IS NULL AND EXPIRES_AT>?",
+        java.sql.Timestamp.from(now), tokenHash, userId, java.sql.Timestamp.from(now));
+    if (consumed != 1) return false;
+    jdbcTemplate.update("UPDATE APP_USERS SET ROLE='ADMIN' WHERE USER_ID=?", userId);
+    jdbcTemplate.update("UPDATE ADMIN_INVITATIONS SET CONSUMED_AT=? WHERE USER_ID=? AND CONSUMED_AT IS NULL",
+        java.sql.Timestamp.from(now), userId);
+    return true;
   }
 
   private static void validateDestinationAccessArguments(

@@ -1,6 +1,6 @@
 package mmiv.user_access_service.repository;
 
-import java.util.HashMap;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.Map;
 import java.util.Optional;
 import mmiv.user_access_service.model.DestinationAccess;
@@ -13,7 +13,36 @@ import org.springframework.stereotype.Repository;
 @Profile("test")
 public class InMemoryUserRepository implements UserRepository {
 
-  private final Map<String, User> users = new HashMap<>();
+  private record Invitation(String userId, java.time.Instant expiresAt) {}
+  private final Map<String, Invitation> invitations = new ConcurrentHashMap<>();
+
+  @Override
+  public synchronized void createAdminInvitation(String userId, String tokenHash, java.time.Instant expiresAt, String issuerId) {
+    if (invitations.putIfAbsent(tokenHash, new Invitation(userId, expiresAt)) != null)
+      throw new org.springframework.dao.DuplicateKeyException("Invitation already exists");
+  }
+
+  @Override
+  public synchronized boolean acceptAdminInvitation(String userId, String tokenHash, java.time.Instant now) {
+    var invitation = invitations.get(tokenHash);
+    var user = users.get(userId);
+    if (invitation == null || !invitation.userId().equals(userId) || !invitation.expiresAt().isAfter(now)
+        || user == null || !user.isActive() || !"USER".equals(user.getRole())) return false;
+    invitations.entrySet().removeIf(entry -> entry.getValue().userId().equals(userId));
+    users.put(userId, new User(userId, user.getDestinationAccesses(), user.getUsername(), "ADMIN",
+        true, user.getPermissions(), user.getPasswordHash()));
+    return true;
+  }
+
+  private final Map<String, User> users = new ConcurrentHashMap<>();
+
+  @Override
+  public synchronized void create(User user) {
+    if (users.containsKey(user.getUserId()) || findByUsername(user.getUsername()).isPresent()) {
+      throw new org.springframework.dao.DuplicateKeyException("User already exists");
+    }
+    users.put(user.getUserId(), user);
+  }
 
   @Override
   public void save(User user) {
@@ -38,6 +67,14 @@ public class InMemoryUserRepository implements UserRepository {
   @Override
   public Optional<User> findById(String userId) {
     return Optional.ofNullable(users.get(userId));
+  }
+
+  @Override
+  public boolean deleteVerificationAccount(String userId) {
+    User user = users.get(userId);
+    return user != null && "USER".equals(user.getRole())
+        && user.getUsername() != null && user.getUsername().matches("mmiv_ci_[0-9a-f]{32}")
+        && users.remove(userId, user);
   }
 
   @Override

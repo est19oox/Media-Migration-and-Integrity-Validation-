@@ -37,8 +37,8 @@ def healthy(port):
 
 
 def registered(name, address=None, port=None):
-    # Discovery is a placeholder without Eureka registration.
-    if name in ('service-registry', 'discovery-service'):
+    # The registry server does not register itself as a client.
+    if name == 'service-registry':
         return
     deadline = time.monotonic() + 180
     for attempt in range(30):
@@ -57,8 +57,10 @@ def registered(name, address=None, port=None):
                              and str(instance['port'].get('$')) == str(port)))
                         for instance in instances)
             if ready and name == 'api-gateway':
-                for path, expected in [('/upload.html', 200), ('/files.html', 200),
-                                       ('/api/v1/files/invalid!/content', 400)]:
+                for path, expected in [('/', 200), ('/login.html', 200),
+                                       ('/api/v1/files/invalid!/content', 401),
+                                       ('/api/metadata/plans/00000000-0000-0000-0000-000000000000', 401),
+                                       ('/api/reports/00000000-0000-0000-0000-000000000000', 401)]:
                     try:
                         with urlopen('http://127.0.0.1:8080' + path, timeout=3) as response:
                             status = response.status
@@ -328,11 +330,24 @@ def managed_access(state):
     key_id = state.get('USER_ACCESS_JWT_KEY_ID', 'mmiv-user-access-key-1')
     if any(not isinstance(v, str) or not v or '\n' in v or '\r' in v for v in (issuer, key_id)):
         raise ValueError('Invalid JWT issuer or key identity')
+    bootstrap = directory / 'bootstrap-admin.json'
+    if not bootstrap.exists():
+        application = inspect('user-access-service')
+        already_enabled = application and 'MMIV_BOOTSTRAP_ADMIN_ENABLED=true' in application.get('Config', {}).get('Env', [])
+        if (directory / 'bootstrap-admin.env').exists() or already_enabled:
+            raise RuntimeError('Bootstrap administrator credentials are missing; restore their private backup')
+        save(bootstrap, {'username': 'admin', 'password': secrets.token_hex(24)})
+    administrator = json.loads(bootstrap.read_text())
+    if set(administrator) != {'username', 'password'} or administrator['username'] != 'admin' or not re.fullmatch(r'[a-f0-9]{48}', administrator['password']):
+        raise RuntimeError('Invalid bootstrap administrator configuration; restore its private backup')
     environment = ('ORACLE_JDBC_URL=jdbc:oracle:thin:@//oracle:1521/FREEPDB1\n'
                    'ORACLE_USER=USER_ACCESS\nORACLE_PASSWORD=' + values['user_access'] + '\n'
                    'JWT_ISSUER=' + issuer + '\nJWT_KEY_ID=' + key_id + '\n'
                    'JWT_PRIVATE_KEY_PATH=file:/run/mmiv-jwt/private.pem\n'
                    'JWT_PUBLIC_KEY_PATH=file:/run/mmiv-jwt/public.pem\n')
+    bootstrap_env = ('MMIV_BOOTSTRAP_ADMIN_ENABLED=true\nMMIV_BOOTSTRAP_ADMIN_USERNAME=admin\n'
+                     'MMIV_BOOTSTRAP_ADMIN_PASSWORD=' + administrator['password'] + '\n')
+    atomic_write(directory / 'bootstrap-admin.env', bootstrap_env)
     identity = hashlib.sha256((environment + private.read_text() + derived).encode()).hexdigest()
     bundle = Path('/etc/mmiv/user-access/versions/' + identity)
     bundle.mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -350,6 +365,40 @@ def managed_access(state):
     if existing.returncode != 0:
         command('docker', 'volume', 'create', ORACLE_VOLUME)
     return {**state, 'USER_ACCESS_CONFIG_ID': identity}
+
+
+def managed_messaging():
+    directory = Path('/etc/mmiv/messaging')
+    directory.mkdir(parents=True, exist_ok=True, mode=0o700)
+    credentials = directory / 'credentials.json'
+    if credentials.exists():
+        values = json.loads(credentials.read_text())
+        if set(values) != {'rabbit', 'mongo_root', 'mongo_app'} or any(not re.fullmatch(r'[a-f0-9]{64}', value) for value in values.values()):
+            raise RuntimeError('Invalid messaging credentials; restore their backup')
+    else:
+        # Existing persistent broker/database data must never be silently given new passwords.
+        for volume in ('mmiv-rabbitmq-data', 'mmiv-reporting-data'):
+            current = command('docker', 'volume', 'inspect', volume, check=False)
+            if current.returncode == 0:
+                raise RuntimeError('Messaging data exists without credentials; restore the host secret backup')
+            if 'no such volume' not in current.stderr.lower():
+                raise RuntimeError('Could not inspect messaging volume')
+        values = {key: secrets.token_hex(32) for key in ('rabbit', 'mongo_root', 'mongo_app')}
+        atomic_write(credentials, json.dumps(values))
+    files = {
+        'rabbit-client.env': 'SPRING_RABBITMQ_USERNAME=mmiv\nSPRING_RABBITMQ_PASSWORD=' + values['rabbit'] + '\n',
+        'rabbit-server.env': 'RABBITMQ_DEFAULT_USER=mmiv\nRABBITMQ_DEFAULT_PASS=' + values['rabbit'] + '\n',
+        'mongo-server.env': 'MONGO_INITDB_ROOT_USERNAME=mmiv_admin\nMONGO_INITDB_ROOT_PASSWORD=' + values['mongo_root'] + '\nMMIV_REPORTING_PASSWORD=' + values['mongo_app'] + '\n',
+        'reporting.env': 'MONGODB_URI=mongodb://mmiv_reporting:' + values['mongo_app'] + '@mongodb:27017/mmiv_reporting?authSource=mmiv_reporting\n',
+        'initialize-reporting.js': "db.getSiblingDB('mmiv_reporting').createUser({user:'mmiv_reporting',pwd:process.env.MMIV_REPORTING_PASSWORD,roles:[{role:'readWrite',db:'mmiv_reporting'}]});\n"}
+    for name, content in files.items():
+        target = directory / name
+        if not target.exists() or target.read_text() != content:
+            atomic_write(target, content)
+        if name.endswith(".js"):
+            target.chmod(0o644)
+    for name in ('service-registry','api-gateway','transfer-service','integrity-service','user-access-service','reporting-service','discovery-service'):
+        Path('/var/lib/mmiv/event-outbox/' + name).mkdir(parents=True, exist_ok=True, mode=0o700)
 
 
 def parallel(function, values):
@@ -380,11 +429,33 @@ def config_for(state):
                                    'EUREKA_DEFAULT_ZONE': 'http://service-registry:8761/eureka/'},
                    'volumes': [{'type': 'bind', 'source': '/var/lib/mmiv/media', 'target': '/media',
                                 'read_only': True}], 'networks': ['backend']}
+        service['mem_limit'] = '384m'
+        service['memswap_limit'] = '384m'
+        service['environment'].update({
+            'JAVA_TOOL_OPTIONS': '-Xms32m -Xmx192m -XX:MaxDirectMemorySize=64m',
+            'SERVER_TOMCAT_THREADS_MAX': '16', 'SERVER_TOMCAT_THREADS_MIN_SPARE': '2',
+            'SPRING_RABBITMQ_HOST': 'rabbitmq', 'MMIV_EVENTS_ENABLED': 'true',
+            'MMIV_EVENTS_OUTBOX_DIRECTORY': '/var/lib/mmiv/event-outbox',
+            'USER_ACCESS_JWT_ISSUER': state.get('USER_ACCESS_JWT_ISSUER', 'https://auth.mmiv.example'),
+            'USER_ACCESS_JWK_SET_URI': 'http://user-access-service:8083/.well-known/jwks.json',
+            'METADATA_URL': 'http://discovery-service:8085', 'USER_ACCESS_URL': 'http://user-access-service:8083',
+            'TRANSFER_URL': 'http://transfer-service:8081'})
+        service['env_file'] = [{'path': '/etc/mmiv/messaging/rabbit-client.env', 'format': 'raw'}]
+        service['volumes'].append({'type': 'bind', 'source': '/var/lib/mmiv/event-outbox/' + name,
+                                  'target': '/var/lib/mmiv/event-outbox'})
+        if name == 'discovery-service':
+            config_id = state.get('USER_ACCESS_CONFIG_ID', '')
+            if not re.fullmatch(r'[a-f0-9]{64}', config_id):
+                raise ValueError('Metadata requires the staged Oracle configuration')
+            service['env_file'].append({'path': '/etc/mmiv/user-access/versions/' + config_id + '/environment.env', 'format': 'raw'})
+            service['environment'].update({'DISCOVERY_ROOT': '/media',
+                                          'SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE': '3',
+                                          'SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE': '1'})
+        if name == 'reporting-service':
+            service['env_file'].append({'path': '/etc/mmiv/messaging/reporting.env', 'format': 'raw'})
         if name == 'transfer-service':
-            service['environment']['MMIV_LOG_QUEUE_URL'] = state.get('MMIV_LOG_QUEUE_URL', '')
-            service['environment']['MMIV_LOG_OUTBOX_DIRECTORY'] = '/var/lib/mmiv/log-outbox'
-            service['volumes'].append({'type': 'bind', 'source': '/var/lib/mmiv/transfer-log-outbox',
-                                      'target': '/var/lib/mmiv/log-outbox'})
+            service['environment']['USER_ACCESS_JWT_ISSUER'] = state.get('USER_ACCESS_JWT_ISSUER', 'https://auth.mmiv.example')
+            service['environment']['USER_ACCESS_JWK_SET_URI'] = 'http://user-access-service:8083/.well-known/jwks.json'
         if name == 'user-access-service':
             service['mem_limit'] = '512m'
             service['memswap_limit'] = '512m'
@@ -398,21 +469,25 @@ def config_for(state):
             if not re.fullmatch(r'[a-f0-9]{64}', config_id):
                 raise ValueError('User Access requires a staged immutable configuration bundle')
             directory = '/etc/mmiv/user-access/versions/' + config_id
-            service['env_file'] = [{'path': directory + '/environment.env', 'format': 'raw'}]
+            if state.get('MANAGED_USER_ACCESS_ORACLE'):
+                service['env_file'].append({'path': '/etc/mmiv/managed-oracle/bootstrap-admin.env', 'format': 'raw'})
+            service['env_file'].append({'path': directory + '/environment.env', 'format': 'raw'})
             service['volumes'].extend([
                 {'type': 'bind', 'source': directory + '/private.pem',
                  'target': '/run/mmiv-jwt/private.pem', 'read_only': True},
                 {'type': 'bind', 'source': directory + '/public.pem',
                  'target': '/run/mmiv-jwt/public.pem', 'read_only': True}])
         if name == 'integrity-service':
-            service['env_file'] = [{'path': ENVIRONMENT, 'format': 'raw'}]
+            service['env_file'].append({'path': ENVIRONMENT, 'format': 'raw'})
         service['healthcheck'] = {'test': ['CMD-SHELL',
             'wget -q --spider http://127.0.0.1:' + str(port) + '/actuator/health'],
             'interval': '10s', 'timeout': '5s', 'retries': 60, 'start_period': '60s'}
-        dependencies = {}
+        dependencies = {'rabbitmq': {'condition': 'service_healthy'}}
+        if name == 'reporting-service':
+            dependencies['mongodb'] = {'condition': 'service_healthy'}
         if name != 'service-registry' and 'service-registry' in state['services']:
             dependencies['service-registry'] = {'condition': 'service_healthy'}
-        if name == 'user-access-service' and state.get('MANAGED_USER_ACCESS_ORACLE'):
+        if name in ('user-access-service', 'discovery-service') and state.get('MANAGED_USER_ACCESS_ORACLE'):
             dependencies['oracle'] = {'condition': 'service_healthy'}
         if name == 'api-gateway':
             dependencies.update({n: {'condition': 'service_healthy'} for n in state['services']
@@ -438,9 +513,26 @@ def config_for(state):
         hook.chmod(0o644)
         services['oracle']['volumes'].append({'type': 'bind', 'source': str(hook),
             'target': '/container-entrypoint-startdb.d/99-mmiv-ready.sh', 'read_only': True})
+    services['rabbitmq'] = {'image': 'rabbitmq:4.1.4-management-alpine@sha256:5cbd7145b0306399ad68422c3350b6cbd1bb95704b39f5896480e5b6d4238a04', 'container_name': 'rabbitmq',
+        'hostname': 'mmiv-rabbitmq', 'restart': 'unless-stopped', 'networks': ['backend'],
+        'mem_limit': '384m', 'memswap_limit': '384m',
+        'env_file': [{'path': '/etc/mmiv/messaging/rabbit-server.env', 'format': 'raw'}],
+        'environment': {'RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS': '+S 2:2'},
+        'volumes': [{'type': 'volume', 'source': 'rabbit-data', 'target': '/var/lib/rabbitmq'}],
+        'healthcheck': {'test': ['CMD', 'rabbitmq-diagnostics', '-q', 'ping'], 'interval': '10s', 'timeout': '5s', 'retries': 30, 'start_period': '30s'}}
+    services['mongodb'] = {'image': 'mongo:8.0.14-noble@sha256:877fa303326645cd0e50a3833fce2f3c03d6eb4aac82c97a02e98879f51126d3', 'container_name': 'mongodb', 'restart': 'unless-stopped',
+        'networks': ['backend'], 'mem_limit': '512m', 'memswap_limit': '512m',
+        'command': ['mongod', '--wiredTigerCacheSizeGB', '0.25'],
+        'env_file': [{'path': '/etc/mmiv/messaging/mongo-server.env', 'format': 'raw'}],
+        'volumes': [{'type': 'volume', 'source': 'mongo-data', 'target': '/data/db'},
+                    {'type': 'bind', 'source': '/etc/mmiv/messaging/initialize-reporting.js',
+                     'target': '/docker-entrypoint-initdb.d/initialize-reporting.js', 'read_only': True}],
+        'healthcheck': {'test': ['CMD-SHELL', "mongosh --quiet --username \"$$MONGO_INITDB_ROOT_USERNAME\" --password \"$$MONGO_INITDB_ROOT_PASSWORD\" --authenticationDatabase admin --eval 'quit(db.adminCommand({ping:1}).ok ? 0 : 1)'"],
+                        'interval': '10s', 'timeout': '5s', 'retries': 30, 'start_period': '30s'}}
     config = {'services': services, 'networks': {'backend': {'external': True, 'name': 'mmiv-backend'}}}
+    config['volumes'] = {'rabbit-data': {'name': 'mmiv-rabbitmq-data'}, 'mongo-data': {'name': 'mmiv-reporting-data'}}
     if 'oracle' in services:
-        config['volumes'] = {'oracle-data': {'external': True, 'name': ORACLE_VOLUME}}
+        config['volumes']['oracle-data'] = {'external': True, 'name': ORACLE_VOLUME}
     return config
 
 
@@ -491,7 +583,7 @@ def up(compose, names, force=(), dependencies=True):
 def ready(name, state):
     item = state['services'][name]
     healthy(item['port'])
-    if name not in ('service-registry', 'discovery-service'):
+    if name != 'service-registry':
         current = inspect(name)
         address = current['NetworkSettings']['Networks']['mmiv-backend']['IPAddress']
         if not address:
@@ -590,8 +682,7 @@ def reconcile(action, state):
         for filename in ('environment.env', 'private.pem', 'public.pem'):
             if not (Path('/etc/mmiv/user-access/versions/' + bundle['config_id']) / filename).is_file():
                 raise RuntimeError('User Access configuration bundle is incomplete')
-    if 'transfer-service' in state['services'] and not state.get('MMIV_LOG_QUEUE_URL'):
-        raise ValueError('The deployed release requires MMIV_LOG_QUEUE_URL')
+    stage('initialize_messaging', managed_messaging)
     desired = stage('build_compose_config', config_for, state)
     compose_existed = compose.exists()
     previous = json.loads(compose.read_text()) if compose_existed else {'services': {}, 'networks': desired['networks']}
@@ -623,6 +714,9 @@ def reconcile(action, state):
         labels = previous['services']['integrity-service'].get('labels')
         if labels:
             desired['services']['integrity-service']['labels'] = labels
+    for infrastructure in ('rabbitmq', 'mongodb'):
+        previous['services'].setdefault(infrastructure, desired['services'][infrastructure])
+    previous['volumes'] = desired['volumes']
     if 'oracle' in desired['services']:
         current_oracle = inspect('oracle')
         if current_oracle and (current_oracle['Config'].get('Labels') or {}).get('com.docker.compose.project') != PROJECT:

@@ -2,7 +2,7 @@
 
 [English](README.md) | [简体中文](README.zh-CN.md)
 
-MMIV is a microservice-based system for discovering, transferring, validating, and reporting media migrations with access control.
+MMIV discovers, transfers, validates, and reports media migrations with destination access control. See [service integration and deployment](docs/integration/services.md) for the current APIs, RabbitMQ logging, and live integration test.
 
 ## Services
 
@@ -36,14 +36,14 @@ mvn clean verify
 ```
 
 
-Gateway browser access and temporary Redis disabling: see docs/ci-cd/gateway-access.md.
+Gateway browser access: see docs/ci-cd/gateway-access.md.
 
 
 ## Merged gateway access
 
 Gateway is public on EC2 TCP 8080; backends bind to localhost. See
 [Gateway access](docs/ci-cd/gateway-access.md). The real Discovery Service from
-main is preserved; its CD entry is disabled pending Oracle/runtime configuration.
+the uploaded code is enabled in CD with its Oracle and shared media configuration.
 
 ## Current Docker deployment
 
@@ -51,8 +51,15 @@ Terraform and parallel image builds → idempotent host preparation → one Comp
 
 ### Current deployment configuration
 
-See [the main deployment update](docs/ci-cd/main-update.md) before running CD:
+See [the main deployment update](docs/ci-cd/login-access.md) before running CD:
 User Access uses a persistent Oracle container with automatically generated credentials
-and JWT keys. No runtime GitHub secret is required for this default. The optional
-`MMIV_RUNTIME_CONFIG` secret still supports an external User Access database and
-explicit Integrity settings. Integrity keeps its current database configuration. Transfer publishes file events to SQS; the log service is left for its owner.
+and JWT keys. Database credentials need no GitHub secret, but authenticated verification creates and removes a dedicated account per run unless credentials are supplied in `MMIV_RUNTIME_CONFIG`. The same secret also supports an external User Access database and
+explicit Integrity settings. Integrity keeps its current database configuration. All seven services publish to RabbitMQ; Reporting stores service logs and migration reports in MongoDB.
+
+## Login and Transfer access
+
+Gateway root (`http://EC2_PUBLIC_IP:8080/`) now opens the login page. After login, /upload.html opens. Transfer pages, uploads and file reads require a verified User Access JWT. Browser sessions use HttpOnly cookies and CSRF protection; API clients use Bearer headers. See [login setup](docs/ci-cd/login-access.md).
+
+Signup is available through **Create an account** on login, or `/signup.html`. New accounts persist in Oracle and initially have no destination access. An administrator must grant destination READ or WRITE permission before the account can read or upload files.
+
+Administrator password login, default-account setup, and external invitations are documented in [Administrator access](docs/admin/administrator-access.md).

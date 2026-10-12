@@ -1,3 +1,5 @@
+See [the integrated stack guide](../../docs/integration/services.md) for producer wiring, account permissions, and RabbitMQ service logging. The standalone examples below exercise the reporting event contract.
+
 # Reporting Service
 
 Reporting consumes MMIV v2 outcome events from RabbitMQ, stores an immutable
