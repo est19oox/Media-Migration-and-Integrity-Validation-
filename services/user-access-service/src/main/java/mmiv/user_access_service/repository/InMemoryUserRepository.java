@@ -49,6 +49,14 @@ public class InMemoryUserRepository implements UserRepository {
   }
 
   @Override
+  public boolean deleteVerificationAccount(String userId) {
+    User user = users.get(userId);
+    return user != null && "USER".equals(user.getRole())
+        && user.getUsername() != null && user.getUsername().matches("mmiv_ci_[0-9a-f]{32}")
+        && users.remove(userId, user);
+  }
+
+  @Override
   public Optional<User> findByUsername(String username) {
     if (username == null) {
       return Optional.empty();

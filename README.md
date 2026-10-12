@@ -36,7 +36,7 @@ mvn clean verify
 ```
 
 
-Gateway browser access and temporary Redis disabling: see docs/ci-cd/gateway-access.md.
+Gateway browser access: see docs/ci-cd/gateway-access.md.
 
 
 ## Merged gateway access
@@ -53,7 +53,7 @@ Terraform and parallel image builds → idempotent host preparation → one Comp
 
 See [the main deployment update](docs/ci-cd/login-access.md) before running CD:
 User Access uses a persistent Oracle container with automatically generated credentials
-and JWT keys. Database credentials need no GitHub secret, but authenticated deployment verification requires an existing test account in `MMIV_RUNTIME_CONFIG`. The same secret also supports an external User Access database and
+and JWT keys. Database credentials need no GitHub secret, but authenticated verification creates and removes a dedicated account per run unless credentials are supplied in `MMIV_RUNTIME_CONFIG`. The same secret also supports an external User Access database and
 explicit Integrity settings. Integrity keeps its current database configuration. Transfer publishes file events to SQS; the log service is left for its owner.
 
 ## Login and Transfer access

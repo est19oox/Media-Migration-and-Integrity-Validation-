@@ -32,6 +32,6 @@ For local Compose, enable it explicitly with --profile discovery after supplying
 the database settings and DISCOVERY_MEDIA_PATH. Other services use the registry.
 
 Folder API: POST /api/v1/transfers/folder with matching files and relativePaths.
-Limit: 500 files and 100 MiB total. Transfer invokes Integrity after upload and requires confirmed integrity success. Redis remains disabled as in the uploaded transfer project.
+Limit: 500 files and 100 MiB total. Transfer invokes Integrity after upload and requires confirmed integrity success. Redis is not part of the active deployment.
 
 Transfer pages and file APIs now require login. See [login setup](login-access.md) for cookie sessions, authenticated CD checks and signup.

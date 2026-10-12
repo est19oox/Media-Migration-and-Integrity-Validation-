@@ -12,7 +12,7 @@ parser.add_argument('url', nargs='?', default='http://localhost:8761')
 parser.add_argument('--include-discovery', action='store_true',
                     help='Require Discovery when its optional Compose profile is enabled')
 args = parser.parse_args()
-url = args.url.rstrip('/') + '/eureka/apps' 
+url = args.url.rstrip('/') + '/eureka/apps'
 expected = {"TRANSFER-SERVICE", "INTEGRITY-SERVICE", "USER-ACCESS-SERVICE", "REPORTING-SERVICE", "API-GATEWAY"}
 if args.include_discovery:
     expected.add('DISCOVERY-SERVICE')

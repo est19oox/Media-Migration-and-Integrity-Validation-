@@ -608,6 +608,23 @@ class RunnerAndBarrierTest(unittest.TestCase):
             self.assertEqual(set(names), ssm.expected_services())
             restore.assert_not_called()
 
+    def test_generated_account_cleanup_runs_after_success_and_failure(self):
+        for scan_code, cleanup_code in [(0, 0), (1, 0), (0, 1)]:
+            account_paths = set()
+            def launch(*args, **kwargs):
+                account = Path(kwargs['env']['MMIV_VERIFICATION_ACCOUNT_FILE'])
+                account.write_text('{}')
+                account_paths.add(str(account))
+                return SimpleNamespace(stdout=['scanner output\n'], wait=lambda: scan_code)
+            with tempfile.TemporaryDirectory() as directory, \
+                    patch.object(verification.subprocess, 'Popen', side_effect=launch), \
+                    patch.object(verification.subprocess, 'run', return_value=SimpleNamespace(returncode=cleanup_code)) as cleanup:
+                self.assertEqual(verification.verify(self.state(), Path(directory)), int(bool(scan_code or cleanup_code)))
+                self.assertEqual(len(account_paths), 1)
+                cleanup.assert_called_once()
+                self.assertEqual(cleanup.call_args.kwargs['env']['DAST_CLEANUP_ONLY'], 'true')
+                self.assertFalse(Path(next(iter(account_paths))).exists())
+
     def test_rollback_uses_one_ssm_command_and_skips_already_restored(self):
         state = self.state()
         with tempfile.TemporaryDirectory() as directory, patch.object(ssm, 'lifecycle',

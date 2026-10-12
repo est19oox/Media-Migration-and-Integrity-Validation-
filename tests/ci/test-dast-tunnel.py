@@ -71,7 +71,7 @@ elif operation == 'start-session':
                 return
             self.send_response(200)
             self.end_headers()
-            self.wfile.write(b'{{"accessToken":"test.header.signature","tokenType":"Bearer"}}')
+            self.wfile.write(b'{{"accessToken":"test.eyJzdWIiOiJ0ZXN0LXVzZXItaWQifQ.signature","tokenType":"Bearer"}}')
         def log_message(self, *args):
             pass
     server = http.server.HTTPServer(('127.0.0.1', port), Handler)

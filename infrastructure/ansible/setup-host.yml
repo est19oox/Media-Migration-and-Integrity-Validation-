@@ -71,8 +71,3 @@
       community.docker.docker_network:
         name: "{{ mmiv_docker_network }}"
         state: present
-    # Redis preparation is temporarily commented out.
-    # - name: Prepare Redis when enabled
-    #   ansible.builtin.include_role:
-    #     name: redis
-    #   when: mmiv_redis_enabled | default(false) | bool

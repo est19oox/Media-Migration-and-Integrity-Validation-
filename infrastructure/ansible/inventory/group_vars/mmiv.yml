@@ -1,5 +1,2 @@
 ---
 mmiv_docker_network: mmiv-backend
-# Redis is temporarily commented out; the shared network remains active.
-# mmiv_redis_env_file: /etc/mmiv/redis.env
-# mmiv_redis_enabled: false
