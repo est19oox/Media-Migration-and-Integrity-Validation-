@@ -1,107 +1,180 @@
+
 package mmiv.controller;
 
+import mmiv.csv.MetadataCsvValidationException;
+import mmiv.dto.ApiErrorResponse;
+import mmiv.dto.ApiErrorResponse.ValidationErrorDetail;
+
+import jakarta.servlet.http.HttpServletRequest;
+
+import org.springframework.dao.DataAccessException;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.server.ResponseStatusException;
+
+import java.io.IOException;
+import java.nio.file.NoSuchFileException;
+import java.time.Instant;
+import java.util.List;
 
 /**
- * Centralised HTTP error mapping for the Discovery Service REST API.
+ * Global exception handling for Discovery Service REST APIs.
  *
- * <p>This class is an intentionally empty skeleton. It declares no
- * {@code @ExceptionHandler} methods yet, so it changes no existing API
- * behaviour: every exception currently propagates exactly as before.
- * {@link DiscoveryController} is deliberately untouched.
- *
- * <p>Today, without this class, the two endpoints behave like this:
- *
- * <ul>
- *   <li>{@code POST /api/discovery/scan} and
- *       {@code POST /api/discovery/manifest} both declare
- *       {@code throws IOException}, and nothing handles it, so a scan or
- *       manifest I/O failure becomes HTTP 500.</li>
- *   <li>{@code MetadataCsvValidationException} extends
- *       {@code IllegalArgumentException} (a RuntimeException), so an
- *       invalid or missing CSV also becomes HTTP 500, and the
- *       {@code MetadataCsvValidationError} list it carries is discarded
- *       rather than returned to the caller.</li>
- *   <li>Only the missing {@code discovery.manifest-path} case is handled
- *       explicitly, by the controller itself throwing
- *       {@code ResponseStatusException} with HTTP 503.</li>
- * </ul>
- *
- * <p>Every handler added here must keep the existing successful responses
- * byte-for-byte identical. Only error paths are in scope.
+ * Converts application-specific exceptions into consistent
+ * JSON error responses without overriding Spring MVC's
+ * built-in handling of HTTP errors such as 404 and 405.
  */
 @RestControllerAdvice
 public class DiscoveryExceptionHandler {
 
-    // TODO Add an @ExceptionHandler for mmiv.csv.MetadataCsvValidationException.
-    //      - It extends IllegalArgumentException, so it must be handled before
-    //        any broader handler for that parent type, otherwise the specific
-    //        case is unreachable.
-    //      - The exception carries public List<MetadataCsvValidationError>
-    //        getErrors(); those per-row errors are the most useful part of the
-    //        response and are currently thrown away.
-    //      - Decide with the team whether an invalid manifest is 400 Bad Request
-    //        (malformed caller input) or 422 Unprocessable Content. Do not pick
-    //        one silently: this becomes the published contract for the endpoint.
+    /**
+     * Handle invalid CSV manifests.
+     *
+     * Missing CSV files return HTTP 404.
+     * Other CSV validation failures return HTTP 400.
+     */
+    @ExceptionHandler(MetadataCsvValidationException.class)
+    public ResponseEntity<ApiErrorResponse> handleCsvValidation(
+            MetadataCsvValidationException exception,
+            HttpServletRequest request) {
 
-    // TODO Add an @ExceptionHandler for java.nio.file.NoSuchFileException
-    //      (and decide whether the wider java.nio.file.FileSystemException is
-    //      also in scope).
-    //      - This is the "CSV manifest file does not exist" and
-    //        "discovery root does not exist" case.
-    //      - Note the validator does NOT throw for a missing CSV: it returns
-    //        MetadataCsvValidationResult with the error
-    //        (0, "File", "CSV file does not exist"), which the service layer
-    //        then converts into MetadataCsvValidationException. So a missing
-    //        CSV may arrive as the validation exception above, not as
-    //        NoSuchFileException. Confirm which path actually fires before
-    //        writing the handler, and do not add a handler for a case that
-    //        cannot occur.
-    //      - Intended status: 404 Not Found.
+        List<ValidationErrorDetail> errors =
+                exception.getErrors().stream()
+                        .map(error -> new ValidationErrorDetail(
+                                error.rowNumber(),
+                                error.fieldName(),
+                                error.reason()
+                        ))
+                        .toList();
 
-    // TODO Add an @ExceptionHandler for java.io.IOException.
-    //      - This is the catch-all for filesystem access failures during the
-    //        scan itself (a directory entry that disappears mid-walk, an
-    //        unreadable subdirectory, and so on).
-    //      - Intended status: 500 Internal Server Error, or 503 if the team
-    //        prefers to signal "temporarily unable to complete the scan".
-    //      - Careful with ordering: NoSuchFileException extends IOException, so
-    //        Spring picks the most specific handler automatically, but the two
-    //        handlers must both be present for that to matter.
+        boolean fileNotFound =
+                exception.getErrors().size() == 1
+                        && exception.getErrors().stream()
+                                .allMatch(error ->
+                                        "File".equals(error.fieldName())
+                                        && "CSV file does not exist"
+                                                .equals(error.reason())
+                                );
 
-    // TODO Add an @ExceptionHandler for
-    //      org.springframework.dao.DataAccessException.
-    //      - This covers Oracle being unreachable, a constraint violation, or
-    //        the FILE_METADATA / MEDIA_LOG tables being absent.
-    //      - Intended status: 503 Service Unavailable (a dependency is down),
-    //        which is consistent with the 503 the controller already returns
-    //        for an unconfigured manifest path.
-    //      - Decide with the team whether the database message may appear in
-    //        the response body. Raw JDBC/Oracle text can leak schema and
-    //        connection details, so the safe default is a fixed message with
-    //        the detail logged server-side only.
+        HttpStatus status = fileNotFound
+                ? HttpStatus.NOT_FOUND
+                : HttpStatus.BAD_REQUEST;
 
-    // TODO Add a fallback @ExceptionHandler for java.lang.Exception.
-    //      - Last resort: keeps an unexpected failure from returning the
-    //        framework's default error body, which can expose stack details
-    //        depending on server.error.include-* settings.
-    //      - Intended status: 500 Internal Server Error, with a fixed generic
-    //        message and the real cause logged server-side.
-    //      - Spring resolves handlers by specificity, so this must not shadow
-    //        the more specific handlers above.
+        String message = fileNotFound
+                ? "CSV manifest file not found"
+                : "CSV validation failed";
 
-    // TODO Decide the response body shape before writing any handler.
-    //      mmiv.dto.ApiErrorResponse is the reserved placeholder for it; do not
-    //      invent fields in the handler and leave the DTO behind.
+        return buildResponse(
+                status,
+                message,
+                errors,
+                request.getRequestURI()
+        );
+    }
 
-    // TODO Confirm whether @RestControllerAdvice in this package is picked up
-    //      by every context that should have it. Component scanning starts at
-    //      mmiv.Application, so mmiv.controller is covered for the full
-    //      application context; a @WebMvcTest slice also picks up
-    //      @RestControllerAdvice automatically, but verify rather than assume.
+    /**
+     * Handle missing filesystem resources.
+     */
+    @ExceptionHandler(NoSuchFileException.class)
+    public ResponseEntity<ApiErrorResponse> handleFileNotFound(
+            NoSuchFileException exception,
+            HttpServletRequest request) {
 
-    // TODO Add tests for each handler as it is written. There is currently no
-    //      web-layer test at all in this module, so no existing test will fail
-    //      if a handler is wrong. DiscoveryControllerWebTest is the reserved
-    //      skeleton for that work.
+        return buildResponse(
+                HttpStatus.NOT_FOUND,
+                "Requested file not found",
+                List.of(),
+                request.getRequestURI()
+        );
+    }
+
+    /**
+     * Handle general file processing failures.
+     */
+    @ExceptionHandler(IOException.class)
+    public ResponseEntity<ApiErrorResponse> handleIOException(
+            IOException exception,
+            HttpServletRequest request) {
+
+        return buildResponse(
+                HttpStatus.INTERNAL_SERVER_ERROR,
+                "File processing failed",
+                List.of(),
+                request.getRequestURI()
+        );
+    }
+
+    /**
+     * Handle Oracle and other database access failures.
+     *
+     * Do not expose raw SQL or database exception messages.
+     */
+    @ExceptionHandler(DataAccessException.class)
+    public ResponseEntity<ApiErrorResponse> handleDatabaseException(
+            DataAccessException exception,
+            HttpServletRequest request) {
+
+        return buildResponse(
+                HttpStatus.SERVICE_UNAVAILABLE,
+                "Database operation failed",
+                List.of(),
+                request.getRequestURI()
+        );
+    }
+
+    /**
+     * Preserve explicitly declared HTTP status codes,
+     * including the 503 returned when the CSV manifest
+     * path is not configured.
+     */
+    @ExceptionHandler(ResponseStatusException.class)
+    public ResponseEntity<ApiErrorResponse> handleResponseStatus(
+            ResponseStatusException exception,
+            HttpServletRequest request) {
+
+        HttpStatus status = HttpStatus.resolve(
+                exception.getStatusCode().value()
+        );
+
+        if (status == null) {
+            status = HttpStatus.INTERNAL_SERVER_ERROR;
+        }
+
+        String message =
+                exception.getReason() != null
+                        ? exception.getReason()
+                        : status.getReasonPhrase();
+
+        return buildResponse(
+                status,
+                message,
+                List.of(),
+                request.getRequestURI()
+        );
+    }
+
+    /**
+     * Build a consistent API error response.
+     */
+    private ResponseEntity<ApiErrorResponse> buildResponse(
+            HttpStatus status,
+            String message,
+            List<ValidationErrorDetail> validationErrors,
+            String path) {
+
+        ApiErrorResponse response = new ApiErrorResponse(
+                Instant.now(),
+                status.value(),
+                status.getReasonPhrase(),
+                message,
+                validationErrors,
+                path
+        );
+
+        return ResponseEntity
+                .status(status)
+                .body(response);
+    }
 }

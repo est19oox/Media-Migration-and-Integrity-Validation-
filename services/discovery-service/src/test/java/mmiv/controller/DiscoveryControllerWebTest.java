@@ -1,113 +1,205 @@
+
 package mmiv.controller;
 
-/**
- * Reserved skeleton for web-layer (MockMvc) tests of the Discovery REST API.
- *
- * <p>This class deliberately declares no test methods and no Spring test
- * annotations yet, so it runs nothing and changes nothing. It exists to hold
- * the mapping between each intended test and the exact annotation package that
- * Spring Boot 4.1.1 requires, because those packages moved in Boot 4 and the
- * Boot 3 names no longer compile.
- *
- * <p>Why the annotations are not applied here: annotating this class with
- * {@code @WebMvcTest} would make the Spring TestContext framework build a web
- * slice around {@link DiscoveryController} as soon as the first test method is
- * added. That controller's constructor requires {@code DiscoveryService} and
- * {@code ManifestProcessingService} beans, plus {@code discovery.root} and
- * {@code discovery.manifest-path} properties, none of which the web slice
- * provides; the context would fail to load. Those stubs belong with the first
- * real test, not in a placeholder.
- *
- * <p>The existing {@link DiscoveryControllerTest} is a plain unit test that
- * calls {@code new DiscoveryController(...)} directly. It never starts Spring,
- * so it cannot detect a wrong {@code @PostMapping} path, a wrong JSON field
- * name, or a wrong status code. That gap is exactly what this class is for.
- */
+import mmiv.csv.MetadataCsvValidationError;
+import mmiv.csv.MetadataCsvValidationException;
+import mmiv.dto.DiscoveryResponse;
+import mmiv.model.DiscoveryRunResult;
+import mmiv.model.ManifestMatchResult;
+import mmiv.model.MigrationFileInventory;
+import mmiv.service.DiscoveryService;
+import mmiv.service.ManifestProcessingService;
+
+import org.junit.jupiter.api.Test;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.http.MediaType;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.test.web.servlet.MockMvc;
+
+import java.io.IOException;
+import java.nio.file.Path;
+import java.util.List;
+
+import static org.mockito.Mockito.*;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
+
+@WebMvcTest(
+        controllers = DiscoveryController.class,
+        properties = {
+                "discovery.root=/test/media",
+                "discovery.manifest-path=/test/manifest.csv"
+        }
+)
 class DiscoveryControllerWebTest {
 
-    // TODO Verified annotation packages for Spring Boot 4.1.1 (checked against
-    //      the resolved jars in the local Maven repository, not assumed):
-    //
-    //        org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest
-    //            <- MOVED. In Boot 3 this was
-    //               org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest.
-    //               The Boot 3 package does not exist in Boot 4.1.1.
-    //            <- provided by spring-boot-webmvc-test-4.1.1.jar, pulled in
-    //               transitively by the spring-boot-starter-webmvc-test
-    //               dependency already declared in pom.xml with test scope.
-    //        org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
-    //            <- also moved, same jar. Already implied by @WebMvcTest, so it
-    //               only needs adding if MockMvc is used without @WebMvcTest.
-    //        org.springframework.test.web.servlet.MockMvc
-    //            <- UNCHANGED, provided by spring-test-7.0.9.jar.
-    //        org.springframework.test.web.servlet.request.MockMvcRequestBuilders
-    //            <- UNCHANGED, spring-test-7.0.9.jar.
-    //        org.springframework.test.web.servlet.result.MockMvcResultMatchers
-    //            <- UNCHANGED, spring-test-7.0.9.jar.
-    //        org.springframework.test.context.bean.override.mockito.MockitoBean
-    //            <- provided by spring-test, not by Spring Boot. Already used by
-    //               mmiv.ApplicationTest, so the dependency is present.
-    //
-    //      No new dependency is required for any of the above.
+    @Autowired
+    private MockMvc mockMvc;
 
-    // TODO Wire the slice before writing assertions. Required once the class is
-    //      annotated with @WebMvcTest:
-    //        - @MockitoBean DiscoveryService discoveryService
-    //        - @MockitoBean ManifestProcessingService manifestProcessingService
-    //        - properties = {"discovery.root=...", "discovery.manifest-path=..."}
-    //          because discovery.root has no default value in application.yml,
-    //          so the placeholder will not resolve without it.
-    //      Consider @WebMvcTest(controllers = DiscoveryController.class) so the
-    //      slice cannot widen silently.
+    @MockitoBean
+    private DiscoveryService discoveryService;
 
-    // TODO POST /api/discovery/scan - happy path.
-    //      Stub discoverAndSaveWithResult(...) to return a DiscoveryRunResult
-    //      wrapping a MigrationFileInventory, then assert HTTP 200 and the JSON
-    //      fields discovered / accepted / skipped / failed / inserted.
-    //      This is the test that proves the mapping path: DiscoveryControllerTest
-    //      calls the method directly and would still pass if the @PostMapping
-    //      value were misspelled.
+    @MockitoBean
+    private ManifestProcessingService manifestProcessingService;
 
-    // TODO POST /api/discovery/manifest - happy path.
-    //      Stub processManifest(...) to return a mixed list of
-    //      ManifestMatchResult (success + mismatch), then assert HTTP 200 and
-    //      JSON fields total / matched / mismatched.
-    //      Cover the empty-list case too: it must serialise as 0/0/0, not fail.
+    private final Path rootPath = Path.of("/test/media");
+    private final Path csvPath = Path.of("/test/manifest.csv");
 
-    // TODO JSON serialisation contract.
-    //      Pin the exact field names and the integer-versus-decimal shape. Note
-    //      DiscoveryResponse declares inserted as int while the other four are
-    //      long; ManifestResponse declares total as int while matched and
-    //      mismatched are long. If the contract later changes, these assertions
-    //      are what catches it.
+    @Test
+    void scanShouldReturnHttp200AndSummary() throws Exception {
 
-    // TODO Invalid CSV -> HTTP 400.
-    //      Requires the handler that DiscoveryExceptionHandler does not have yet.
-    //      Stub processManifest(...) to throw MetadataCsvValidationException
-    //      carrying MetadataCsvValidationError entries, then assert the status
-    //      and that the per-row errors appear in the body.
-    //      This test cannot pass before that handler exists - do not write it
-    //      with a weaker expectation just to get it green.
+        DiscoveryRunResult result =
+                new DiscoveryRunResult(
+                        new MigrationFileInventory(List.of()),
+                        0
+                );
 
-    // TODO Missing CSV -> HTTP 404.
-    //      Confirm which exception actually fires first. MetadataCsvValidator
-    //      returns an error for a missing file rather than throwing, so the
-    //      missing-CSV case may surface as MetadataCsvValidationException
-    //      instead of NoSuchFileException. Verify before asserting a status.
+        when(discoveryService.discoverAndSaveWithResult(rootPath))
+                .thenReturn(result);
 
-    // TODO Missing manifest configuration -> HTTP 503.
-    //      Construct the controller with a blank manifest path (as
-    //      DiscoveryControllerTest already does) and assert 503.
-    //      Worth also asserting the response body, since the current
-    //      ResponseStatusException reason text is not surfaced to callers under
-    //      the default server.error.include-message setting.
+        mockMvc.perform(post("/api/discovery/scan"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.discovered").value(0))
+                .andExpect(jsonPath("$.accepted").value(0))
+                .andExpect(jsonPath("$.skipped").value(0))
+                .andExpect(jsonPath("$.failed").value(0))
+                .andExpect(jsonPath("$.inserted").value(0));
 
-    // TODO Database errors -> HTTP 503.
-    //      Stub the service to throw a DataAccessException subtype (for example
-    //      DataIntegrityViolationException) and assert 503 once the handler
-    //      exists.
+        verify(discoveryService).discoverAndSaveWithResult(rootPath);
+    }
 
-    // TODO Add a test asserting that a successful call still returns the exact
-    //      same body as before these handlers were introduced. The instruction
-    //      for this work is that only error paths change.
+    @Test
+    void manifestShouldReturnMatchedAndMismatchedCounts()
+            throws Exception {
+
+        ManifestMatchResult success =
+                ManifestMatchResult.success(null, null);
+
+        ManifestMatchResult mismatch =
+                ManifestMatchResult.mismatch(
+                        null, null, "FILE_SIZE", "100"
+                );
+
+        when(manifestProcessingService.processManifest(
+                csvPath, rootPath
+        )).thenReturn(List.of(success, mismatch));
+
+        mockMvc.perform(post("/api/discovery/manifest"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.total").value(2))
+                .andExpect(jsonPath("$.matched").value(1))
+                .andExpect(jsonPath("$.mismatched").value(1));
+    }
+
+    @Test
+    void manifestShouldHandleEmptyResults() throws Exception {
+
+        when(manifestProcessingService.processManifest(
+                csvPath, rootPath
+        )).thenReturn(List.of());
+
+        mockMvc.perform(post("/api/discovery/manifest"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.total").value(0))
+                .andExpect(jsonPath("$.matched").value(0))
+                .andExpect(jsonPath("$.mismatched").value(0));
+    }
+
+    @Test
+    void invalidCsvShouldReturnHttp400() throws Exception {
+
+        MetadataCsvValidationException exception =
+                new MetadataCsvValidationException(
+                        List.of(new MetadataCsvValidationError(
+                                2,
+                                "File Size",
+                                "Invalid numeric value"
+                        ))
+                );
+
+        when(manifestProcessingService.processManifest(
+                csvPath, rootPath
+        )).thenThrow(exception);
+
+        mockMvc.perform(post("/api/discovery/manifest"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(jsonPath("$.message")
+                        .value("CSV validation failed"))
+                .andExpect(jsonPath(
+                        "$.validationErrors[0].rowNumber"
+                ).value(2))
+                .andExpect(jsonPath(
+                        "$.validationErrors[0].fieldName"
+                ).value("File Size"));
+    }
+
+    @Test
+    void missingCsvShouldReturnHttp404() throws Exception {
+
+        MetadataCsvValidationException exception =
+                new MetadataCsvValidationException(
+                        List.of(new MetadataCsvValidationError(
+                                0,
+                                "File",
+                                "CSV file does not exist"
+                        ))
+                );
+
+        when(manifestProcessingService.processManifest(
+                csvPath, rootPath
+        )).thenThrow(exception);
+
+        mockMvc.perform(post("/api/discovery/manifest"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.status").value(404))
+                .andExpect(jsonPath("$.message")
+                        .value("CSV manifest file not found"));
+    }
+
+    @Test
+    void databaseErrorShouldReturnHttp503() throws Exception {
+
+        when(manifestProcessingService.processManifest(
+                csvPath, rootPath
+        )).thenThrow(new DataIntegrityViolationException(
+                "Database error"
+        ));
+
+        mockMvc.perform(post("/api/discovery/manifest"))
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(jsonPath("$.status").value(503))
+                .andExpect(jsonPath("$.message")
+                        .value("Database operation failed"));
+    }
+
+    @Test
+    void ioErrorShouldReturnHttp500() throws Exception {
+
+        when(discoveryService.discoverAndSaveWithResult(rootPath))
+                .thenThrow(new IOException("File read failed"));
+
+        mockMvc.perform(post("/api/discovery/scan"))
+                .andExpect(status().isInternalServerError())
+                .andExpect(jsonPath("$.status").value(500))
+                .andExpect(jsonPath("$.message")
+                        .value("File processing failed"));
+    }
+
+    @Test
+    void unknownPathShouldReturnHttp404() throws Exception {
+
+        mockMvc.perform(get("/api/discovery/unknown"))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void wrongHttpMethodShouldReturnHttp405() throws Exception {
+
+        mockMvc.perform(get("/api/discovery/scan"))
+                .andExpect(status().isMethodNotAllowed());
+    }
 }
