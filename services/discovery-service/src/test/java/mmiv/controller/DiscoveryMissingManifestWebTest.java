@@ -7,6 +7,7 @@ import mmiv.service.ManifestProcessingService;
 import org.junit.jupiter.api.Test;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
@@ -16,6 +17,13 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+/**
+ * The unconfigured-manifest path returns 503.
+ *
+ * <p>Security filters are disabled here: this test covers the missing
+ * configuration response, while bearer-token rules are covered separately by
+ * {@code mmiv.security.DiscoverySecurityIntegrationTest}.
+ */
 @WebMvcTest(
         controllers = DiscoveryController.class,
         properties = {
@@ -23,6 +31,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
                 "discovery.manifest-path="
         }
 )
+@AutoConfigureMockMvc(addFilters = false)
 class DiscoveryMissingManifestWebTest {
 
     @Autowired

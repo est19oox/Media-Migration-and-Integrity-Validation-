@@ -1,6 +1,6 @@
 
 server:
-  port: 8085
+  port: ${SERVER_PORT:8085}
 
 spring:
   application:
@@ -14,10 +14,23 @@ spring:
 
 eureka:
   client:
+    enabled: ${EUREKA_CLIENT_ENABLED:true}
     service-url:
-      defaultZone: ${EUREKA_URL:http://localhost:8761/eureka/}
+      defaultZone: ${EUREKA_DEFAULT_ZONE:http://localhost:8761/eureka/}
     register-with-eureka: true
     fetch-registry: true
+    healthcheck:
+      enabled: true
+  instance:
+    prefer-ip-address: true
+    instance-id: ${spring.application.name}:${spring.cloud.client.ip-address}:${server.port}
+
+# Bearer tokens are issued by the User Access Service. This service only
+# verifies them, using that service's published JWKS endpoint. The issuer
+# default matches the User Access Service configuration.
+jwt:
+  issuer: ${JWT_ISSUER:https://auth.mmiv.example}
+  jwk-set-uri: ${JWT_JWKS_URI:http://localhost:8083/.well-known/jwks.json}
 
 discovery:
   root: ${DISCOVERY_ROOT}

@@ -1,0 +1,23 @@
+# Shared settings for the local test profile.
+#
+# Tests must not reach an Oracle instance or a Eureka registry, so the data
+# source auto-configuration is excluded here and the repositories are supplied
+# as mocks by the tests that need them.
+spring:
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.jdbc.autoconfigure.DataSourceAutoConfiguration
+
+eureka:
+  client:
+    enabled: false
+
+discovery:
+  root: /tmp
+  # Configured but absent on disk, so the manifest endpoint is reachable and
+  # reports a missing manifest instead of the "not configured" 503.
+  manifest-path: /tmp/mmiv-test-manifest.csv
+
+jwt:
+  issuer: https://auth.mmiv.example
+  jwk-set-uri: http://localhost:8083/.well-known/jwks.json
