@@ -27,10 +27,10 @@ test('one folder submission sends one request and restores the button', async ()
   }
   vm.runInNewContext(script, {
     document: { querySelector: select }, FormData, encodeURIComponent,
-    fetch: async (url, options) => {
+    mmivAuth: { fetch: async (url, options) => {
       requests.push({ url, options });
       return { ok: true, json: async () => ({ succeeded: 1, failed: 0 }) };
-    }
+    }}
   });
   select('#folder').files = [{ name: 'a.docx', size: 4, webkitRelativePath: 'Office/docs/a.docx' }];
   const handlers = listeners['#folderForm:submit'];

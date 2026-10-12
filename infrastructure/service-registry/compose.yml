@@ -61,6 +61,9 @@ services:
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
       AWS_SESSION_TOKEN: ${AWS_SESSION_TOKEN:-}
+      USER_ACCESS_JWT_ISSUER: ${USER_ACCESS_JWT_ISSUER:-https://auth.mmiv.example}
+      USER_ACCESS_JWK_SET_URI: http://user-access-service:8083/.well-known/jwks.json
+      JWT_COOKIE_SECURE: ${JWT_COOKIE_SECURE:-false}
       MMIV_LOG_QUEUE_URL: ${MMIV_LOG_QUEUE_URL:-}
       MMIV_LOG_OUTBOX_DIRECTORY: /var/lib/mmiv/log-outbox
     volumes:

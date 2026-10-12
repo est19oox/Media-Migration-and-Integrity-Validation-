@@ -13,6 +13,30 @@
   "services": {
     "transfer-service": [
       {
+        "name": "anonymous upload rejected",
+        "method": "POST",
+        "path": "/api/v1/transfers",
+        "body": {},
+        "status": 401,
+        "anonymous": true
+      },
+      {
+        "name": "anonymous file read rejected",
+        "path": "/api/v1/files/invalid!/content",
+        "status": 401,
+        "anonymous": true
+      },
+      {
+        "name": "anonymous transfer page redirects to login",
+        "path": "/upload.html",
+        "status": 302,
+        "anonymous": true,
+        "follow_redirects": false,
+        "header_equals": {
+          "Location": "/login.html"
+        }
+      },
+      {
         "name": "missing source",
         "method": "POST",
         "path": "/api/v1/transfers",
@@ -472,6 +496,24 @@
         "json_equals": {
           "authorised": false
         }
+      },
+      {
+        "name": "invalid signup rejected",
+        "method": "POST",
+        "path": "/api/auth/signup",
+        "body": {
+          "username": "ab",
+          "password": "short"
+        },
+        "status": 400,
+        "anonymous": true
+      },
+      {
+        "name": "signup page available",
+        "method": "GET",
+        "path": "/signup.html",
+        "status": 200,
+        "anonymous": true
       }
     ],
     "reporting-service": [],
@@ -496,6 +538,30 @@
     ],
     "api-gateway": [
       {
+        "name": "anonymous upload rejected",
+        "method": "POST",
+        "path": "/api/v1/transfers",
+        "body": {},
+        "status": 401,
+        "anonymous": true
+      },
+      {
+        "name": "anonymous file read rejected",
+        "path": "/api/v1/files/invalid!/content",
+        "status": 401,
+        "anonymous": true
+      },
+      {
+        "name": "anonymous transfer page redirects to login",
+        "path": "/upload.html",
+        "status": 302,
+        "anonymous": true,
+        "follow_redirects": false,
+        "header_equals": {
+          "Location": "/login.html"
+        }
+      },
+      {
         "name": "gateway info endpoint",
         "path": "/actuator/info",
         "status": 200,
@@ -517,9 +583,10 @@
         "status": 200
       },
       {
-        "name": "gateway routes home to upload page",
+        "name": "gateway routes home to login page",
         "path": "/",
-        "status": 200
+        "status": 200,
+        "anonymous": true
       },
       {
         "name": "missing source",
@@ -866,6 +933,30 @@
           "failed",
           "files"
         ]
+      },
+      {
+        "name": "gateway login page",
+        "path": "/login.html",
+        "status": 200,
+        "anonymous": true
+      },
+      {
+        "name": "invalid signup rejected",
+        "method": "POST",
+        "path": "/user-access/api/auth/signup",
+        "body": {
+          "username": "ab",
+          "password": "short"
+        },
+        "status": 400,
+        "anonymous": true
+      },
+      {
+        "name": "signup page available",
+        "method": "GET",
+        "path": "/signup.html",
+        "status": 200,
+        "anonymous": true
       }
     ]
   }

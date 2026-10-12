@@ -10,6 +10,8 @@ public interface UserRepository {
 
   void save(User user);
 
+  void create(User user);
+
   Optional<User> findByUsername(String username);
 
   void grantDestinationAccess(String userId, String destination, Permission permission);

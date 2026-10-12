@@ -22,7 +22,9 @@ public class SecurityConfig {
             auth ->
                 auth.dispatcherTypeMatchers(DispatcherType.ERROR)
                     .permitAll()
-                    .requestMatchers(HttpMethod.POST, "/api/auth/login")
+                    .requestMatchers(HttpMethod.GET, "/login.html", "/signup.html")
+                    .permitAll()
+                    .requestMatchers(HttpMethod.POST, "/api/auth/login", "/api/auth/signup")
                     .permitAll()
                     .requestMatchers(HttpMethod.GET, "/.well-known/jwks.json")
                     .permitAll()

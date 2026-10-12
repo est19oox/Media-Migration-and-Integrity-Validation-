@@ -57,8 +57,8 @@ def registered(name, address=None, port=None):
                              and str(instance['port'].get('$')) == str(port)))
                         for instance in instances)
             if ready and name == 'api-gateway':
-                for path, expected in [('/upload.html', 200), ('/files.html', 200),
-                                       ('/api/v1/files/invalid!/content', 400)]:
+                for path, expected in [('/', 200), ('/login.html', 200),
+                                       ('/api/v1/files/invalid!/content', 401)]:
                     try:
                         with urlopen('http://127.0.0.1:8080' + path, timeout=3) as response:
                             status = response.status
@@ -381,6 +381,8 @@ def config_for(state):
                    'volumes': [{'type': 'bind', 'source': '/var/lib/mmiv/media', 'target': '/media',
                                 'read_only': True}], 'networks': ['backend']}
         if name == 'transfer-service':
+            service['environment']['USER_ACCESS_JWT_ISSUER'] = state.get('USER_ACCESS_JWT_ISSUER', 'https://auth.mmiv.example')
+            service['environment']['USER_ACCESS_JWK_SET_URI'] = 'http://user-access-service:8083/.well-known/jwks.json'
             service['environment']['MMIV_LOG_QUEUE_URL'] = state.get('MMIV_LOG_QUEUE_URL', '')
             service['environment']['MMIV_LOG_OUTBOX_DIRECTORY'] = '/var/lib/mmiv/log-outbox'
             service['volumes'].append({'type': 'bind', 'source': '/var/lib/mmiv/transfer-log-outbox',

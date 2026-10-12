@@ -62,6 +62,25 @@ class OracleUserRepositoryIT {
   }
 
   @Test
+  void insertOnlySignupPersistsAndRejectsDuplicateUsername() {
+    String signupId = USER_ID + "_signup";
+    String signupUsername = USERNAME + "_signup";
+    jdbcTemplate.update("DELETE FROM app_users WHERE user_id = ?", signupId);
+    try {
+      repository.create(new User(signupId, signupUsername, "USER", true, Set.of(), "$2a$12$signup-hash"));
+      User loaded = repository.findByUsername(signupUsername).orElseThrow();
+      assertEquals(signupId, loaded.getUserId());
+      assertTrue(loaded.getPermissions().isEmpty());
+      org.junit.jupiter.api.Assertions.assertThrows(
+          org.springframework.dao.DuplicateKeyException.class,
+          () -> repository.create(new User(signupId + "2", signupUsername, "USER", true, Set.of(), "replacement")));
+      assertEquals("$2a$12$signup-hash", repository.findByUsername(signupUsername).orElseThrow().getPasswordHash());
+    } finally {
+      jdbcTemplate.update("DELETE FROM app_users WHERE user_id IN (?, ?)", signupId, signupId + "2");
+    }
+  }
+
+  @Test
   void savesAndLoadsUserByIdAndUsername() {
     User byId = repository.findById(USER_ID).orElseThrow();
     User byUsername = repository.findByUsername(USERNAME).orElseThrow();

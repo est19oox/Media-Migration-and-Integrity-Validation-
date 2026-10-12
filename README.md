@@ -56,3 +56,9 @@ User Access uses a persistent Oracle container with automatically generated cred
 and JWT keys. No runtime GitHub secret is required for this default. The optional
 `MMIV_RUNTIME_CONFIG` secret still supports an external User Access database and
 explicit Integrity settings. Integrity keeps its current database configuration. Transfer publishes file events to SQS; the log service is left for its owner.
+
+## Login and Transfer access
+
+Gateway root (`http://EC2_PUBLIC_IP:8080/`) now opens the login page. After login, /upload.html opens. Transfer pages, uploads and file reads require a verified User Access JWT. Browser sessions use HttpOnly cookies and CSRF protection; API clients use Bearer headers. See [login setup](docs/ci-cd/login-access.md).
+
+Signup is available through **Create an account** on login, or `/signup.html`. New accounts persist in Oracle, then return to login before accessing Transfer.

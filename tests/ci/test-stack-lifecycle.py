@@ -509,7 +509,7 @@ class RemoteReadinessTest(unittest.TestCase):
             if attempts == 1:
                 raise HTTPError(url, 503, 'not discovered', {}, None)
             if url.endswith('/content'):
-                raise HTTPError(url, 400, 'invalid id', {}, None)
+                raise HTTPError(url, 401, 'login required', {}, None)
             result = io.BytesIO(b'page')
             result.status = 200
             return result
@@ -517,7 +517,7 @@ class RemoteReadinessTest(unittest.TestCase):
             remote.registered('api-gateway')
             self.assertEqual(attempts, 2)
             sleep.assert_called_once_with(5)
-        self.assertTrue(any('/files.html' in url for url in calls))
+        self.assertTrue(any('/login.html' in url for url in calls))
         self.assertTrue(any('/content' in url for url in calls))
 
     def test_backend_not_up_fails_after_retries(self):

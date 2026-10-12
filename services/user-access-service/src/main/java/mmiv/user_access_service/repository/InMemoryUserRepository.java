@@ -1,6 +1,6 @@
 package mmiv.user_access_service.repository;
 
-import java.util.HashMap;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.Map;
 import java.util.Optional;
 import mmiv.user_access_service.model.DestinationAccess;
@@ -13,7 +13,15 @@ import org.springframework.stereotype.Repository;
 @Profile("test")
 public class InMemoryUserRepository implements UserRepository {
 
-  private final Map<String, User> users = new HashMap<>();
+  private final Map<String, User> users = new ConcurrentHashMap<>();
+
+  @Override
+  public synchronized void create(User user) {
+    if (users.containsKey(user.getUserId()) || findByUsername(user.getUsername()).isPresent()) {
+      throw new org.springframework.dao.DuplicateKeyException("User already exists");
+    }
+    users.put(user.getUserId(), user);
+  }
 
   @Override
   public void save(User user) {

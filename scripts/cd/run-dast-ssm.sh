@@ -12,6 +12,8 @@ READY_PATH="${DAST_READY_PATH:-/actuator/health}"
 SCAN_MODE="${DAST_SCAN_MODE:-baseline}"
 SERVICE_NAME="${DAST_SERVICE_NAME:?DAST_SERVICE_NAME is required}"
 OPENAPI_FILE="${DAST_OPENAPI_FILE:-tests/api/${SERVICE_NAME%-service}-openapi.json}"
+# Transfer functional checks and scans use the Gateway so login shares the tunnel.
+if [[ "$SERVICE_NAME" == transfer-service ]]; then PORT=8080; fi
 [[ "$SCAN_MODE" == baseline || "$SCAN_MODE" == api ]] || {
   echo '::error::DAST_SCAN_MODE must be baseline or api.'; exit 1;
 }
@@ -62,6 +64,9 @@ cleanup() {
     done
     kill -KILL -- "-$TUNNEL_PID" 2>/dev/null
     wait "$TUNNEL_PID" 2>/dev/null
+  fi
+  if [[ -n "${API_TEST_TOKEN:-}" ]]; then
+    python3 scripts/cd/redact-verification-token.py "$REPORT_DIR" || true
   fi
   rm -rf "$TEMP_DIR"
   exit "$EXIT_CODE"
@@ -134,6 +139,15 @@ fi
 echo "Deployed health endpoint reachable: $READY_URL"
 echo "ZAP target configured: $TARGET_URL"
 
+AUTH_DOCKER_ARGS=()
+if [[ "$SERVICE_NAME" == transfer-service || "$SERVICE_NAME" == api-gateway ]]; then
+  python3 scripts/cd/login-for-verification.py "http://127.0.0.1:$LOCAL_PORT" "$TEMP_DIR/auth.env"
+  API_TEST_TOKEN=$(sed -n 's/^API_TEST_TOKEN=//p' "$TEMP_DIR/auth.env")
+  printf '::add-mask::%s\n' "$API_TEST_TOKEN"
+  export API_TEST_TOKEN
+  AUTH_DOCKER_ARGS=(--env-file "$TEMP_DIR/auth.env")
+fi
+
 echo 'Running functional endpoint tests through the SSM tunnel'
 python3 scripts/cd/test-endpoints.py \
   --service "${DAST_SERVICE_NAME:?DAST_SERVICE_NAME is required}" \
@@ -164,7 +178,7 @@ PY
   echo "Active API scan: $SERVICE_NAME using $OPENAPI_FILE; requests may change test data."
 fi
 docker create --user 0:0 --name "$ZAP_CONTAINER" --network host \
-  --volume /zap/wrk -e PYTHONUNBUFFERED=1 "$ZAP_IMAGE" \
+  --volume /zap/wrk -e PYTHONUNBUFFERED=1 "${AUTH_DOCKER_ARGS[@]}" "$ZAP_IMAGE" \
   "${SCAN_ARGS[@]}" \
   -J zap-report.json -r zap-report.html > "$REPORT_DIR/container-id.txt"
 if [[ "$SCAN_MODE" == api ]]; then

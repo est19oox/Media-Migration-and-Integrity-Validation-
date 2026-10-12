@@ -23,6 +23,10 @@ aws:
   region: ${AWS_REGION:ap-southeast-1}
 
 mmiv:
+  auth:
+    issuer: ${USER_ACCESS_JWT_ISSUER:https://auth.mmiv.example}
+    jwk-set-uri: ${USER_ACCESS_JWK_SET_URI:http://localhost:8083/.well-known/jwks.json}
+    cookie-secure: ${JWT_COOKIE_SECURE:false}
   log:
     queue-url: ${MMIV_LOG_QUEUE_URL:}
     outbox-directory: ${MMIV_LOG_OUTBOX_DIRECTORY:/var/lib/mmiv/log-outbox}

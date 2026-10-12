@@ -202,7 +202,7 @@ jobs:
           python3 tests/ci/test-cd-contract.py
           python3 tests/ci/test-terraform-sqs-policy.py
           python3 tests/ci/test-stack-lifecycle.py
-          node --test tests/ci/test-upload-page.cjs
+          node --test tests/ci/test-upload-page.cjs tests/ci/test-transfer-auth-pages.cjs
 
       - name: Reclaim and verify User Access Oracle database storage
         env:

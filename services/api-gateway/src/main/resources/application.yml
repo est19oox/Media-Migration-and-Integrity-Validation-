@@ -19,6 +19,10 @@ spring:
             connect-timeout: 3000
             response-timeout: ${GATEWAY_RESPONSE_TIMEOUT:300s}
           routes:
+            - id: user-access-login-page
+              uri: lb://user-access-service
+              predicates:
+                - Path=/login.html,/signup.html
             - id: transfer-api
               uri: lb://transfer-service
               predicates:
@@ -34,13 +38,17 @@ spring:
             - id: transfer-pages
               uri: lb://transfer-service
               predicates:
-                - Path=/upload.html,/files.html
-            - id: home
+                - Path=/upload.html,/files.html,/auth.js
+            - id: transfer-session
               uri: lb://transfer-service
+              predicates:
+                - Path=/api/v1/session
+            - id: home
+              uri: lb://user-access-service
               predicates:
                 - Path=/
               filters:
-                - SetPath=/upload.html
+                - SetPath=/login.html
             - id: integrity-api
               uri: lb://integrity-service
               predicates:
