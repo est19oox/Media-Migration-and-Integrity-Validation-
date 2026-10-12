@@ -76,7 +76,7 @@ def run_case(case, base_url, token):
     headers = {"Content-Type": "application/json", **case.get("headers", {})}
     if "multipart" in case:
         data, headers["Content-Type"] = multipart_body(case["multipart"])
-    if token and not case.get("anonymous"):
+    if token and not case.get("anonymous") and "Authorization" not in headers:
         headers["Authorization"] = "Bearer " + token
     request = Request(base_url + path, data=data,
                       method=case.get("method", "GET"), headers=headers)

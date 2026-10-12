@@ -1,0 +1,15 @@
+# Redis is temporarily disabled; this playbook is not invoked by CI/CD.
+# ---
+# - name: Prepare shared Redis dependency
+#   hosts: mmiv
+#   become: true
+#   gather_facts: false
+#   pre_tasks:
+#     - name: Wait for SSM connectivity
+#       ansible.builtin.wait_for_connection:
+#         timeout: 600
+#         sleep: 10
+#     - name: Gather facts
+#       ansible.builtin.setup:
+#   roles:
+#     - redis

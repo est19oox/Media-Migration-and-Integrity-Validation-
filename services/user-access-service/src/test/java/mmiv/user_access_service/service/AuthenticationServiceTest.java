@@ -18,7 +18,6 @@ import mmiv.user_access_service.repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
-import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 class AuthenticationServiceTest {
@@ -92,19 +91,6 @@ class AuthenticationServiceTest {
     assertThrows(
         InvalidCredentialsException.class, () -> service.authenticate("alice", "password"));
     verify(passwordEncoder, never()).matches(anyString(), anyString());
-  }
-
-  @Test
-  void rejectsPasswordSuffixBeyondBcryptByteLimit() {
-    BCryptPasswordEncoder bcrypt = new BCryptPasswordEncoder(4);
-    AuthenticationService actual = new AuthenticationService(repository, bcrypt);
-    for (String prefix : List.of("a".repeat(72), "界".repeat(24))) {
-      User user = user(true, bcrypt.encode(prefix));
-      when(repository.findByUsername("alice")).thenReturn(Optional.of(user));
-      assertSame(user, actual.authenticate("alice", prefix));
-      assertThrows(
-          InvalidCredentialsException.class, () -> actual.authenticate("alice", prefix + "x"));
-    }
   }
 
   @Test

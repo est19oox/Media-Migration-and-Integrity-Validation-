@@ -1,0 +1,50 @@
+LOCAL CHECKS PASSED
+- Browser logic: 6 tests (login, redirect, failed login/session, CSRF request headers, logout, folder submission, signup success, duplicate username, mismatched passwords).
+- Stack lifecycle: 39 tests.
+- Endpoint runner: 6 tests.
+- SSM DAST tunnel including login: 5 tests.
+- CD contract: 7 tests.
+- Runtime configuration: 6 tests.
+- Modified Python scripts compile; DAST shell syntax passes; modified YAML and Maven XML parse.
+
+NOT RUN / ENVIRONMENT BLOCKERS
+- Maven/Java security integration and service build: Maven is unavailable, installed Java is 17; project needs Java 25.
+- Docker Compose runtime check: Docker is unavailable.
+- Ansible access configuration check: ansible-playbook is unavailable.
+- AWS deployment and live authenticated DAST: not run here.
+
+Included TransferSecurityIntegrationTest runs real RSA/JWKS validation and CSRF checks under mvn -B clean verify in CI. Credentials for an existing test account must be supplied as documented in docs/ci-cd/login-access.md before deployed verification.
+
+Signup Java tests additionally cover BCrypt authentication, safe default roles, duplicate/concurrent registrations, validation, REST responses, and Oracle insert-only uniqueness. Java/Oracle checks remain unexecuted locally due to the environment blockers above.
+
+Gateway CI follow-up: the supplied log showed GatewayRoutingTest still expecting /upload.html for /. Updated it to /login.html and added assertions for login/signup pages, session/auth.js/file routes and authentication API prefix stripping. Gateway's Java tests still need to be rerun in Java 25/Maven CI. The pasted log's deprecation, Mockito agent and load-balancer cache warnings did not cause the reported assertion failure.
+
+Transfer context CI follow-up: limit TransferSecurityConfig to servlet applications so the non-web Feign contract test does not create an HttpSecurity filter chain. Explicitly enable Spring Web Security for the MVC slice. The security test now specifies only its security configuration, browser session controller and protected probe as context classes. Page matching uses the context-relative request URI, including MockMvc requests with an empty servletPath. The pasted summary did not contain the original Caused by exceptions; Java tests still require execution in CI.
+
+Additional review fixes:
+- User Access security explicitly enables servlet web security and excludes non-web contexts.
+- Transfer and User Access use Spring Boot 4's current resource-server starter; Transfer uses the Boot security test starter.
+- Transfer strictly rejects past-expiry JWTs; browser session issuance rejects tokens with no remaining whole second.
+- Login verifies cookie authentication before redirecting; disabled cookies display an error instead of bouncing between pages.
+- DAST refreshes authentication after functional tests.
+- CI shell test harness normalizes relative repository roots.
+- Gateway/Transfer access documentation and required verification-secret instructions now match current behavior.
+
+Review validation: 80 browser/Python unit and contract tests passed (6 browser, 39 stack lifecycle, 5 tunnel, 6 endpoint runner, 7 CD, 6 runtime config, 7 Terraform SQS policy, 4 Terraform provider cache). CI shell runtime harness passed. All Python parses, shell syntax, Maven POM XML, workflow/runtime YAML and API JSON checks passed. Java/Oracle, Docker and Ansible execution remain unavailable locally. Added NonWebSecurityContextTest to guard the exact non-web startup regression in Java CI.
+
+CSRF CI follow-up: the new log showed 116 tests, 1 failure, 0 startup errors. Cookie upload without CSRF returned 200. Spring Resource Server adds an automatic CSRF exemption for tokens resolved by the configured BearerTokenResolver; this application's cookie resolver caused cookie requests to be exempt too. Added a CsrfFilter object post-processor to set the final protection matcher after that framework override: unsafe requests require CSRF unless credentials are explicitly in Authorization. The original 403 expectation is retained and extended to wrong CSRF, logout without CSRF, valid Bearer uploads and invalid authorization attempts. Java rerun is still required.
+
+Session/verification edge review:
+- Added server-computed expiresInSeconds for browser timers; wrong local clocks no longer cause premature redirect.
+- CSRF rejection now has an explicit CSRF_INVALID response emitted before a controller runs.
+- Browser refreshes stale CSRF tokens and replays only that proven rejection, once; general authorization failures are not replayed.
+- Ordinary authenticated access-denied responses use HTTP 403 rather than a cookie-dependent 401.
+- Verification login validates the complete loopback URL, blocks redirects, requires Bearer JWT syntax/type, and repairs private file permissions on rewrite.
+- New Java assertions cover the CSRF response and forbidden authenticated paths.
+- New Node regressions cover wrong clock, stale CSRF recovery and no replay on permission errors; Python tests cover verification URL/token validation and secret-file permissions.
+
+This review passed 37 targeted checks: 9 Node browser checks, 5 tunnel tests, 7 CD contracts, 6 endpoint-runner tests, 6 runtime-config tests and 4 verification-login tests. Python, Maven XML, workflow YAML and shell syntax checks passed. A standalone Maven executable was found and an offline local test attempt made, but the required Spring Boot 4.1.1 parent was not cached, so no Java tests ran. The only installed JDK is 17; the project's supported target remains Java 25. Prior Java-tooling statements above describe the environment as observed at their earlier review time.
+
+First-deployment verification fix: the default managed Oracle database can have no accounts, so requiring a manually supplied userAccessSmoke account blocked initial verification. Verification now generates a dedicated random normal account fixture once per run, creates it through signup only when its initial login returns 401, then uses the real login API for Transfer/User Access/Gateway checks. Existing supplied account passwords are never modified. userId is derived from login and can optionally be supplied as a consistency check. User Access unauthenticated/invalid-token cases remain explicit and are no longer overwritten by a default valid API token. Oracle still uses the external mmiv-oracle-data volume; fixtures and user data persist across container redeployments. CI fixture accounts are retained as documented, rather than claiming they are temporary or deleted. Python login, configuration, tunnel, endpoint and stack-lifecycle tests passed; live AWS signup/login and DAST still need rerunning after deployment.
+
+Redirect-header follow-up: supplied deployment log shows 25 passing endpoint checks and one failure for the anonymous page Location header; HTTP redirect status already passed. Replaced servlet sendRedirect with explicit HTTP 302 and relative Location /login.html to prevent container expansion to an internal backend origin. Existing Java redirect assertions and strict deployment header expectations remain unchanged. Local endpoint-runner tests passed (6); Java tests and live deployment require CI rerun. The log did not include the actual Location value, so backend URL expansion is the likely cause rather than a confirmed captured value.

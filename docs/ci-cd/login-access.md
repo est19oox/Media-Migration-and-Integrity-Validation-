@@ -22,23 +22,26 @@ The current development Gateway uses HTTP, so JWT_COOKIE_SECURE defaults to fals
 
 ## Authenticated CD verification
 
-The existing anonymous upload smoke tests and DAST have been updated to log in through the Gateway. By default verification signs up one randomly named account, reuses it for the run, and deletes it through the authenticated cleanup endpoint after all checks, including failed checks. To use a supplied account instead, add credentials to the MMIV_RUNTIME_CONFIG GitHub secret:
+No userAccessSmoke secret is required for the default workflow. After the complete release is ready, verification generates one ci_smoke_<random> username and a strong random password per run. On the first failed login for these generated credentials, it creates a normal USER account through the real signup API, then logs in normally. Transfer, User Access and Gateway scans share that account. The account ID is read from the issuer's login response; protected Transfer calls still cryptographically validate the JWT. Supplied existing accounts are never registered, reset or overwritten.
+
+The test account remains in Oracle as a CI fixture. New verification runs create distinct fixtures with inaccessible random passwords; do not use these as your personal login. Existing user accounts and Oracle data remain intact.
+
+Optional: to use a specific existing account, add this to MMIV_RUNTIME_CONFIG alongside any external database or Integrity settings:
 
 ```json
 {
   "userAccessSmoke": {
     "username": "YOUR_EXISTING_TEST_USERNAME",
-    "password": "YOUR_EXISTING_TEST_PASSWORD",
-    "userId": "THE_ACCOUNT_USER_ID"
+    "password": "YOUR_EXISTING_TEST_PASSWORD"
   }
 }
 ```
 
-If MMIV_RUNTIME_CONFIG already includes external database or Integrity settings, add userAccessSmoke to that JSON rather than replacing the other settings. Supplied accounts are never created, reset, or deleted by verification. If no credentials are supplied, verification calls the real signup API with a unique `mmiv_ci_` name and a random password, then logs in normally. Partial credentials fail instead of falling back to signup. `userId` is optional; checks use the actual JWT subject returned by login. The account cache is private, shared across scans, and kept outside uploaded reports. Cleanup failure fails verification and records evidence; the persistent Oracle volume is preserved. Only the caller’s generated `USER` account can be removed by `DELETE /api/auth/verification-account`; regular and privileged accounts are rejected. Transfer's DAST now targets its Gateway routes, while Transfer itself still verifies the JWT. Scanner tokens are masked and redacted from saved text evidence.
+userId is optional because verification derives it from login. If supplied, it must match that account. Partial or incorrect supplied credentials fail rather than overwriting an account. With no supplied credentials, signup must be available in the deployed User Access image. Scanner credentials/tokens are masked and tokens are redacted from saved text evidence.
 
 ## Verification
 
-Spring integration tests cover anonymous access, real RSA signatures, wrong issuer, expired/forged tokens, browser cookie establishment, CSRF and logout. Run mvn -B clean verify with Java 25 from services/transfer-service. Run the Python verification-account, runtime-configuration, tunnel, and lifecycle tests under tests/ci for the deployment path.
+Spring integration tests cover anonymous access, real RSA signatures, wrong issuer, expired/forged tokens, browser cookie establishment, CSRF and logout. Run mvn -B clean verify with Java 25 from services/transfer-service. These Java tests could not be executed in the editing environment because Java 25, Docker and the required cached Maven dependencies are unavailable. Browser login/signup logic and the relevant Python deployment/tunnel contracts were checked locally; see login-validation.txt at the project root.
 
 ## Signup
 

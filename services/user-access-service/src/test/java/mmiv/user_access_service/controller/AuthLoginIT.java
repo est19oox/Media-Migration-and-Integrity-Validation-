@@ -40,8 +40,8 @@ import org.springframework.test.web.servlet.MockMvc;
 @AutoConfigureMockMvc
 @TestPropertySource(
     properties = {
-      "spring.datasource.url=${ORACLE_JDBC_URL:jdbc:oracle:thin:@//localhost:1521/FREEPDB1}",
-      "spring.datasource.username=${ORACLE_USER:USER_ACCESS}"
+      "spring.datasource.url=jdbc:oracle:thin:@//localhost:1521/FREEPDB1",
+      "spring.datasource.username=USER_ACCESS"
     })
 class AuthLoginIT {
 

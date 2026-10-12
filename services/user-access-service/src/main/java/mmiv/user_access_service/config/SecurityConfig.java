@@ -36,8 +36,6 @@ public class SecurityConfig {
                     .permitAll()
                     .requestMatchers(HttpMethod.GET, "/api/health")
                     .permitAll()
-                    .requestMatchers(HttpMethod.DELETE, "/api/auth/verification-account")
-                    .authenticated()
                     .requestMatchers("/api/access/**")
                     .authenticated()
                     .anyRequest()

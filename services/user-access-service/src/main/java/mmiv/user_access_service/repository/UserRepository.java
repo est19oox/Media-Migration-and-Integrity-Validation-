@@ -12,8 +12,6 @@ public interface UserRepository {
 
   void create(User user);
 
-  boolean deleteVerificationAccount(String userId);
-
   Optional<User> findByUsername(String username);
 
   void grantDestinationAccess(String userId, String destination, Permission permission);

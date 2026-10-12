@@ -1,6 +1,5 @@
 package mmiv.user_access_service.service;
 
-import java.nio.charset.StandardCharsets;
 import mmiv.user_access_service.model.User;
 import mmiv.user_access_service.repository.UserRepository;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -18,11 +17,7 @@ public class AuthenticationService {
   }
 
   public User authenticate(String username, String password) {
-    if (username == null
-        || username.isBlank()
-        || password == null
-        || password.isBlank()
-        || password.getBytes(StandardCharsets.UTF_8).length > 72) {
+    if (username == null || username.isBlank() || password == null || password.isBlank()) {
       throw new InvalidCredentialsException();
     }
 

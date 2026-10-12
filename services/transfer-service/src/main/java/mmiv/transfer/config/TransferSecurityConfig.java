@@ -4,6 +4,7 @@ import java.time.Instant;
 import jakarta.servlet.DispatcherType;
 import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -68,7 +69,10 @@ public class TransferSecurityConfig {
         return (request, response, exception) -> {
             response.setHeader("Cache-Control", "no-store");
             if (isPage(request)) {
-                response.sendRedirect("/login.html");
+                // Keep navigation on the public Gateway origin. sendRedirect can
+                // expand this path into an absolute internal backend URL.
+                response.setStatus(HttpServletResponse.SC_FOUND);
+                response.setHeader("Location", "/login.html");
             } else {
                 response.setHeader("WWW-Authenticate", "Bearer");
                 response.sendError(401, "Login required");

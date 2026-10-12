@@ -34,7 +34,7 @@ mvn clean verify
 ```
 
 
-Gateway browser access: see docs/ci-cd/gateway-access.md.
+Gateway browser access and temporary Redis disabling: see docs/ci-cd/gateway-access.md.
 
 
 ## Merged gateway access
