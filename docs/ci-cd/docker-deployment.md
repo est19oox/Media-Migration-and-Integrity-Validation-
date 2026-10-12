@@ -2,11 +2,14 @@
 
 The GitHub pipeline builds all enabled images in parallel and deploys one Compose
 stack through one SSM Run Command. The Service Registry is included. Gateway deploys
-last, after backend health and Eureka registration pass.
+last, after backend container health passes. Eureka registration and Gateway routes
+must also pass before tests start.
 
 ## Pipeline
 
-1. Existing CI/security gates pass. Terraform runs on every pipeline. Image builds
+1. Terraform formatting/validation runs first on an isolated runner, sharing one
+   provider cache across its three roots. CI/security gates then pass on their own
+   runner with Oracle and scanners. Terraform apply runs on every pipeline. Image builds
    run in parallel with Terraform after the gates; each image is tested, scanned,
    pushed or reused by its immutable commit tag, and recorded in an image artifact.
 2. `setup-host` waits for Terraform and all image builds. Ansible reconciles host
@@ -16,11 +19,13 @@ last, after backend health and Eureka registration pass.
    Missing, stale, duplicate or mismatched images fail before service deployment.
 4. One SSM command downloads missing images with bounded parallelism, captures the
    prior release, and reconciles `/opt/mmiv/stack/compose.yaml` under `mmiv-stack`:
-   - Registry starts on 8761 and must become healthy.
-   - Enabled backends start together; their health and current-container Eureka
-     registration checks run concurrently.
-   - Gateway starts on 8080 last. Its health, registration, pages and routed file
-     request must pass before the release becomes ready.
+   - One `docker compose up -d --no-build --pull never` starts the whole release.
+   - Registry and managed Oracle start first. Oracle has a persistent external volume.
+     Its startup hook reclaims unused User Access datafile/TEMP space before readiness;
+     this runs inside that startup, with no additional forward Compose invocation.
+   - Backends depend on Registry health; User Access also waits for Oracle/account initialization.
+   - Gateway depends on all enabled backends being healthy. Current-container Eureka
+     registration, Gateway pages and routed requests must pass before the release becomes ready.
 5. Verification downloads `release-state-<commit>`, checks the complete readiness
    barrier, prepares Session Manager and pinned ZAP once, and runs functional tests
    and DAST. Each service has its own reports. Gateway is scanned last.
@@ -28,35 +33,37 @@ last, after backend health and Eureka registration pass.
    the original deployment command. A verification failure uses one additional SSM
    command to restore changed services from the release snapshot.
 
-Compose is invoked for each phase inside the same remote command. Explicit host-side
-checks gate later phases, including Eureka registration; container startup alone is
-not treated as readiness. `--no-deps` prevents an individual phase from starting
-Gateway early. Functional tests and ZAP remain on the GitHub verification runner.
-Separate port-forwarding sessions are retained for the different service ports.
+Compose uses health checks and `depends_on` instead of separate deployment phases.
+One forward invocation reconciles the release. The host performs final HTTP health,
+Eureka registration and Gateway route checks before scanning. Rollback is a separate
+recovery action and may invoke Compose for individual changed application services,
+using `--no-deps` to preserve unrelated containers. Functional tests and ZAP run on
+the GitHub verification runner with separate SSM tunnels for each service port.
 
 ## Enabled services
 
 | Service | Host port | Deployment phase |
 | --- | ---: | --- |
+| Oracle (User Access schema) | Internal 1521 only | First |
 | Service Registry | 8761 | First |
 | Transfer | 8081 | Backend group |
 | Integrity | 8082 | Backend group |
+| User Access | 8083 | Backend group |
 | API Gateway | 8080 | Last |
 
-User Access 8083, Reporting 8084 and Discovery 8085 retain commented entries in the
-`build-images` matrix. Enabling a configured service adds its image, rollout and
-verification requirements automatically. Discovery still needs Oracle/media settings
-and Eureka integration before it is enabled. Gateway readiness currently checks its
-Transfer routes. The additional service-specific settings must be implemented before
-enabling services that require them.
+Reporting 8084 and Discovery 8085 remain commented out until their owners complete the services.
+User Access uses a private immutable Oracle/JWT configuration bundle. The log service owner will implement the SQS consumer.
+Gateway readiness checks its Transfer routes; each enabled backend must also pass
+its health and current-instance Eureka registration checks.
 
 ## Idempotency and recovery
 
 - ECR tags include the commit; existing images are scanned and reused. EC2 downloads
   only missing images and completes all pulls before modifying service state.
 - One Compose file is generated from the release manifest. Unchanged service image,
-  configuration and environment preserve containers. An Oracle environment change
-  forces only Integrity to recreate.
+  configuration and environment preserve containers. Explicit changes to an existing
+  Integrity environment are detected by a configuration fingerprint, without a second
+  deployment invocation. Without an explicit update, its existing environment stays unchanged.
 - The release ID includes commit, workflow run and attempt. A repeated command for
   the same successful release preserves its original snapshot. An unchanged new run
   records no changed services and does not restart containers or trigger rollback.
@@ -70,7 +77,8 @@ enabling services that require them.
 - A journal records touched services before each mutation. Recovery restores only
   changed services that were touched, preserving untouched containers. New services
   with no prior container are removed to restore their prior absence. This also
-  cleans up a failed first deployment.
+  cleans up a failed first application deployment. Managed Oracle and its volume are
+  retained, along with their original credentials and signing keys.
 - Recovery orders Gateway first, backends next, Registry last, then checks restored
   health/registration and Gateway routes. It resumes recorded recovery work after
   interruption. A subsequent release first recovers an unfinished earlier rollout;
@@ -90,7 +98,7 @@ enabling services that require them.
 - `.github/workflows/cicd.yml`: parallel image matrix, Terraform, host setup and stack rollout.
 - `.github/workflows/verify-services.yml`: readiness barrier, scanner preparation and recovery.
 - `scripts/cd/docker-stack-ssm.py`: image-set validation, release assembly and SSM polling.
-- `scripts/cd/docker-stack-remote.py`: one Compose stack, phase ordering and release recovery.
+- `scripts/cd/docker-stack-remote.py`: one deployment invocation, managed Oracle and release recovery.
 - `scripts/cd/verify-deployed-services.py`: all-service verification and one-command recovery.
 - `infrastructure/ansible/stage-integrity.yml`: optional protected Oracle staging.
 
@@ -115,11 +123,12 @@ port-open acknowledgement before sending HTTP requests. Cleanup terminates the
 owned tunnel process group and forcibly stops any remaining plugin child after
 a bounded wait, so sequential scans do not depend on reusing port 18081.
 
-Local tests exercise phase order, idempotency, partial updates, Oracle changes,
+Local tests exercise health dependency order, one deployment invocation, credential/key reuse,
+database preservation, idempotency, partial updates, optional Integrity configuration changes,
 failed rollout recovery, first-release cleanup, migration, interrupted release
 recovery, stale rollback rejection, manifest completeness, SSM eventual visibility,
 scan sequencing and scanner image reuse. Static configuration and existing shell
-runtime checks also run. Actual AWS/SSM, Docker/Compose, Ansible, Terraform, Maven
+runtime checks also run. Actual AWS/SSM, Docker/Compose, Terraform, Maven
 and live ZAP execution are not available in this editing environment; run the
 workflow on the new commit to validate that integration.
 
@@ -130,8 +139,22 @@ Copy the complete updated tree into your checkout and remove the superseded file
 - `scripts/cd/docker-service-ssm.py`
 - `tests/ci/test-docker-lifecycle.py`
 
-Earlier cleanup removals are recorded in `CLEANUP-REVIEW.md`. The optional legacy
+The optional legacy
 Ansible deployment role remains for separate/manual deployments; use stack release
 recovery for hosts migrated to `mmiv-stack`. Neither the package nor local tests
 prove the runtime cause of the earlier Office folder-upload failure; its diagnostic
 fields and integrity assertions remain intact for the next live report.
+
+## Transfer log queue
+
+Terraform provisions the encrypted SQS file-log queue and DLQ. Its queue URL is
+passed through Terraform job outputs and setup-host into the release manifest and
+Transfer container. Apply the updated bootstrap once to grant queue provisioning
+permissions. Host setup creates a private persistent Transfer log outbox without
+another Ansible install. See [Transfer SQS logging](../../services/transfer-service/SQS-LOGGING.md)
+for timestamp meanings and producer configuration. The Reporting consumer is deferred to its owner.
+
+## Current main additions
+
+See [main-update.md](main-update.md) for automatic User Access credentials, persistent Oracle,
+optional external configuration and the log service handoff. User Access is enabled; Reporting and Discovery remain commented out.

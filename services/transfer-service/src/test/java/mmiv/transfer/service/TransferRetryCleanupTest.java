@@ -27,7 +27,7 @@ class TransferRetryCleanupTest {
         var validator = new TransferRequestValidator(media.toString());
         var strategy = new S3TransferStrategy(s3, "bucket", validator);
         service = new TransferService(validator, new TransferStrategyFactory(List.of(strategy)),
-                new IntegrityValidationGateway(client, 3, 0), new S3ObjectCleanup(s3, 3, 0));
+                new IntegrityValidationGateway(client, 3, 0), new S3ObjectCleanup(s3, 3, 0), mock(mmiv.transfer.logging.FileEventLogger.class));
         when(s3.putObject(any(PutObjectRequest.class), any(RequestBody.class)))
                 .thenReturn(PutObjectResponse.builder().eTag("\"etag\"").versionId("version-1").build());
     }

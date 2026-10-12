@@ -87,3 +87,11 @@ running. Runtime health in the actual Compose stack still checks both systems.
 - Events may arrive out of order; reports are recalculated from stage-owned
   fields and a late terminal event can recover an `INCOMPLETE` report.
 - Event/report JSON contains no absolute host paths or checksum values.
+
+## Relationship to the existing Transfer SQS log
+
+Transfer currently also publishes a separate version 1 operational log to AWS
+SQS. That log is retained for compatibility, but it is not an MMIV Reporting v2
+event and is not consumed by this service. Discovery, Transfer, and Integrity
+must publish the RabbitMQ v2 events defined in `contracts/events/v2` for the
+migration report to become complete.

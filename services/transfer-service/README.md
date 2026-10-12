@@ -34,3 +34,9 @@ Content-Type: application/json
 ```
 
 The implementation uses the Strategy Pattern and a factory so additional transfer targets can be added later.
+
+## Asynchronous file logs
+
+Uploads, transfers, downloads and previews publish records through a persistent
+SQS outbox. See [SQS-LOGGING.md](SQS-LOGGING.md) for message variable names, UTC
+timestamps, consumer requirements and the one-time bootstrap permission update.

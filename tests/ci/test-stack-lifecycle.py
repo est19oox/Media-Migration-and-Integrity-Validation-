@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Simulate one Compose stack, release recovery and SSM result polling."""
+from contextlib import redirect_stdout, redirect_stderr
 import importlib.util
 import io
 import json
@@ -30,9 +31,11 @@ class StackLifecycleTest(unittest.TestCase):
         self.root = Path(self.temporary.name)
         self.containers, self.configs, self.images, self.calls = {}, {}, set(), []
         self.generation = 0
+        self.volumes = set()
+        self.real_subprocess = subprocess.run
         self.state = {'INSTANCE_ID': 'i-test', 'GITHUB_SHA': 'first', 'RELEASE_ID': 'first-1',
                       'ECR_REGISTRY': 'registry', 'AWS_REGION': 'ap-southeast-1',
-                      'MMIV_BUCKET_NAME': 'test', 'ORACLE_CONFIG_STAGED': False,
+                      'MMIV_BUCKET_NAME': 'test', 'MMIV_LOG_QUEUE_URL': 'https://sqs.example/queue', 'ORACLE_CONFIG_STAGED': False,
                       'services': {n: {'image': 'registry/mmiv:' + n + '-first', 'port': p}
                                    for n, p in ssm.PORTS.items() if n in
                                    ('service-registry', 'transfer-service', 'integrity-service', 'api-gateway')}}
@@ -51,6 +54,16 @@ class StackLifecycleTest(unittest.TestCase):
                 result.stdout = json.dumps([self.containers[args[2]]])
             else:
                 result.returncode, result.stderr = 1, 'No such object'
+        elif args[:3] == ('docker', 'volume', 'inspect'):
+            result.returncode = int(args[3] not in self.volumes)
+            if result.returncode:
+                result.stderr = 'Error response from daemon: get mmiv-oracle-data: no such volume'
+        elif args[:3] == ('docker', 'volume', 'ls'):
+            result.stdout = '\n'.join(sorted(self.volumes))
+        elif args[:3] == ('docker', 'volume', 'create'):
+            self.volumes.add(args[3])
+        elif args[0] == 'openssl':
+            return self.real_subprocess(args, check=check, capture_output=True, text=True, timeout=timeout)
         elif args[:3] == ('docker', 'image', 'inspect'):
             result.returncode = int(args[3] not in self.images)
         elif args[:2] == ('docker', 'pull'):
@@ -66,14 +79,25 @@ class StackLifecycleTest(unittest.TestCase):
                 result.stdout = json.dumps(config)
             else:
                 names = [name for name in args[args.index('up') + 1:] if name in config['services']]
-                for name in names:
+                processed = set()
+                def launch(name):
+                    if name in processed:
+                        return
                     service = config['services'][name]
+                    if '--no-deps' not in args:
+                        for dependency in service.get('depends_on', {}):
+                            launch(dependency)
+                            if dependency in self.state['services']:
+                                remote.healthy(self.state['services'][dependency]['port'])
+                    processed.add(name)
                     if service != self.configs.get(name) or '--force-recreate' in args or name not in self.containers:
                         self.generation += 1
                         self.configs[name] = service
                         self.containers[name] = {'Id': str(self.generation),
                             'Config': {'Image': service['image'], 'Labels': {'com.docker.compose.project': 'mmiv-stack'}},
                             'NetworkSettings': {'Networks': {'mmiv-backend': {'IPAddress': '172.20.0.' + str(self.generation)}}}}
+                for name in names:
+                    launch(name)
         if check and result.returncode:
             raise subprocess.CalledProcessError(result.returncode, args)
         return result
@@ -83,12 +107,240 @@ class StackLifecycleTest(unittest.TestCase):
         for name in names or self.state['services']:
             self.state['services'][name]['image'] = 'registry/mmiv:' + name + '-second'
 
+    def stage_access(self, config_id='a' * 64):
+        self.state['services'].update({n: {'image': 'registry/mmiv:' + n + '-first', 'port': ssm.PORTS[n]}
+                                      for n in ('user-access-service',)})
+        bundle = self.root / 'etc/mmiv/user-access/versions' / config_id
+        bundle.mkdir(parents=True, exist_ok=True)
+        for name in ('environment.env', 'private.pem', 'public.pem'):
+            (bundle / name).write_text('private test configuration')
+        pointer = self.root / ('etc/mmiv/next-user-access-' + self.state['RELEASE_ID'] + '.json')
+        pointer.write_text(json.dumps({'config_id': config_id}))
+
+    def managed(self):
+        self.state['MANAGED_USER_ACCESS_ORACLE'] = True
+        self.state['services']['user-access-service'] = {
+            'image': 'registry/mmiv:user-access-service-first', 'port': '8083'}
+
+    def test_managed_oracle_reuses_credentials_keys_and_database_on_update_and_rollback(self):
+        self.managed()
+        first = remote.run('deploy', dict(self.state))
+        self.assertTrue(first['READY'])
+        secrets_dir = self.root / 'etc/mmiv/managed-oracle'
+        originals = {p.name: p.read_bytes() for p in secrets_dir.iterdir()}
+        oracle_id = self.containers['oracle']['Id']
+        launches = [c for c in self.calls if c[:2] == ('docker', 'compose') and 'up' in c]
+        self.assertEqual(len(launches), 1)
+        self.assertNotIn('--no-deps', launches[0])
+        self.assertNotIn('ports', self.configs['oracle'])
+        self.assertEqual(self.configs['oracle']['mem_limit'], '3g')
+        self.assertEqual(self.configs['oracle']['memswap_limit'], '3g')
+        self.assertEqual(self.configs['user-access-service']['mem_limit'], '512m')
+        self.assertEqual(self.configs['user-access-service']['memswap_limit'], '512m')
+        self.assertIn('-Xmx256m', self.configs['user-access-service']['environment']['JAVA_TOOL_OPTIONS'])
+        self.assertEqual(self.configs['user-access-service']['environment']['SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE'], '4')
+        self.assertNotIn('mem_limit', self.configs['integrity-service'])
+        self.assertEqual(self.configs['oracle']['image'], 'gvenzl/oracle-free:23.26.3-slim-faststart')
+        self.assertEqual(self.configs['oracle']['logging'],
+                         {'driver': 'json-file', 'options': {'max-size': '10m', 'max-file': '3'}})
+        self.assertEqual(self.configs['oracle']['healthcheck']['start_period'], '180s')
+        self.assertEqual(self.volumes, {remote.ORACLE_VOLUME})
+        environment = (self.root / self.configs['user-access-service']['env_file'][0]['path'].lstrip('/')).read_text()
+        self.assertIn('ORACLE_JDBC_URL=jdbc:oracle:thin:@//oracle:1521/FREEPDB1', environment)
+        self.assertIn('ORACLE_USER=USER_ACCESS', environment)
+        self.assertIn('JWT_PRIVATE_KEY_PATH=file:/run/mmiv-jwt/private.pem', environment)
+        self.assertIn('JWT_PUBLIC_KEY_PATH=file:/run/mmiv-jwt/public.pem', environment)
+        self.assertNotIn('oracle', self.configs['integrity-service'].get('depends_on', {}))
+        self.assertEqual((self.root / 'etc/mmiv/integrity.env').read_text(),
+                         '# Embedded H2 mode: no Oracle secrets required.\n')
+        self.assertTrue(all((secrets_dir / n).stat().st_mode & 0o777 == 0o600
+                            for n in ('credentials.json', 'private.pem', 'public.pem', 'oracle.env')))
+        state_text = json.dumps(first)
+        compose_text = (self.root / 'opt/mmiv/stack/compose.yaml').read_text()
+        self.assertNotIn(json.loads((secrets_dir / 'credentials.json').read_text())['user_access'], state_text + compose_text)
+        self.update(['user-access-service'])
+        second = remote.run('deploy', dict(self.state))
+        self.assertTrue(second['READY'])
+        remote.run('rollback', second)
+        self.assertEqual(self.containers['oracle']['Id'], oracle_id)
+        self.assertEqual(originals, {p.name: p.read_bytes() for p in secrets_dir.iterdir()})
+        self.assertEqual(first['USER_ACCESS_CONFIG_ID'], second['USER_ACCESS_CONFIG_ID'])
+
+    def test_storage_hook_changes_reconcile_oracle_in_single_forward_deployment(self):
+        self.managed()
+        self.assertTrue(remote.run('deploy', dict(self.state))['READY'])
+        oracle_id = self.containers['oracle']['Id']
+        self.calls.clear()
+        self.state['RELEASE_ID'] = 'storage-hook-update'
+        with patch.object(remote, 'ORACLE_STARTUP', remote.ORACLE_STARTUP + '\n# revised hook\n'):
+            self.assertTrue(remote.run('deploy', dict(self.state))['READY'])
+        self.assertNotEqual(self.containers['oracle']['Id'], oracle_id)
+        self.assertEqual(self.volumes, {remote.ORACLE_VOLUME})
+        self.assertEqual(sum(c[:2] == ('docker', 'compose') and 'up' in c for c in self.calls), 1)
+
+    def test_startup_login_failure_does_not_mark_database_ready(self):
+        directory = self.root / 'hook-test'
+        directory.mkdir()
+        executable = directory / 'sqlplus'
+        executable.write_text('#!/bin/sh\ncat >"$SQL_CAPTURE"\nif [ "$3" = /nolog ]; then exit "$TEST_LOGIN_EXIT"; fi\nexit "$TEST_SCHEMA_EXIT"\n')
+        executable.chmod(0o755)
+        marker = directory / 'ready'
+        hook = directory / 'startup.sh'
+        hook.write_text(remote.ORACLE_STARTUP.replace('/opt/oracle/oradata/mmiv-app-user-ready', str(marker)))
+        env = {**os.environ, 'PATH': str(directory) + os.pathsep + os.environ['PATH'],
+               'APP_USER_PASSWORD': 'test-password', 'TEST_LOGIN_EXIT': '1',
+               'TEST_SCHEMA_EXIT': '0', 'SQL_CAPTURE': str(directory / 'captured.sql')}
+        for exit_code in ('1', '0'):
+            env['TEST_LOGIN_EXIT'] = exit_code
+            result = self.real_subprocess(['bash', '-c', 'set -euo pipefail; source "$1"', 'bash', str(hook)],
+                                          env=env, text=True, capture_output=True)
+            self.assertEqual(result.returncode == 0, exit_code == '0')
+            self.assertEqual(marker.exists(), exit_code == '0')
+            self.assertNotIn('test-password', result.stdout + result.stderr)
+        env['TEST_SCHEMA_EXIT'] = '1'
+        result = self.real_subprocess(['bash', '-c', 'set -euo pipefail; source "$1"', 'bash', str(hook)],
+                                      env=env, text=True, capture_output=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertFalse(marker.exists())
+        self.assertIn(remote.ORACLE_STORAGE_SQL.strip(), (directory / 'captured.sql').read_text())
+        self.assertNotIn('test-password', result.stdout + result.stderr)
+
+    def test_switch_to_managed_database_retains_existing_signing_key(self):
+        self.stage_access()
+        bundle = self.root / 'etc/mmiv/user-access/versions' / ('a' * 64)
+        private = self.real_subprocess(['openssl', 'genpkey', '-algorithm', 'RSA', '-pkeyopt', 'rsa_keygen_bits:2048'],
+                                      check=True, capture_output=True, text=True).stdout
+        public = self.real_subprocess(['openssl', 'pkey', '-pubout'], input=private,
+                                     check=True, capture_output=True, text=True).stdout
+        (bundle / 'private.pem').write_text(private)
+        (bundle / 'public.pem').write_text(public)
+        self.assertTrue(remote.run('deploy', dict(self.state))['READY'])
+        self.managed()
+        self.state['RELEASE_ID'] = 'managed-2'
+        self.assertTrue(remote.run('deploy', dict(self.state))['READY'])
+        self.assertEqual((self.root / 'etc/mmiv/managed-oracle/private.pem').read_text(), private)
+        self.assertEqual((self.root / 'etc/mmiv/managed-oracle/public.pem').read_text(), public)
+
+    def test_managed_access_preserves_existing_integrity_environment(self):
+        self.managed()
+        environment = self.root / 'etc/mmiv/integrity.env'
+        environment.parent.mkdir(parents=True)
+        environment.write_text('SPRING_PROFILES_ACTIVE=oracle\nEXISTING_INTEGRITY_CONFIG=keep\n')
+        first = remote.run('deploy', dict(self.state))
+        self.assertTrue(first['READY'])
+        self.assertEqual(environment.read_text(), 'SPRING_PROFILES_ACTIVE=oracle\nEXISTING_INTEGRITY_CONFIG=keep\n')
+        self.assertFalse(first['changes']['integrity-service']['previous'])
+
+    def test_first_managed_release_failure_keeps_oracle_and_volume(self):
+        self.managed()
+        with patch.object(remote, 'registered', side_effect=RuntimeError('not registered')):
+            failed = remote.run('deploy', dict(self.state))
+        self.assertTrue(failed['ROLLED_BACK'])
+        self.assertEqual(set(self.containers), {'oracle'})
+        self.assertEqual(self.volumes, {remote.ORACLE_VOLUME})
+        self.state['RELEASE_ID'] = 'retry-2'
+        self.assertTrue(remote.run('deploy', dict(self.state))['READY'])
+
+    def test_missing_volume_uses_listing_and_reuses_credentials_on_retry(self):
+        self.managed()
+        remote.managed_access(dict(self.state))
+        credentials = self.root / 'etc/mmiv/managed-oracle/credentials.json'
+        original = credentials.read_bytes()
+        self.assertIn(('docker', 'volume', 'ls', '--format', '{{.Name}}'), self.calls)
+        self.assertEqual(self.volumes, {remote.ORACLE_VOLUME})
+        self.calls.clear()
+        remote.managed_access(dict(self.state))
+        self.assertEqual(credentials.read_bytes(), original)
+        self.assertFalse(any(c[:3] == ('docker', 'volume', 'create') for c in self.calls))
+
+    def test_uninspectable_existing_volume_is_not_treated_as_absent(self):
+        self.managed()
+        self.volumes.add(remote.ORACLE_VOLUME)
+        def command(*args, **kwargs):
+            if args[:3] == ('docker', 'volume', 'inspect'):
+                return subprocess.CompletedProcess(args, 1, '', 'unrecognized error')
+            return self.command(*args, **kwargs)
+        with patch.object(remote, 'command', side_effect=command):
+            with self.assertRaisesRegex(RuntimeError, 'Could not inspect Oracle volume'):
+                remote.managed_access(dict(self.state))
+        self.assertFalse((self.root / 'etc/mmiv/managed-oracle/credentials.json').exists())
+        self.assertFalse(any(c[:3] == ('docker', 'volume', 'create') for c in self.calls))
+
+    def test_daemon_or_volume_listing_failure_creates_no_credentials_or_volume(self):
+        self.managed()
+        for failed in [('docker', 'info'), ('docker', 'volume', 'ls')]:
+            def command(*args, **kwargs):
+                if args[:len(failed)] == failed:
+                    raise subprocess.CalledProcessError(1, args)
+                return self.command(*args, **kwargs)
+            with patch.object(remote, 'command', side_effect=command):
+                with self.assertRaises(subprocess.CalledProcessError):
+                    remote.managed_access(dict(self.state))
+            self.assertFalse((self.root / 'etc/mmiv/managed-oracle/credentials.json').exists())
+            self.assertFalse(self.volumes)
+
+    def test_existing_database_without_credentials_fails_without_resetting_it(self):
+        self.managed()
+        self.volumes.add(remote.ORACLE_VOLUME)
+        with self.assertRaisesRegex(RuntimeError, 'restore the host secret backup'):
+            remote.run('deploy', dict(self.state))
+        self.assertEqual(self.volumes, {remote.ORACLE_VOLUME})
+        self.assertFalse(any('up' in c or c[:3] == ('docker', 'volume', 'create') for c in self.calls))
+
+    def test_existing_database_with_lost_signing_key_refuses_silent_rotation(self):
+        self.managed()
+        remote.run('deploy', dict(self.state))
+        (self.root / 'etc/mmiv/managed-oracle/private.pem').unlink()
+        self.state['RELEASE_ID'] = 'retry-2'
+        with self.assertRaisesRegex(RuntimeError, 'Signing key is missing'):
+            remote.run('deploy', dict(self.state))
+
+    def test_five_services_access_keys_and_transfer_outbox(self):
+        self.stage_access()
+        result = remote.run('deploy', dict(self.state))
+        self.assertTrue(result['READY'])
+        launches = [c for c in self.calls if c[:2] == ('docker', 'compose') and 'up' in c]
+        self.assertEqual(len(launches), 1)
+        self.assertEqual(set(self.configs['api-gateway']['depends_on']), set(self.state['services']) - {'api-gateway'})
+        service = self.configs['user-access-service']
+        keys = [v for v in service['volumes'] if v['target'].startswith('/run/mmiv-jwt')]
+        self.assertEqual(len(keys), 2)
+        self.assertTrue(all(v['read_only'] for v in keys))
+        self.assertEqual(self.configs['transfer-service']['environment']['MMIV_LOG_QUEUE_URL'], self.state['MMIV_LOG_QUEUE_URL'])
+
+    def test_same_bundle_is_a_noop_and_rotation_rolls_back(self):
+        self.stage_access()
+        remote.run('deploy', dict(self.state))
+        original = self.containers['user-access-service']['Id']
+        self.state['RELEASE_ID'] = 'first-2'
+        self.stage_access()
+        result = remote.run('deploy', dict(self.state))
+        self.assertFalse(result['changes']['user-access-service']['changed'])
+        self.assertEqual(original, self.containers['user-access-service']['Id'])
+        self.state['RELEASE_ID'] = 'first-3'
+        self.stage_access('b' * 64)
+        result = remote.run('deploy', dict(self.state))
+        self.assertTrue(result['changes']['user-access-service']['changed'])
+        self.assertIn('b' * 64, self.configs['user-access-service']['env_file'][0]['path'])
+        remote.run('rollback', dict(self.state))
+        self.assertIn('a' * 64, self.configs['user-access-service']['env_file'][0]['path'])
+        self.assertTrue((self.root / 'etc/mmiv/user-access/versions' / ('b' * 64) / 'private.pem').exists())
+
+    def test_incomplete_access_bundle_changes_no_containers(self):
+        self.stage_access()
+        (self.root / 'etc/mmiv/user-access/versions' / ('a' * 64) / 'public.pem').unlink()
+        with self.assertRaises(RuntimeError): remote.run('deploy', dict(self.state))
+        self.assertEqual(self.containers, {})
+
     def test_registry_first_backends_together_gateway_last(self):
         result = remote.run('deploy', dict(self.state))
         self.assertTrue(result['READY'])
         launches = [c for c in self.calls if c[:2] == ('docker', 'compose') and 'up' in c]
         groups = [[n for n in c if n in self.state['services']] for c in launches]
-        self.assertEqual(groups, [['service-registry'], ['integrity-service', 'transfer-service'], ['api-gateway']])
+        self.assertEqual(len(groups), 1)
+        self.assertEqual(set(groups[0]), set(self.state['services']))
+        self.assertEqual(set(self.configs['api-gateway']['depends_on']), set(self.state['services']) - {'api-gateway'})
+        self.assertEqual(list(self.configs)[-1], 'api-gateway')
         self.assertTrue(all(c[c.index('-p') + 1] == 'mmiv-stack' for c in launches))
         self.assertEqual(sum(c[:3] == ('aws', 'ecr', 'get-login-password') for c in self.calls), 1)
 
@@ -127,6 +379,8 @@ class StackLifecycleTest(unittest.TestCase):
             result = remote.run('deploy', dict(self.state))
         self.assertFalse(result['READY'])
         self.assertTrue(result['ROLLED_BACK'])
+        self.assertEqual(result['failure_phase'], 'compose_startup')
+        self.assertIn('integrity-service', result['container_states'])
         self.assertEqual(self.containers['api-gateway']['Id'], gateway_id)
         self.assertTrue(all(c['Config']['Image'].endswith('-first') for c in self.containers.values()))
 
@@ -295,6 +549,41 @@ class RunnerAndBarrierTest(unittest.TestCase):
                 'ECR_REGISTRY': 'registry', 'READY': True, 'ROLLED_BACK': False, 'COMMAND_STATUS': 'Success',
                 'services': {n: {'image': 'registry/mmiv:' + n + '-commit', 'port': ssm.PORTS[n]}
                              for n in ssm.expected_services()}}
+
+    def test_failure_snapshot_excludes_commands_credentials_and_health_logs(self):
+        secret = 'private-password-value'
+        error = subprocess.CalledProcessError(17, ['docker', 'compose', '--password', secret],
+                                            output=secret, stderr=secret)
+        def fail():
+            raise error
+        with self.assertRaises(subprocess.CalledProcessError):
+            remote.stage('compose_startup', fail)
+        container = {'Config': {'Env': [secret]}, 'State': {'Status': 'exited',
+                     'ExitCode': 137, 'OOMKilled': True, 'Error': secret,
+                     'Health': {'Status': 'unhealthy', 'Log': [secret]}}}
+        with patch.object(remote, 'inspect', return_value=container):
+            details = remote.failure_details(error, {'services': {'transfer-service': {}}})
+        self.assertEqual(details['failure_phase'], 'compose_startup')
+        self.assertEqual(details['failed_operation'], 'docker compose')
+        self.assertEqual(details['command_exit_code'], 17)
+        self.assertTrue(details['container_states']['transfer-service']['oom_killed'])
+        self.assertNotIn(secret, json.dumps(details))
+        out, err = io.StringIO(), io.StringIO()
+        with redirect_stdout(out), redirect_stderr(err):
+            ssm.report_outcome('deploy', {**details, 'READY': False, 'ROLLED_BACK': True,
+                                        'environment': {'password': secret}})
+        self.assertIn('compose_startup', err.getvalue())
+        self.assertIn('exit_code=17', err.getvalue())
+        self.assertIn('transfer-service', err.getvalue())
+        self.assertNotIn(secret, out.getvalue() + err.getvalue())
+
+    def test_failure_detail_only_reports_known_safe_messages(self):
+        with patch.object(remote, 'inspect', return_value=None):
+            details = remote.failure_details(RuntimeError('password=private-value'), {})
+            self.assertNotIn('private-value', json.dumps(details))
+            safe = 'Container health did not become UP'
+            details = remote.failure_details(RuntimeError(safe), {})
+            self.assertEqual(details['error_detail'], safe)
 
     def test_incomplete_or_failed_release_starts_no_scans(self):
         for mode in ('missing', 'failed', 'restored'):

@@ -25,12 +25,18 @@
         path: /var/lib/mmiv/media
         state: directory
         mode: '0755'
+    - name: Create persistent Transfer log outbox
+      ansible.builtin.file:
+        path: /var/lib/mmiv/transfer-log-outbox
+        state: directory
+        mode: '0700'
     - name: Install missing host components
       ansible.builtin.dnf:
         name:
           - docker
           - awscli
           - python3-requests
+          - openssl
         state: present
     - name: Enable Docker
       ansible.builtin.service:

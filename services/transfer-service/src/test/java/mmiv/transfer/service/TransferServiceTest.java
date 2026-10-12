@@ -15,6 +15,7 @@ class TransferServiceTest {
     TransferStrategy strategy;
     TransferService service;
     S3ObjectCleanup cleanup;
+    mmiv.transfer.logging.FileEventLogger logs;
     mmiv.transfer.integration.IntegrityValidationGateway integrity;
     final TransferRequest request = new TransferRequest("sample.txt", "key", "text/plain");
     @BeforeEach void setUp() {
@@ -27,7 +28,8 @@ class TransferServiceTest {
         cleanup = mock(S3ObjectCleanup.class);
         when(cleanup.delete(anyString(), anyString(), nullable(S3ObjectReference.class)))
                 .thenReturn(new S3ObjectCleanup.Result("DELETED", "Uploaded file deleted"));
-        service = new TransferService(validator, factory, integrity, cleanup);
+        logs = mock(mmiv.transfer.logging.FileEventLogger.class);
+        service = new TransferService(validator, factory, integrity, cleanup, logs);
     }
     @Test void validatesThenSelectsThenTransfers() {
         var response = new TransferResponse("bucket", "key", "text/plain", 5);
@@ -38,6 +40,7 @@ class TransferServiceTest {
         assertTrue(result.success());
         assertEquals("PASSED", result.validationResult());
         assertNotNull(result.transferId());
+        verify(logs).transfer(eq(result), any(java.time.Instant.class));
         var order = inOrder(validator, factory, strategy, integrity);
         order.verify(validator).validate(request);
         order.verify(factory).getStrategy(request);
@@ -49,6 +52,7 @@ class TransferServiceTest {
         doThrow(error).when(validator).validate(request);
         assertSame(error, assertThrows(IllegalArgumentException.class, () -> service.transfer(request)));
         verifyNoInteractions(factory, strategy);
+        verify(logs).failure(eq("TRANSFER"), isNull(), eq("key"), eq(error), any(java.time.Instant.class));
     }
     @Test void unsupportedMediaStopsBeforeTransfer() {
         var error = new IllegalArgumentException("unsupported");
