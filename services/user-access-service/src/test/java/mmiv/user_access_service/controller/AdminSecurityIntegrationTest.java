@@ -307,7 +307,9 @@ class AdminSecurityIntegrationTest {
                 .content("{\"token\":\"" + token + "\"}"))
         .andExpect(status().isForbidden());
     assertEquals("private-hash", users.findById(TARGET).orElseThrow().getPasswordHash());
-    var data = org.mockito.ArgumentCaptor.forClass(java.util.Map.class);
+    @SuppressWarnings("unchecked")
+    org.mockito.ArgumentCaptor<java.util.Map<String, Object>> data =
+        org.mockito.ArgumentCaptor.forClass(java.util.Map.class);
     verify(events).audit(eq("ADMIN_INVITATION_CREATED"), data.capture());
     assertFalse(data.getValue().toString().contains(token));
   }

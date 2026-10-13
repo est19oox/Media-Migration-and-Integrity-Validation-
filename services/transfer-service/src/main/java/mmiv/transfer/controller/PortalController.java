@@ -73,7 +73,8 @@ public class PortalController {
         || name.equals("upload")
         || mmiv.transfer.service.FileMutationService.reserved(name))
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid folder name");
-    try (var scope = guard.write(name)) {
+    try (@SuppressWarnings("unused")
+        var scope = guard.write(name)) {
       try {
         s3.putObject(
             PutObjectRequest.builder()

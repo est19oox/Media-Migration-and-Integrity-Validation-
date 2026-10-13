@@ -62,7 +62,7 @@ class S3TransferStrategyTest {
     assertEquals("media-bucket", put.getValue().bucket());
     assertEquals(source.key(), put.getValue().key());
     assertEquals("image/png", put.getValue().contentType());
-    assertEquals(source.sizeBytes(), body.getValue().contentLength());
+    assertEquals(source.sizeBytes(), body.getValue().optionalContentLength().orElseThrow());
     assertEquals(
         Base64.getEncoder().encodeToString(HexFormat.of().parseHex(source.sha256())),
         put.getValue().checksumSHA256());

@@ -49,7 +49,8 @@ public class FileMutationService {
     if (slash < 1) throw new ResponseStatusException(HttpStatus.FORBIDDEN, "No access to folder");
     String folder = key.substring(0, slash);
     Instant started = Instant.now();
-    try (var scope = folders.write(folder)) {
+    try (@SuppressWarnings("unused")
+        var scope = folders.write(folder)) {
       metadata.requireFolder(folder, "WRITE");
       boolean admin = "ADMIN".equals(metadata.profile().role());
       UUID migration = migration(key);
@@ -78,7 +79,8 @@ public class FileMutationService {
                             || p.equals("..")
                             || !p.matches("[\\p{L}\\p{N}._ ()-]{1,200}"))))
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid folder path");
-    try (var scope = folders.write(folder)) {
+    try (@SuppressWarnings("unused")
+        var scope = folders.write(folder)) {
       portal.admin();
       metadata.requireFolder(folder, "WRITE");
       String prefix = folder + "/";

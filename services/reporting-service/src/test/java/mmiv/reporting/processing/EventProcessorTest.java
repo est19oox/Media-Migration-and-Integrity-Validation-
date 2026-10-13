@@ -150,6 +150,7 @@ class EventProcessorTest {
   }
 
   @Test
+  @SuppressWarnings("unchecked")
   void replayAfterMarkAppliedFailureProjectsSafelyAgain() {
     AuditEventDocument firstPersisted = receivedAudit(eventBody());
     AuditEventDocument persistedReceived = receivedAudit(eventBody());
@@ -172,6 +173,7 @@ class EventProcessorTest {
   }
 
   @Test
+  @SuppressWarnings("unchecked")
   void duplicateKeyRaceReloadsTheWinningAudit() {
     AuditEventDocument winner = receivedAudit(eventBody());
     winner.markApplied(NOW.minusSeconds(1));

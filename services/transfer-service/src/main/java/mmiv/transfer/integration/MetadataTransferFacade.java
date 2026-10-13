@@ -41,7 +41,8 @@ public class MetadataTransferFacade {
 
   public TransferResponse transfer(UUID metadataId) {
     var initial = metadata.resolve(metadataId);
-    try (var folderScope = accessGuard.read(initial.destinationId())) {
+    try (@SuppressWarnings("unused")
+        var folderScope = accessGuard.read(initial.destinationId())) {
       var plan = metadata.resolve(metadataId);
       if (org.springframework.web.context.request.RequestContextHolder.getRequestAttributes()
           instanceof org.springframework.web.context.request.ServletRequestAttributes attributes) {
@@ -65,7 +66,8 @@ public class MetadataTransferFacade {
   public UploadResponse upload(MultipartFile file, String destinationId) {
     if (file == null) throw new IllegalArgumentException("file is required");
     String name = validator.validateUpload(file, maxUploadBytes);
-    try (var folderScope = accessGuard.read(destinationId)) {
+    try (@SuppressWarnings("unused")
+        var folderScope = accessGuard.read(destinationId)) {
       var plan =
           metadata.allocate(name, file.getSize(), destinationId, null, names.paths(destinationId));
       MigrationContext.set(plan);
@@ -84,7 +86,8 @@ public class MetadataTransferFacade {
       List<MultipartFile> files, List<String> relativePaths, String destinationId) {
     // Validate the whole folder and authorize every allocation before any object is written.
     folders.validate(files, relativePaths);
-    try (var folderScope = accessGuard.read(destinationId)) {
+    try (@SuppressWarnings("unused")
+        var folderScope = accessGuard.read(destinationId)) {
       var occupied = names.paths(destinationId);
       var plans = new java.util.ArrayList<MetadataClient.Plan>();
       for (int i = 0; i < files.size(); i++)

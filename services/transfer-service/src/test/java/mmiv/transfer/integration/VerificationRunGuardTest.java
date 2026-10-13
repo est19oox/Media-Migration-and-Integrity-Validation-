@@ -50,7 +50,8 @@ class VerificationRunGuardTest {
       assertThrows(
           org.springframework.web.server.ResponseStatusException.class, () -> guard.acquire(plan));
       assertDoesNotThrow(() -> guard.cleanup("owner", run, () -> {}));
-      try (var other = guard.acquire(plan("other-owner", run))) {}
+      try (@SuppressWarnings("unused")
+          var other = guard.acquire(plan("other-owner", run))) {}
     } finally {
       if (!released) scope.close();
       executor.shutdownNow();

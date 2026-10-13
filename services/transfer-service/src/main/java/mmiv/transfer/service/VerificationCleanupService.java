@@ -30,7 +30,8 @@ public class VerificationCleanupService {
     if (!("mmiv-verification-" + run).equals(folder.name()) || !metadata.verificationClosed(run))
       throw new org.springframework.web.server.ResponseStatusException(
           org.springframework.http.HttpStatus.CONFLICT, "Verification run must be closed first");
-    try (var scope = folders.write(folder.name())) {
+    try (@SuppressWarnings("unused")
+        var scope = folders.write(folder.name())) {
       String marker = folder.name() + "/";
       for (var page :
           s3.listObjectVersionsPaginator(

@@ -29,7 +29,7 @@ public class TransferExceptionHandler {
 
   @ExceptionHandler(org.springframework.web.multipart.MaxUploadSizeExceededException.class)
   public ResponseEntity<Map<String, String>> uploadTooLarge() {
-    return ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE)
+    return ResponseEntity.status(HttpStatus.CONTENT_TOO_LARGE)
         .body(Map.of("error", "File exceeds the upload size limit"));
   }
 
