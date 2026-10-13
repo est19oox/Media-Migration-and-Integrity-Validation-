@@ -1,6 +1,7 @@
 # Java / Maven
 target/
 *.class
+node_modules/
 
 # Terraform generated and local files
 **/.terraform/

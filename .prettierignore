@@ -1,0 +1,49 @@
+# Build outputs and generated content
+**/target/
+**/node_modules/
+**/.terraform/
+**/build/
+**/dist/
+**/coverage/
+**/generated/
+**/vendor/
+**/third_party/
+**/webjars/
+**/static/lib/
+.ci/
+
+# Secrets, environment files, keys, certificates, and local Terraform state
+**/.env
+**/.env.*
+**/*.pem
+**/*.key
+**/*.p12
+**/*.pfx
+**/*.crt
+**/*.tfstate
+**/*.tfstate.*
+**/*.tfvars
+**/*.tfplan
+
+# Lockfiles and files outside formatter ownership
+**/package-lock.json
+**/npm-shrinkwrap.json
+**/yarn.lock
+**/pnpm-lock.yaml
+**/Cargo.lock
+**/poetry.lock
+**/Pipfile.lock
+
+# Preserve deployment, security, and exact-behavior configuration
+.github/workflows/**
+infrastructure/ansible/**
+infrastructure/service-registry/compose*.yml
+services/**/compose.yml
+**/docker-compose.yml
+services/**/src/main/resources/*.yml
+services/**/src/test/resources/*.yml
+jenkins/casc.yaml
+security/**/*.yaml
+infrastructure/bootstrap/policies/**
+**/database/migrations/**/*.sql
+**/*.min.js

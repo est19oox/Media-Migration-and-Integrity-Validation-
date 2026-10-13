@@ -35,6 +35,15 @@ Build and test a service from its own directory:
 mvn clean verify
 ```
 
+Repository formatting uses pinned Prettier plus each service's Spotless configuration and
+`terraform fmt`. Run `npm ci` once, then use `scripts/format/format-all.ps1` and
+`scripts/format/check-all.ps1` on Windows, or run the matching scripts with `bash` on Linux.
+The check scripts never modify files. On pushes to `feature/**`, `fix/**` and `chore/**`, the
+workflow formats or checks **only files changed by the push** using
+`scripts/format/format-changed.mjs`; historical files are never bulk-formatted. It is check-only
+unless the repository variable `MMIV_AUTO_FORMAT_COMMIT` is set to `true`, which should happen only
+after the final-commit validation limitation is reviewed.
+
 
 Gateway browser access: see docs/ci-cd/gateway-access.md.
 
