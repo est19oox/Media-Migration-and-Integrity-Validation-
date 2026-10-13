@@ -81,7 +81,7 @@ class RepositoryFailureSecurityIntegrationTest {
             request,
             String.class);
 
-    verify(userRepository).findById(USER_ID);
+    verify(userRepository,org.mockito.Mockito.atLeastOnce()).findById(USER_ID);
     String responseBody = response.getBody() == null ? "" : response.getBody();
     assertFalse(responseBody.contains("\"authorised\":true"));
     assertFalse(responseBody.contains(EXCEPTION_MARKER));

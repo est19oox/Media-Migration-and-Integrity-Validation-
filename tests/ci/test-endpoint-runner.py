@@ -18,6 +18,26 @@ spec.loader.exec_module(runner)
 
 
 class EndpointRunnerTest(unittest.TestCase):
+    def test_upload_fixtures_are_isolated_between_service_runs(self):
+        config = json.loads((ROOT / 'tests/api/endpoints.json').read_text())
+        used = set()
+        for service, run_id in [('transfer-service', 'first'), ('api-gateway', 'second'), ('api-gateway', 'retry')]:
+            cases = config['services'][service]
+            for original in cases:
+                if original['name'] not in ('successful local file upload', 'successful Word upload', 'folder upload preserves Office paths'):
+                    continue
+                case = runner.expand(original, {'RUN_ID': run_id, 'MMIV_VERIFICATION_DESTINATION': 'shared-folder'})
+                paths = [part['content'] for part in case['multipart'] if part['name'] == 'relativePaths']
+                if not paths:
+                    paths = [part['filename'] for part in case['multipart'] if 'filename' in part]
+                    self.assertEqual(case['json_equals']['fileName'], paths[0])
+                else:
+                    for index, path in enumerate(paths):
+                        self.assertEqual(case['json_equals'][f'files.{index}.relativePath'], path)
+                for path in paths:
+                    self.assertNotIn(path, used)
+                    used.add(path)
+
     def run_fixture(self, response, case, http_status=200, headers=None):
         class Handler(BaseHTTPRequestHandler):
             def do_GET(self):

@@ -25,7 +25,7 @@ input:focus{outline:3px solid #cbe0ff;border-color:#2667c9}.password{position:re
 .note{color:#68778d;font-size:12px;line-height:1.7;margin:28px 0 0;border-top:1px solid #e7edf4;padding-top:20px}
 [hidden]{display:none!important}@media(max-width:700px){body{padding:16px}.shell{grid-template-columns:1fr}.brand{padding:28px;gap:24px}.brand h1{font-size:28px}.brand small{display:none}.panel{padding:32px 28px}}
 </style>
-</head>
+<!-- PWA disabled: <link rel="manifest" href="/manifest.webmanifest"> --><!-- PWA disabled: <meta name="theme-color" content="#14233b"> --><!-- PWA disabled: <script src="/pwa.js" defer></script> --></head>
 <body>
 <main class="shell">
 <section class="brand" aria-label="Media Migration and Integrity Validation">
@@ -48,7 +48,7 @@ input:focus{outline:3px solid #cbe0ff;border-color:#2667c9}.password{position:re
 <p class="note">Already have an account? <a href="/login.html">Sign in</a></p>
 </section>
 </main>
-<script>
+<script src="/feedback.js"></script><script>
 'use strict';
 const form = document.getElementById('signupForm');
 const username = document.getElementById('username');
@@ -60,6 +60,7 @@ const toggle = document.getElementById('toggle');
 function message(text, kind) {
   status.textContent = text;
   status.className = 'status' + (kind ? ' ' + kind : '');
+  if(kind==='error')globalThis.mmivFeedback?.notice('Please check your account details',text,'error');
 }
 toggle.addEventListener('click', () => {
   const show = password.type === 'password';
@@ -107,5 +108,6 @@ form.addEventListener('submit', async event => {
   }
 });
 </script>
+<script src="/english-validation.js"></script>
 </body>
 </html>

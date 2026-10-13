@@ -21,13 +21,13 @@ public class DashboardController {
     this.mongo=mongo;
     var factory=new org.springframework.http.client.JdkClientHttpRequestFactory(java.net.http.HttpClient.newBuilder().connectTimeout(java.time.Duration.ofSeconds(3)).build());
     factory.setReadTimeout(java.time.Duration.ofSeconds(10));
-    metadata=RestClient.builder().baseUrl(metadataUrl).requestFactory(factory).build();access=RestClient.builder().baseUrl(accessUrl).requestFactory(factory).build();
+    metadata=RestClient.builder().requestInterceptor(mmiv.resilience.DependencyCircuits.http("metadata",metadataUrl)).baseUrl(metadataUrl).requestFactory(factory).build();access=RestClient.builder().requestInterceptor(mmiv.resilience.DependencyCircuits.http("user-access",accessUrl)).baseUrl(accessUrl).requestFactory(factory).build();
   }
   @GetMapping("/api/dashboard") public Object logs(@AuthenticationPrincipal Jwt jwt,@RequestParam(required=false) String folder,@RequestParam(defaultValue="0") int page) {
     if(page<0 || page>100000) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Invalid page");
     try {
+      access.get().uri("/api/admin/me").header("Authorization","Bearer "+jwt.getTokenValue()).retrieve().toBodilessEntity();
       if(folder==null) {
-        access.get().uri("/api/admin/me").header("Authorization","Bearer "+jwt.getTokenValue()).retrieve().toBodilessEntity();
         return Map.of("logs",mongo.find(new Query().with(Sort.by(Sort.Direction.DESC,"occurredAt")).skip(page*100L).limit(100),Document.class,"service_logs"),"page",page);
       }
       var plans=metadata.get().uri(b->b.path("/api/metadata/folders/{folder}/plans").queryParam("page",page).build(folder))
@@ -40,4 +40,17 @@ public class DashboardController {
   }
   @com.fasterxml.jackson.annotation.JsonIgnoreProperties(ignoreUnknown=true)
   public record Plan(UUID migrationId) {}
+  @GetMapping("/api/history") public Object history(@AuthenticationPrincipal Jwt jwt,@RequestParam(defaultValue="0") int page) {
+    if(page<0||page>100000)throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Invalid page");
+    try {access.get().uri("/api/access/me").header("Authorization","Bearer "+jwt.getTokenValue()).retrieve().toBodilessEntity();}
+    catch(HttpClientErrorException e){throw new ResponseStatusException(e.getStatusCode(),"Account unavailable");}
+    catch(RestClientException e){throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,"Account service unavailable");}
+    var query=Query.query(Criteria.where("data.actorId").is(jwt.getSubject()).and("data.operation").in("UPLOAD","TRANSFER","DOWNLOAD","DELETE","FOLDER_DELETE"))
+        .with(Sort.by(Sort.Direction.DESC,"occurredAt")).skip(page*50L).limit(51);
+    var rows=mongo.find(query,Document.class,"service_logs");
+    var entries=rows.stream().limit(50).map(row->{var data=row.get("data",Document.class);return new History(row.getString("occurredAt"),
+        switch(data.getString("operation")){case "DOWNLOAD"->"Download";case "DELETE"->"Delete";case "FOLDER_DELETE"->"Delete folder";default->"Upload";},data.getString("fileName"),data.getString("folder"),data.get("sizeBytes"),Boolean.TRUE.equals(data.getBoolean("success"))?"Completed":"Failed");}).toList();
+    return Map.of("entries",entries,"hasMore",rows.size()>50,"page",page);
+  }
+  public record History(String time,String action,String fileName,String folder,Object sizeBytes,String status) {}
 }

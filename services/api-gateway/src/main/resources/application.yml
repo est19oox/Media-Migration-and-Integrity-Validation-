@@ -27,7 +27,7 @@ spring:
             - id: user-access-login-page
               uri: lb://user-access-service
               predicates:
-                - Path=/login.html,/signup.html
+                - Path=/login.html,/signup.html,/english-validation.js,/feedback.js,/reset-password.html
             - id: transfer-api
               uri: lb://transfer-service
               predicates:
@@ -43,7 +43,7 @@ spring:
             - id: transfer-pages
               uri: lb://transfer-service
               predicates:
-                - Path=/home.html,/upload.html,/files.html,/logs.html,/admin.html,/invite.html,/admin.js,/portal.js,/portal.css,/auth.js
+                - Path=/home.html,/upload.html,/files.html,/logs.html,/admin.html,/invite.html,/admin.js,/portal.js,/portal.css,/auth.js,/manifest.webmanifest,/icon-192.png,/icon-512.png,/sw.js,/pwa.js,/preview.js,/file-browser.js,/history.html
             - id: portal-api
               uri: lb://transfer-service
               predicates:
@@ -51,7 +51,7 @@ spring:
             - id: transfer-session
               uri: lb://transfer-service
               predicates:
-                - Path=/api/v1/session,/api/v1/destinations
+                - Path=/api/v1/session,/api/v1/destinations,/api/v1/verification/**
             - id: home
               uri: lb://transfer-service
               predicates:

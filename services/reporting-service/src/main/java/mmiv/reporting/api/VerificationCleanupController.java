@@ -18,7 +18,7 @@ public class VerificationCleanupController {
     public VerificationCleanupController(@Value("${mmiv.metadata.url:http://discovery-service:8085}") String url,VerificationCleanupGuard cleanup){
         var factory=new org.springframework.http.client.JdkClientHttpRequestFactory(java.net.http.HttpClient.newBuilder().connectTimeout(java.time.Duration.ofSeconds(3)).build());
         factory.setReadTimeout(java.time.Duration.ofSeconds(15));
-        this.metadata=RestClient.builder().baseUrl(url).requestFactory(factory).build();this.cleanup=cleanup;
+        this.metadata=RestClient.builder().requestInterceptor(mmiv.resilience.DependencyCircuits.http("metadata",url)).baseUrl(url).requestFactory(factory).build();this.cleanup=cleanup;
     }
     @PostMapping("/{run}/cleanup") public Object cleanup(@AuthenticationPrincipal Jwt jwt,@PathVariable UUID run){
         Plan[] plans;

@@ -72,7 +72,7 @@ jobs:
           python3 -m pip install PyYAML
           python3 tests/ci/test-cd-contract.py
           python3 tests/ci/test-stack-lifecycle.py
-          node --test tests/ci/test-upload-page.cjs
+          node --test tests/ci/*.cjs
 
       - name: Build and test services
         run: bash scripts/ci/run-tests.sh .

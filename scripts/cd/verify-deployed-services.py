@@ -51,7 +51,7 @@ def verify_scans(deployments, report_root, account_file):
                    'DAST_READY_PATH': '/actuator/health',
                    'MMIV_VERIFICATION_ACCOUNT_FILE': str(account_file),
                    'MMIV_VERIFICATION_RUN_ID': run_id,
-                   'MMIV_VERIFICATION_DESTINATION': os.environ.get('MMIV_VERIFICATION_DESTINATION', 'verification'),
+                   'MMIV_VERIFICATION_DESTINATION': os.environ.get('MMIV_VERIFICATION_DESTINATION', '') if os.environ.get('USER_ACCESS_TEST_USERNAME') else 'mmiv-verification-'+run_id,
                    'MMIV_MANAGED_VERIFICATION_DB': 'true' if deployments.get('MANAGED_USER_ACCESS_ORACLE', True) else 'false'}
             print('Verifying ' + name, flush=True)
             with (directory / 'dast.log').open('w') as log:

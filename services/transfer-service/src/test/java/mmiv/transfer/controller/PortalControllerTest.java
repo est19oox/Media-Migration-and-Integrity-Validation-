@@ -12,7 +12,7 @@ class PortalControllerTest {
   final MetadataClient metadata=mock(MetadataClient.class);
   final PortalClient portal=mock(PortalClient.class);
   final S3Client s3=mock(S3Client.class);
-  final PortalController controller=new PortalController(metadata,portal,s3,"bucket");
+  final PortalController controller=new PortalController(metadata,portal,s3,"bucket",mock(mmiv.transfer.service.FileMutationService.class),new FolderAccessGuard());
   @Test void ordinaryUsersCannotCreateStorageMarkers() {
     doThrow(new ResponseStatusException(HttpStatus.FORBIDDEN)).when(portal).admin();
     assertThrows(ResponseStatusException.class,()->controller.create(new PortalController.Folder("SW001")));
@@ -28,6 +28,7 @@ class PortalControllerTest {
     assertThrows(ResponseStatusException.class,()->controller.files("semester2",null));verifyNoInteractions(s3);
   }
   @Test void listingKeepsExactFolderBoundaryAndHidesMigrationStoragePaths() {
+    when(metadata.profile()).thenReturn(new MetadataClient.Profile("id","admin","ADMIN",java.util.List.of()));
     String key="SW001/migrations/11111111-1111-4111-8111-111111111111/docs/report.pdf";
     when(s3.listObjectsV2(any(ListObjectsV2Request.class))).thenReturn(ListObjectsV2Response.builder()
         .contents(S3Object.builder().key("SW001/").size(0L).build(),S3Object.builder().key(key).size(4L).build()).nextContinuationToken("next-page").build());
@@ -37,4 +38,6 @@ class PortalControllerTest {
     var files=(java.util.List<?>)result.get("files");assertEquals(1,files.size());
     var file=(PortalController.FileEntry)files.getFirst();assertEquals("docs/report.pdf",file.name());assertEquals(key,FileIds.decode(file.fileId()));assertEquals("next-page",result.get("nextCursor"));
   }
+  @Test void deletingSelfClearsTheSharedSessionCookie(){var id=java.util.UUID.randomUUID();var jwt=org.springframework.security.oauth2.jwt.Jwt.withTokenValue("fixture").header("alg","RS256").subject(id.toString()).build();org.springframework.security.core.context.SecurityContextHolder.getContext().setAuthentication(new org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken(jwt));try{var response=mock(jakarta.servlet.http.HttpServletResponse.class);controller.deleteUser(id,response);verify(response).addHeader(eq("Set-Cookie"),argThat(value->value.contains("MMIV_SESSION=")&&value.contains("Max-Age=0")&&value.contains("HttpOnly")));verify(response).setStatus(204);}finally{org.springframework.security.core.context.SecurityContextHolder.clearContext();}}
+
 }

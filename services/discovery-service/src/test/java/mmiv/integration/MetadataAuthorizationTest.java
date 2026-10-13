@@ -25,7 +25,7 @@ class MetadataAuthorizationTest {
         Files.writeString(root.resolve("test.txt"),"hello");
         var plan=service().create(jwt,new MetadataService.CreatePlan("landing","test.txt",null,0),false);
         assertEquals("bucket",plan.bucket());assertEquals("landing/migrations/"+plan.metadataId()+"/test.txt",plan.destinationKey());
-        verify(permissions).require("caller-token","caller","landing","WRITE");verify(plans).save(plan);
+        verify(permissions).require("caller-token","caller","landing","WRITE");verify(plans).saveNamed(plan,null);
         verify(events,times(3)).migration(anyString(),anyString(),eq(plan.migrationId()),nullable(UUID.class),anyMap());
     }
     @Test void rejectsUnconfiguredDestinationAndPathTraversalBeforeSaving() {

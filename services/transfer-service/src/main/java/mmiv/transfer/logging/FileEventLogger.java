@@ -17,6 +17,7 @@ public class FileEventLogger {
                 result.key(), result.sizeBytes(), null, result.sha256(), result.validationResult(),
                 result.cleanupStatus(), result.success(), null, startedAt);
     }
+    public void deletion(String operation,String key,Instant startedAt){emit(operation,null,null,key.substring(key.lastIndexOf('/')+1),null,key,null,null,null,null,null,true,null,startedAt);}
 
     public void transfer(TransferResponse result, Instant startedAt) {
         String key = result.key();
@@ -44,6 +45,10 @@ public class FileEventLogger {
             String errorType, Instant startedAt) {
         var data = new java.util.LinkedHashMap<String,Object>();
         data.put("operation",operation); data.put("success",success);
+        if(org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication() instanceof org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken actor)
+            data.put("actorId",actor.getToken().getSubject());
+        if(sizeBytes!=null)data.put("sizeBytes",sizeBytes);
+        if(key!=null && key.indexOf('/')>0)data.put("folder",key.substring(0,key.indexOf('/')));
         if (transferId != null) data.put("transferId",transferId);
         if (fileName != null) data.put("fileName",fileName);
         if (errorType != null) data.put("errorType",errorType);

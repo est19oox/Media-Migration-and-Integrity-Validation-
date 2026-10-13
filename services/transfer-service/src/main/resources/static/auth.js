@@ -54,5 +54,21 @@ window.mmivAuth = (() => {
     }
     return response;
   }
-  return {ready, fetch: authenticatedFetch};
+  async function upload(url,body,onProgress=()=>{}) {
+    await ready;
+    function send(){return new Promise((resolve,reject)=>{
+      const xhr=new XMLHttpRequest();xhr.open('POST',url);xhr.withCredentials=true;xhr.timeout=360000;
+      xhr.setRequestHeader(session.csrfHeader,session.csrfToken);
+      xhr.upload.addEventListener('progress',event=>{if(event.lengthComputable)onProgress({phase:'uploading',percent:Math.min(100,event.loaded/event.total*100)});});
+      xhr.upload.addEventListener('load',()=>onProgress({phase:'processing'}));
+      xhr.addEventListener('load',()=>{const text=xhr.responseText;const response={status:xhr.status,ok:xhr.status>=200&&xhr.status<300,text:async()=>text,json:async()=>JSON.parse(text)};resolve(response);});
+      xhr.addEventListener('error',()=>reject(new Error('Upload connection failed. Please check your connection.')));
+      xhr.addEventListener('timeout',()=>reject(new Error('Upload timed out. Check the folder before retrying.')));
+      xhr.addEventListener('abort',()=>reject(new Error('Upload cancelled.')));xhr.send(body);
+    });}
+    let response=await send();if(response.status===401)return login();
+    if(response.status===403){let error;try{error=await response.json();}catch(_){}if(error?.error==='CSRF_INVALID'){session=await requestSession();response=await send();if(response.status===401)return login();}}
+    return response;
+  }
+  return {ready, fetch: authenticatedFetch, upload};
 })();

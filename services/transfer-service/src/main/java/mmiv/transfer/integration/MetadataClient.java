@@ -19,14 +19,15 @@ public class MetadataClient {
     private final RestClient access;
     private final String bucket;
     private final String destination;
+    private final String metadataBase;
     public MetadataClient(@Value("${mmiv.metadata.url:http://discovery-service:8085}") String url,
             @Value("${mmiv.access.url:http://user-access-service:8083}") String accessUrl,
             @Value("${mmiv.s3.bucket}") String bucket,
             @Value("${mmiv.metadata.destination-id:${mmiv.s3.bucket}}") String destination) {
         var factory=new JdkClientHttpRequestFactory(HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(3)).build());
         factory.setReadTimeout(Duration.ofSeconds(10));
-        metadata=RestClient.builder().baseUrl(url).requestFactory(factory).build();
-        access=RestClient.builder().baseUrl(accessUrl).requestFactory(factory).build();this.bucket=bucket;this.destination=destination;
+        metadata=RestClient.builder().requestInterceptor(mmiv.resilience.DependencyCircuits.http("metadata",url)).baseUrl(url).requestFactory(factory).build();
+        access=RestClient.builder().requestInterceptor(mmiv.resilience.DependencyCircuits.http("user-access",accessUrl)).baseUrl(accessUrl).requestFactory(factory).build();this.bucket=bucket;this.destination=destination;this.metadataBase=url;
     }
     public static Jwt currentJwt() {
         var auth=SecurityContextHolder.getContext().getAuthentication();
@@ -39,9 +40,28 @@ public class MetadataClient {
                 .header("Authorization","Bearer "+currentJwt().getTokenValue()).retrieve().body(Plan.class));
     }
     public Plan allocate(String name,long size,String destinationId) {return allocate(name,size,destinationId,null);}
-    public Plan allocate(String name,long size,String destinationId,String relativePath) {
+    public Plan resolveDelete(UUID id){return request(()->metadata.get().uri("/api/metadata/plans/{id}/delete-authorization",id).header("Authorization","Bearer "+currentJwt().getTokenValue()).retrieve().body(Plan.class));}
+    public Set<String> ownedKeys(List<UUID> ids){
+        try{var keys=metadata.post().uri("/api/metadata/ownership").header("Authorization","Bearer "+currentJwt().getTokenValue()).body(ids).retrieve().body(String[].class);return keys==null?Set.of():Set.copyOf(Arrays.asList(keys));}
+        catch(RestClientException e){throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,"Ownership service unavailable");}
+    }
+    public void releaseName(UUID id){try{metadata.post().uri("/api/metadata/plans/{id}/release-name",id).header("Authorization","Bearer "+currentJwt().getTokenValue()).retrieve().toBodilessEntity();}catch(RestClientException error){org.slf4j.LoggerFactory.getLogger(MetadataClient.class).warn("Upload name reservation could not be released");}}
+    public void deletePlan(UUID id,String key){mutate("/api/metadata/plans/"+id+"?key="+PortalClient.encode(key));}
+    public void deleteFolderPlans(String folder,String path){mutate("/api/metadata/folders/"+PortalClient.encode(folder)+"/plans"+(path==null?"":"?path="+PortalClient.encode(path)));}
+    private void mutate(String uri){try{metadata.delete().uri(java.net.URI.create(metadataBase+uri)).header("Authorization","Bearer "+currentJwt().getTokenValue()).retrieve().toBodilessEntity();}
+        catch(HttpClientErrorException e){throw new ResponseStatusException(e.getStatusCode(),"Metadata change denied");}catch(RestClientException e){throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,"Metadata unavailable");}}
+    public boolean verificationClosed(UUID run){try{var result=metadata.get().uri("/api/metadata/verification/{run}/closed",run).header("Authorization","Bearer "+currentJwt().getTokenValue()).retrieve().body(java.util.Map.class);return result!=null&&Boolean.TRUE.equals(result.get("closed"));}catch(RestClientException e){throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,"Verification state unavailable");}}
+    public VerificationFolder verificationFolder(UUID run){
+        try{return access.get().uri("/api/access/verification/{run}/folder",run).header("Authorization","Bearer "+currentJwt().getTokenValue()).retrieve().body(VerificationFolder.class);}
+        catch(RestClientException e){throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,"Verification folder unavailable");}
+    }
+    public void removeVerificationFolder(UUID run){try{access.post().uri("/api/access/verification/{run}/cleanup",run).header("Authorization","Bearer "+currentJwt().getTokenValue()).retrieve().toBodilessEntity();}
+        catch(RestClientException e){throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,"Verification folder cleanup failed");}}
+    public record VerificationFolder(boolean owned,String name) {}
+    public Plan allocate(String name,long size,String destinationId,String relativePath){return allocate(name,size,destinationId,relativePath,java.util.Set.of());}
+    public Plan allocate(String name,long size,String destinationId,String relativePath,java.util.Set<String> occupied) {
         var payload=new java.util.LinkedHashMap<String,Object>();payload.put("fileName",name);payload.put("sizeBytes",size);
-        payload.put("destinationId",destinationId);if(relativePath!=null)payload.put("relativePath",relativePath);
+        payload.put("occupiedPaths",occupied);payload.put("destinationId",destinationId);if(relativePath!=null)payload.put("relativePath",relativePath);
         return request(()->metadata.post().uri("/api/metadata/allocations").headers(headers->{headers.setBearerAuth(currentJwt().getTokenValue());
             if(org.springframework.web.context.request.RequestContextHolder.getRequestAttributes() instanceof org.springframework.web.context.request.ServletRequestAttributes attributes) {
                 String run=attributes.getRequest().getHeader("X-MMIV-Verification-Run");if(run!=null)headers.set("X-MMIV-Verification-Run",UUID.fromString(run).toString());

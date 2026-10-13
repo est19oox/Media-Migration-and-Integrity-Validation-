@@ -6,12 +6,25 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 class IntegrityValidationGatewayTest {
+    @org.junit.jupiter.api.BeforeEach @org.junit.jupiter.api.AfterEach void resetCircuit(){mmiv.resilience.DependencyCircuits.breaker("integrity","eureka:integrity-service").reset();}
     private final IntegrityClient client = mock(IntegrityClient.class);
     private final IntegrityValidationGateway gateway = new IntegrityValidationGateway(client, 1, 0);
     private final String checksum = "a".repeat(64);
     private final IntegrityValidationRequest request = new IntegrityValidationRequest("transfer-1", "bucket", "key", checksum);
     private IntegrityValidationGateway.Outcome validate() {
         return gateway.validate("transfer-1", "bucket", "key", checksum);
+    }
+    @Test void circuitStopsFurtherIntegrityCallsAndNeverReportsSuccess() {
+        when(client.validate(request)).thenThrow(mock(FeignException.class));
+        for(int i=0;i<5;i++)assertFalse(validate().success());
+        var retrying=new IntegrityValidationGateway(client,3,0);
+        assertEquals("UNAVAILABLE",retrying.validate("transfer-1","bucket","key",checksum).validationResult());
+        verify(client,times(5)).validate(request);
+    }
+    @Test void authorizationFailuresDoNotTripTheIntegrityCircuit() {
+        var denied=mock(FeignException.class);when(denied.status()).thenReturn(403);when(client.validate(request)).thenThrow(denied);
+        for(int i=0;i<6;i++)assertFalse(validate().success());
+        assertEquals(io.github.resilience4j.circuitbreaker.CircuitBreaker.State.CLOSED,mmiv.resilience.DependencyCircuits.breaker("integrity","eureka:integrity-service").getState());
     }
     @Test void onlyMatchingChecksumsAndCorrelationReportSuccess() {
         when(client.validate(request)).thenReturn(new IntegrityValidationResponse(

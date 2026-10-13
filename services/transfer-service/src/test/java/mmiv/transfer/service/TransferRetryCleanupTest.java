@@ -22,7 +22,9 @@ class TransferRetryCleanupTest {
     final S3Client s3 = mock(S3Client.class);
     final IntegrityClient client = mock(IntegrityClient.class);
     TransferService service;
+    @org.junit.jupiter.api.AfterEach void resetCircuit(){mmiv.resilience.DependencyCircuits.breaker("integrity","eureka:integrity-service").reset();}
     @BeforeEach void setup() {
+        mmiv.resilience.DependencyCircuits.breaker("integrity","eureka:integrity-service").reset();
         var validator = new TransferRequestValidator(media.toString());
         var strategy = new S3TransferStrategy(s3, "bucket");
         service = new TransferService(new mmiv.transfer.service.TransferSourcePreparer(validator, 104857600), new TransferStrategyFactory(strategy),

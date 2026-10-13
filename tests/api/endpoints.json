@@ -188,7 +188,7 @@
         "multipart": [
           {
             "name": "file",
-            "filename": "local-test.txt",
+            "filename": "local-test-${RUN_ID}.txt",
             "content_type": "text/plain",
             "content": "MMIV local upload test\n"
           },
@@ -198,7 +198,7 @@
           }
         ],
         "json_equals": {
-          "fileName": "local-test.txt",
+          "fileName": "local-test-${RUN_ID}.txt",
           "mediaType": "text/plain",
           "sizeBytes": 23,
           "sha256": "baaa4c7edbfd976383433c57372ea4ca07d2411e08aa9ceb33bb7c156ea193f5",
@@ -315,7 +315,7 @@
         "multipart": [
           {
             "name": "file",
-            "filename": "report.doc",
+            "filename": "report-${RUN_ID}.doc",
             "content_type": "application/octet-stream",
             "content": "Word transfer fixture"
           },
@@ -325,7 +325,7 @@
           }
         ],
         "json_equals": {
-          "fileName": "report.doc",
+          "fileName": "report-${RUN_ID}.doc",
           "mediaType": "application/msword",
           "success": true,
           "validationResult": "PASSED",
@@ -369,7 +369,7 @@
           },
           {
             "name": "relativePaths",
-            "content": "OfficeFolder/slides.ppt"
+            "content": "OfficeFolder-${RUN_ID}/slides.ppt"
           },
           {
             "name": "files",
@@ -378,7 +378,7 @@
           },
           {
             "name": "relativePaths",
-            "content": "OfficeFolder/docs/report.docx"
+            "content": "OfficeFolder-${RUN_ID}/docs/report.docx"
           },
           {
             "name": "destinationId",
@@ -388,8 +388,8 @@
         "json_equals": {
           "succeeded": 2,
           "failed": 0,
-          "files.0.relativePath": "OfficeFolder/slides.ppt",
-          "files.1.relativePath": "OfficeFolder/docs/report.docx",
+          "files.0.relativePath": "OfficeFolder-${RUN_ID}/slides.ppt",
+          "files.1.relativePath": "OfficeFolder-${RUN_ID}/docs/report.docx",
           "files.0.status": "PASSED",
           "files.1.status": "PASSED",
           "files.0.upload.success": true,
@@ -808,7 +808,7 @@
         "multipart": [
           {
             "name": "file",
-            "filename": "local-test.txt",
+            "filename": "local-test-${RUN_ID}.txt",
             "content_type": "text/plain",
             "content": "MMIV local upload test\n"
           },
@@ -818,7 +818,7 @@
           }
         ],
         "json_equals": {
-          "fileName": "local-test.txt",
+          "fileName": "local-test-${RUN_ID}.txt",
           "mediaType": "text/plain",
           "sizeBytes": 23,
           "sha256": "baaa4c7edbfd976383433c57372ea4ca07d2411e08aa9ceb33bb7c156ea193f5",
@@ -935,7 +935,7 @@
         "multipart": [
           {
             "name": "file",
-            "filename": "report.doc",
+            "filename": "report-${RUN_ID}.doc",
             "content_type": "application/octet-stream",
             "content": "Word transfer fixture"
           },
@@ -945,7 +945,7 @@
           }
         ],
         "json_equals": {
-          "fileName": "report.doc",
+          "fileName": "report-${RUN_ID}.doc",
           "mediaType": "application/msword",
           "success": true,
           "validationResult": "PASSED",
@@ -989,7 +989,7 @@
           },
           {
             "name": "relativePaths",
-            "content": "OfficeFolder/slides.ppt"
+            "content": "OfficeFolder-${RUN_ID}/slides.ppt"
           },
           {
             "name": "files",
@@ -998,7 +998,7 @@
           },
           {
             "name": "relativePaths",
-            "content": "OfficeFolder/docs/report.docx"
+            "content": "OfficeFolder-${RUN_ID}/docs/report.docx"
           },
           {
             "name": "destinationId",
@@ -1008,8 +1008,8 @@
         "json_equals": {
           "succeeded": 2,
           "failed": 0,
-          "files.0.relativePath": "OfficeFolder/slides.ppt",
-          "files.1.relativePath": "OfficeFolder/docs/report.docx",
+          "files.0.relativePath": "OfficeFolder-${RUN_ID}/slides.ppt",
+          "files.1.relativePath": "OfficeFolder-${RUN_ID}/docs/report.docx",
           "files.0.status": "PASSED",
           "files.1.status": "PASSED",
           "files.0.upload.success": true,

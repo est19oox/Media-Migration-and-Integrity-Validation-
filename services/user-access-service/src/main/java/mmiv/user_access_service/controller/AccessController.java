@@ -47,6 +47,6 @@ public class AccessController {
     }
 
     var result=accessService.getAccessibleDestinations(subject);
-    return new AccessibleDestinationsResponse(result.destinations().stream().filter(f->folders.exists(f.destination())).toList());
+    return new AccessibleDestinationsResponse(result.destinations().stream().filter(f->!mmiv.user_access_service.repository.FolderRepository.verification(f.destination()) && folders.exists(f.destination())).toList());
   }
 }

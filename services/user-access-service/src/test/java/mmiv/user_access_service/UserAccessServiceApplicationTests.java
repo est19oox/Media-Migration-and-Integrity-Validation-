@@ -106,7 +106,7 @@ class UserAccessServiceApplicationTests {
     var jwt = jwtDecoder.decode(token);
     assertEquals(Set.of("alg", "kid"), jwt.getHeaders().keySet());
     assertEquals(
-        Set.of("iss", "sub", "iat", "exp", "username", "role", "permissions"),
+        Set.of("iss", "sub", "iat", "exp", "username", "role", "permissions", "ver"),
         jwt.getClaims().keySet());
     assertEquals("RS256", jwt.getHeaders().get("alg"));
     assertEquals("mmiv-user-access-key-1", jwt.getHeaders().get("kid"));
