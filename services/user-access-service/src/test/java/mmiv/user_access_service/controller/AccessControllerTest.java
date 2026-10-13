@@ -29,8 +29,8 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 @AutoConfigureMockMvc(addFilters = false)
 @Import(AccessControllerTest.SecurityPrincipalConfiguration.class)
 class AccessControllerTest {
-    @org.springframework.test.context.bean.override.mockito.MockitoBean mmiv.events.EventPublisher auditPublisher;
-
+  @org.springframework.test.context.bean.override.mockito.MockitoBean
+  mmiv.events.EventPublisher auditPublisher;
 
   @Autowired private MockMvc mockMvc;
 

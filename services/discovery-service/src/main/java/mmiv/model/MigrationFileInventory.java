@@ -4,31 +4,28 @@ import java.util.List;
 
 public class MigrationFileInventory {
 
-    private final List<DiscoveryResult> files;
-    private final DiscoverySummary summary;
+  private final List<DiscoveryResult> files;
+  private final DiscoverySummary summary;
 
-    public MigrationFileInventory(
-            List<DiscoveryResult> files) {
+  public MigrationFileInventory(List<DiscoveryResult> files) {
 
-        this.files = List.copyOf(files);
-        this.summary = DiscoverySummary.from(this.files);
-    }
+    this.files = List.copyOf(files);
+    this.summary = DiscoverySummary.from(this.files);
+  }
 
-    public List<DiscoveryResult> getFiles() {
-        return files;
-    }
+  public List<DiscoveryResult> getFiles() {
+    return files;
+  }
 
-    public DiscoverySummary getSummary() {
-        return summary;
-    }
+  public DiscoverySummary getSummary() {
+    return summary;
+  }
 
-    public List<MediaMetadata> getAcceptedFiles() {
+  public List<MediaMetadata> getAcceptedFiles() {
 
-        return files.stream()
-                .filter(result ->
-                        result.getStatus()
-                                == DiscoveryStatus.ACCEPTED)
-                .map(DiscoveryResult::getMetadata)
-                .toList();
-    }
+    return files.stream()
+        .filter(result -> result.getStatus() == DiscoveryStatus.ACCEPTED)
+        .map(DiscoveryResult::getMetadata)
+        .toList();
+  }
 }

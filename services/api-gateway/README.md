@@ -10,24 +10,24 @@ requires Oracle configuration and has no Eureka client yet. Its route is reserve
 
 ## Routes
 
-| Gateway path | Backend | Forwarded path |
-| --- | --- | --- |
-| /api/v1/transfers and /api/v1/transfers/** | transfer-service | Unchanged |
-| /api/v1/files and /api/v1/files/** | transfer-service | Unchanged |
-| /upload.html, /files.html | transfer-service | Unchanged |
-| / | transfer-service | /upload.html |
-| /discovery/** | discovery-service | Remove /discovery |
-| /user-access/** | user-access-service | Remove /user-access |
-| /api/access and /api/access/** | user-access-service | Unchanged |
-| /reporting/** | reporting-service | Remove /reporting |
-| /integrity/** | integrity-service | Remove /integrity |
-| /actuator/health | Gateway itself | Local endpoint |
+| Gateway path                                 | Backend             | Forwarded path      |
+| -------------------------------------------- | ------------------- | ------------------- |
+| /api/v1/transfers and /api/v1/transfers/\*\* | transfer-service    | Unchanged           |
+| /api/v1/files and /api/v1/files/\*\*         | transfer-service    | Unchanged           |
+| /upload.html, /files.html                    | transfer-service    | Unchanged           |
+| /                                            | transfer-service    | /upload.html        |
+| /discovery/\*\*                              | discovery-service   | Remove /discovery   |
+| /user-access/\*\*                            | user-access-service | Remove /user-access |
+| /api/access and /api/access/\*\*             | user-access-service | Unchanged           |
+| /reporting/\*\*                              | reporting-service   | Remove /reporting   |
+| /integrity/\*\*                              | integrity-service   | Remove /integrity   |
+| /actuator/health                             | Gateway itself      | Local endpoint      |
 
 Examples:
 
 - POST http://localhost:8080/api/v1/transfers/folder uses the existing multipart folder API.
 - POST http://localhost:8080/api/access/check uses the existing User Access request DTO.
-- /discovery/** is reserved until Discovery registration is implemented.
+- /discovery/\*\* is reserved until Discovery registration is implemented.
 - GET http://localhost:8080/user-access/actuator/health checks User Access.
 - GET http://localhost:8080/reporting/actuator/health checks Reporting.
 - GET http://localhost:8080/integrity/actuator/health checks Integrity.

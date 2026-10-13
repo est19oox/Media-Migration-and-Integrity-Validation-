@@ -7,6 +7,6 @@ import org.springframework.web.bind.annotation.RequestBody;
 /** Eureka resolves integrity-service; no fixed host or gateway URL. */
 @FeignClient(name = "integrity-service")
 public interface IntegrityClient {
-    @PostMapping(value = "/api/integrity/validate", consumes = "application/json")
-    IntegrityValidationResponse validate(@RequestBody IntegrityValidationRequest request);
+  @PostMapping(value = "/api/integrity/validate", consumes = "application/json")
+  IntegrityValidationResponse validate(@RequestBody IntegrityValidationRequest request);
 }

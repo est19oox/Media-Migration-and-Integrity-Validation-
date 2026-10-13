@@ -1,15 +1,5 @@
 package mmiv.service;
 
-import mmiv.config.DiscoveryProperties;
-import mmiv.model.DiscoveryFailureReason;
-import mmiv.model.DiscoveryResult;
-import mmiv.model.DiscoveryRunResult;
-import mmiv.model.MediaMetadata;
-import mmiv.model.MigrationFileInventory;
-import mmiv.repository.FileMetadataRepository;
-
-import org.springframework.stereotype.Service;
-
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -18,210 +8,152 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
+import mmiv.config.DiscoveryProperties;
+import mmiv.model.DiscoveryFailureReason;
+import mmiv.model.DiscoveryResult;
+import mmiv.model.DiscoveryRunResult;
+import mmiv.model.MediaMetadata;
+import mmiv.model.MigrationFileInventory;
+import mmiv.repository.FileMetadataRepository;
+import org.springframework.stereotype.Service;
 
 @Service
 public class DiscoveryService {
 
-    private final FileMetadataRepository fileMetadataRepository;
-    private final DiscoveryProperties discoveryProperties;
+  private final FileMetadataRepository fileMetadataRepository;
+  private final DiscoveryProperties discoveryProperties;
 
-    public DiscoveryService(
-            FileMetadataRepository fileMetadataRepository,
-            DiscoveryProperties discoveryProperties) {
+  public DiscoveryService(
+      FileMetadataRepository fileMetadataRepository, DiscoveryProperties discoveryProperties) {
 
-        this.fileMetadataRepository = fileMetadataRepository;
-        this.discoveryProperties = discoveryProperties;
+    this.fileMetadataRepository = fileMetadataRepository;
+    this.discoveryProperties = discoveryProperties;
+  }
+
+  // Discover metadata for one file
+  MediaMetadata discover(Path filePath, Path rootDirectory) throws IOException {
+
+    BasicFileAttributes attributes = Files.readAttributes(filePath, BasicFileAttributes.class);
+
+    String fileName = filePath.getFileName().toString();
+
+    String mediaType = getFileExtension(fileName);
+
+    long fileSize = attributes.size();
+
+    Path parentDirectory = filePath.getParent();
+
+    String srcDir = rootDirectory.relativize(parentDirectory).toString();
+
+    LocalDateTime createdDate =
+        LocalDateTime.ofInstant(attributes.creationTime().toInstant(), ZoneId.systemDefault());
+
+    return new MediaMetadata(fileName, mediaType, fileSize, srcDir, createdDate);
+  }
+
+  // Discover one file and assign a formal discovery status
+  public DiscoveryResult discoverFile(Path filePath, Path rootDirectory) {
+
+    if (!isSupportedFile(filePath)) {
+
+      return DiscoveryResult.skipped(
+          filePath, DiscoveryFailureReason.UNSUPPORTED_FILE_TYPE, "Unsupported file type");
     }
 
-    // Discover metadata for one file
-    MediaMetadata discover(
-            Path filePath,
-            Path rootDirectory) throws IOException {
+    try {
 
-        BasicFileAttributes attributes =
-                Files.readAttributes(
-                        filePath,
-                        BasicFileAttributes.class
-                );
+      MediaMetadata metadata = discover(filePath, rootDirectory);
 
-        String fileName =
-                filePath.getFileName().toString();
+      return DiscoveryResult.accepted(filePath, metadata);
 
-        String mediaType =
-                getFileExtension(fileName);
+    } catch (IOException | SecurityException e) {
 
-        long fileSize =
-                attributes.size();
+      return DiscoveryResult.failed(
+          filePath,
+          DiscoveryFailureReason.INACCESSIBLE_FILE,
+          "Unable to read file metadata: " + e.getMessage());
+    }
+  }
 
-        Path parentDirectory =
-                filePath.getParent();
+  // Scan directory and build the structured migration inventory
+  public MigrationFileInventory discoverDirectory(Path rootDirectory) throws IOException {
 
-        String srcDir =
-                rootDirectory
-                        .relativize(parentDirectory)
-                        .toString();
+    List<DiscoveryResult> results = new ArrayList<>();
 
-        LocalDateTime createdDate =
-                LocalDateTime.ofInstant(
-                        attributes.creationTime().toInstant(),
-                        ZoneId.systemDefault()
-                );
+    try (var paths = Files.walk(rootDirectory)) {
 
-        return new MediaMetadata(
-                fileName,
-                mediaType,
-                fileSize,
-                srcDir,
-                createdDate
-        );
+      paths
+          .filter(Files::isRegularFile)
+          .filter(path -> !isIgnoredFile(path))
+          .forEach(
+              path -> {
+                DiscoveryResult result = discoverFile(path, rootDirectory);
+
+                results.add(result);
+              });
     }
 
-    // Discover one file and assign a formal discovery status
-    public DiscoveryResult discoverFile(
-            Path filePath,
-            Path rootDirectory) {
+    return new MigrationFileInventory(results);
+  }
 
-        if (!isSupportedFile(filePath)) {
+  // Discover once, build inventory and persist accepted new files
+  public DiscoveryRunResult discoverAndSaveWithResult(Path rootDirectory) throws IOException {
 
-            return DiscoveryResult.skipped(
-                    filePath,
-                    DiscoveryFailureReason.UNSUPPORTED_FILE_TYPE,
-                    "Unsupported file type"
-            );
-        }
+    MigrationFileInventory inventory = discoverDirectory(rootDirectory);
 
-        try {
+    int insertedCount = 0;
 
-            MediaMetadata metadata =
-                    discover(
-                            filePath,
-                            rootDirectory
-                    );
+    for (MediaMetadata metadata : inventory.getAcceptedFiles()) {
 
-            return DiscoveryResult.accepted(
-                    filePath,
-                    metadata
-            );
+      boolean alreadyExists =
+          fileMetadataRepository.exists(metadata.getFileName(), metadata.getSrcDir());
 
-        } catch (IOException | SecurityException e) {
+      if (!alreadyExists) {
 
-            return DiscoveryResult.failed(
-                    filePath,
-                    DiscoveryFailureReason.INACCESSIBLE_FILE,
-                    "Unable to read file metadata: "
-                            + e.getMessage()
-            );
-        }
+        fileMetadataRepository.save(metadata);
+
+        insertedCount++;
+      }
     }
 
-    // Scan directory and build the structured migration inventory
-    public MigrationFileInventory discoverDirectory(
-            Path rootDirectory) throws IOException {
+    return new DiscoveryRunResult(inventory, insertedCount);
+  }
 
-        List<DiscoveryResult> results =
-                new ArrayList<>();
+  // Keep existing API for compatibility
+  public int discoverAndSave(Path rootDirectory) throws IOException {
 
-        try (var paths = Files.walk(rootDirectory)) {
+    return discoverAndSaveWithResult(rootDirectory).getInsertedCount();
+  }
 
-            paths
-                    .filter(Files::isRegularFile)
-                    .filter(path -> !isIgnoredFile(path))
-                    .forEach(path -> {
+  // Ignore macOS system files
+  private boolean isIgnoredFile(Path path) {
 
-                        DiscoveryResult result =
-                                discoverFile(
-                                        path,
-                                        rootDirectory
-                                );
+    String fileName = path.getFileName().toString();
 
-                        results.add(result);
-                    });
-        }
+    return fileName.equals(".DS_Store") || fileName.startsWith("._");
+  }
 
-        return new MigrationFileInventory(results);
+  // Check whether file type is configured as supported
+  private boolean isSupportedFile(Path path) {
+
+    String fileName = path.getFileName().toString();
+
+    String extension = getFileExtension(fileName);
+
+    return discoveryProperties.getSupportedFileTypes().stream()
+        .anyMatch(type -> type.equalsIgnoreCase(extension));
+  }
+
+  // Extract extension as media type
+  private String getFileExtension(String fileName) {
+
+    int dotIndex = fileName.lastIndexOf('.');
+
+    if (dotIndex == -1 || dotIndex == fileName.length() - 1) {
+
+      return "UNKNOWN";
     }
 
-    // Discover once, build inventory and persist accepted new files
-    public DiscoveryRunResult discoverAndSaveWithResult(
-            Path rootDirectory) throws IOException {
-
-        MigrationFileInventory inventory =
-                discoverDirectory(rootDirectory);
-
-        int insertedCount = 0;
-
-        for (MediaMetadata metadata :
-                inventory.getAcceptedFiles()) {
-
-            boolean alreadyExists =
-                    fileMetadataRepository.exists(
-                            metadata.getFileName(),
-                            metadata.getSrcDir()
-                    );
-
-            if (!alreadyExists) {
-
-                fileMetadataRepository.save(metadata);
-
-                insertedCount++;
-            }
-        }
-
-        return new DiscoveryRunResult(
-                inventory,
-                insertedCount
-        );
-    }
-
-    // Keep existing API for compatibility
-    public int discoverAndSave(
-            Path rootDirectory) throws IOException {
-
-        return discoverAndSaveWithResult(
-                rootDirectory
-        ).getInsertedCount();
-    }
-
-    // Ignore macOS system files
-    private boolean isIgnoredFile(Path path) {
-
-        String fileName =
-                path.getFileName().toString();
-
-        return fileName.equals(".DS_Store")
-                || fileName.startsWith("._");
-    }
-
-    // Check whether file type is configured as supported
-    private boolean isSupportedFile(Path path) {
-
-        String fileName =
-                path.getFileName().toString();
-
-        String extension =
-                getFileExtension(fileName);
-
-        return discoveryProperties
-                .getSupportedFileTypes()
-                .stream()
-                .anyMatch(type ->
-                        type.equalsIgnoreCase(extension));
-    }
-
-    // Extract extension as media type
-    private String getFileExtension(String fileName) {
-
-        int dotIndex =
-                fileName.lastIndexOf('.');
-
-        if (dotIndex == -1
-                || dotIndex == fileName.length() - 1) {
-
-            return "UNKNOWN";
-        }
-
-        return fileName
-                .substring(dotIndex + 1)
-                .toUpperCase();
-    }
+    return fileName.substring(dotIndex + 1).toUpperCase();
+  }
 }

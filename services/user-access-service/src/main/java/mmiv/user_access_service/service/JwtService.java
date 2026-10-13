@@ -42,7 +42,7 @@ public class JwtService {
             .expiresAt(issuedAt.plus(30, ChronoUnit.MINUTES))
             .claim("username", user.getUsername())
             .claim("role", user.getRole())
-            .claim("ver",user.getAuthVersion())
+            .claim("ver", user.getAuthVersion())
             .claim("permissions", permissions)
             .build();
 

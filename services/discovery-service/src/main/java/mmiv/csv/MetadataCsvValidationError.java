@@ -1,4 +1,3 @@
-
 package mmiv.csv;
 
 /**
@@ -8,9 +7,4 @@ package mmiv.csv;
  * @param fieldName Name of the field containing the error
  * @param reason Description of the validation failure
  */
-public record MetadataCsvValidationError(
-        long rowNumber,
-        String fieldName,
-        String reason
-) {
-}
+public record MetadataCsvValidationError(long rowNumber, String fieldName, String reason) {}

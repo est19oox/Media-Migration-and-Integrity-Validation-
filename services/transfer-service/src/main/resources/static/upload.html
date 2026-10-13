@@ -1,130 +1,286 @@
 <!doctype html>
 <html lang="en">
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<!-- PWA disabled: <link rel="manifest" href="/manifest.webmanifest"> --><!-- PWA disabled: <meta name="theme-color" content="#14233b"> --><!-- PWA disabled: <script src="/pwa.js" defer></script> -->
-<title>Upload files · MMIV</title>
-<link rel="stylesheet" href="/portal.css">
-<header><strong>MMIV</strong><nav><a href="/home.html">Home</a><a href="/files.html">Files</a><a href="/history.html">My activity</a><a href="/logs.html" data-admin hidden>Log dashboard</a><a href="/admin.html" data-admin hidden>Administration</a></nav><button id="logout" type="button">Sign out</button></header>
-<main>
-<h1>Upload files to the cloud</h1>
-<p>Choose a file from your computer and upload it to a permitted folder.</p>
-<label for="destination">Folder</label>
-<select id="destination"><option value="">Select a folder</option></select>
-<p id="destinationStatus" role="status"></p>
-<form id="uploadForm">
-<label for="file">Choose a file</label>
-<button id="chooseFile" type="button">Choose file</button><span id="fileSelection">No file selected</span>
-<input class="visually-hidden" id="file" name="file" type="file" accept=".png,.jpg,.jpeg,.mp4,.mp3,.txt,.pdf,.ppt,.pptx,.doc,.docx">
-<small>Supported formats: PNG, JPG, JPEG, MP4, MP3, TXT, PDF, PPT, PPTX, DOC and DOCX. Maximum size: 100 MiB.</small>
-<button id="submit" type="submit">Upload</button>
-</form>
-<hr>
-<h2>Upload a folder (including subfolders)</h2>
-<form id="folderForm">
-<label for="folder">Choose a folder from your computer</label>
-<button id="chooseFolder" type="button">Choose folder</button><span id="folderSelection">No folder selected</span>
-<input class="visually-hidden" id="folder" type="file" webkitdirectory multiple>
-<small>Folder paths are preserved. Up to 500 files, totaling no more than 100 MiB. Supported formats: PNG, JPG, JPEG, MP4, MP3, TXT, PDF, PPT, PPTX, DOC and DOCX. Empty files and folders are not supported. If some uploads fail, check the result for each file.</small>
-<button id="folderSubmit" type="submit">Upload folder</button>
-</form>
-<div id="folderProgress" hidden><progress id="folderProgressBar" max="100" value="0"></progress><p id="folderProgressLabel" role="status"></p></div>
-<pre id="folderResult" role="status" aria-live="polite"></pre>
-<pre id="result" role="status" aria-live="polite"></pre>
-<p id="links" hidden><button id="preview" type="button">Preview</button> · <a id="download">Download file</a> · <a href="/files.html">Open file viewer</a></p>
-</main>
-<script src="/feedback.js"></script><script src="/auth.js"></script><script src="/portal.js"></script><script src="/preview.js"></script>
-<script>
-let uploadedFile=null,uploadBusy=false;
-document.querySelector('#preview').addEventListener('click',()=>{if(uploadedFile)mmivPreview.open(uploadedFile.id,uploadedFile.name);});
-for(const [input,button,label] of [['file','chooseFile','fileSelection'],['folder','chooseFolder','folderSelection']]){document.getElementById(button).addEventListener('click',()=>document.getElementById(input).click());document.getElementById(input).addEventListener('change',()=>{const files=Array.from(document.getElementById(input).files);document.getElementById(label).textContent=input==='file'?(files[0]?.name||'No file selected'):(files.length?files.length+' files selected':'No folder selected');});}
-async function loadDestinations() {
-  const select = document.querySelector('#destination');
-  const status = document.querySelector('#destinationStatus');
-  function noAccess() {
-    const option = document.createElement('option');
-    option.value = ''; option.textContent = 'No access to folder';
-    select.replaceChildren(option); select.disabled = true;
-    status.textContent = 'No access to folder';
-  }
-  document.querySelector('#submit').disabled = true;
-  document.querySelector('#folderSubmit').disabled = true;
-  try {
-    const response = await mmivAuth.fetch('/api/v1/destinations');
-    if (response.status === 403) { noAccess(); return; }
-    if (!response.ok) throw new Error('Unable to load folders. Please try again.');
-    const data = await response.json(); select.replaceChildren();
-    if (data.destinations.length === 0) { noAccess(); return; }
-    for (const destination of data.destinations) {
-      const option = document.createElement('option'); option.value = destination.destination;
-      option.textContent = destination.destination; select.append(option);
-    }
-    document.querySelector('#submit').disabled = select.options.length === 0;
-    document.querySelector('#folderSubmit').disabled = select.options.length === 0;
-  } catch (error) {document.querySelector('#destinationStatus').textContent = error.message;}
-}
-loadDestinations();
-document.querySelector('#uploadForm').addEventListener('submit', async event => {
-  event.preventDefault();
-  if(uploadBusy)return;
-  const file = document.querySelector('#file').files[0];
-  const result = document.querySelector('#result');
-  const button = document.querySelector('#submit');
-  document.querySelector('#links').hidden = true;
-  if (!file || file.size === 0 || file.size > 104857600) {
-    result.textContent = 'Choose a non-empty file no larger than 100 MiB.';globalThis.mmivFeedback?.notice('Check your file',result.textContent,'error');return;
-  }
-  const body = new FormData(); body.append('file', file);
-  body.append('destinationId', document.querySelector('#destination').value);
-  uploadBusy=true;document.querySelector('#submit').disabled=true;document.querySelector('#folderSubmit').disabled=true;result.textContent='Uploading…';const popup=globalThis.mmivFeedback?.upload('Uploading '+file.name);
-  try {
-    const response = await mmivAuth.upload('/api/v1/transfers',body,event=>popup?.update(event));
-    if (response.status === 403) throw new Error('No access to folder');
-    const text = await response.text();
-    let data; try { data = JSON.parse(text); } catch { throw new Error('The server returned invalid JSON. HTTP ' + response.status); }
-    if (!response.ok) throw new Error(data.error || 'Upload failed. HTTP ' + response.status);
-    result.textContent = (data.success ? 'Upload succeeded and integrity verification passed.' : data.cleanupStatus === 'DELETED' ? 'Integrity verification failed. The uploaded file was deleted.' : 'Integrity verification failed. Automatic deletion could not be confirmed; check the file manually.') + '\nFile: ' + data.fileName + '\nFolder: ' + document.querySelector('#destination').value;
-    const id = encodeURIComponent(data.fileId);
-    uploadedFile={id:data.fileId,name:data.fileName};popup?.finish(data.success?'Upload complete':'Upload needs attention',result.textContent,data.success);
-    document.querySelector('#download').href = '/api/v1/files/' + id + '/download';
-    document.querySelector('#links').hidden = !data.success;
-  } catch (error) { result.textContent = error.message;popup?.finish('Upload unsuccessful',error.message,false); }
-  finally {uploadBusy=false;document.querySelector('#submit').disabled=false;document.querySelector('#folderSubmit').disabled=false;}
-});
-document.querySelector('#folderForm').addEventListener('submit', async event => {
-  event.preventDefault();
-  if(uploadBusy)return;
-  const files = Array.from(document.querySelector('#folder').files);
-  const result = document.querySelector('#folderResult');
-  const button = document.querySelector('#folderSubmit');
-  if (!files.length || files.length > 500 || files.reduce((n, f) => n + f.size, 0) > 104857600) {
-    result.textContent = 'Choose a folder containing 1–500 files totaling no more than 100 MiB.';globalThis.mmivFeedback?.notice('Check your folder',result.textContent,'error');return;
-  }
-  const body = new FormData();
-  body.append('destinationId', document.querySelector('#destination').value);
-  for (const file of files) {
-    if (!file.webkitRelativePath || !file.size || !/\.(png|jpe?g|mp4|mp3|txt|pdf|pptx?|docx?)$/i.test(file.name)) {
-      result.textContent = 'The file is empty or its format is not supported: ' + (file.webkitRelativePath || file.name);globalThis.mmivFeedback?.notice('Check your folder files',result.textContent,'error');return;
-    }
-    body.append('files', file, file.name);
-    body.append('relativePaths', file.webkitRelativePath);
-  }
-  uploadBusy=true;document.querySelector('#submit').disabled=true;document.querySelector('#folderSubmit').disabled=true;result.textContent='';const popup=globalThis.mmivFeedback?.upload('Uploading folder ('+files.length+' files)');
-  document.getElementById('folderProgress').hidden=false;document.getElementById('folderProgressBar').value=0;document.getElementById('folderProgressLabel').textContent='Preparing upload…';
-  try {
-    const response = await mmivAuth.upload('/api/v1/transfers/folder', body, progress => {
-      popup?.update(progress);const bar=document.getElementById('folderProgressBar'),label=document.getElementById('folderProgressLabel');
-      if(progress.phase==='processing'){bar.removeAttribute('value');label.textContent='Files received. Transferring and verifying integrity…';}
-      else {bar.value=progress.percent;label.textContent='Uploading folder: '+Math.round(progress.percent)+'%';}
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Upload files · MMIV</title>
+  <link rel="stylesheet" href="/portal.css" />
+  <header>
+    <strong>MMIV</strong>
+    <nav>
+      <a href="/home.html">Home</a><a href="/files.html">Files</a
+      ><a href="/history.html">My activity</a
+      ><a href="/logs.html" data-admin hidden>Log dashboard</a
+      ><a href="/admin.html" data-admin hidden>Administration</a>
+    </nav>
+    <button id="logout" type="button">Sign out</button>
+  </header>
+  <main>
+    <h1>Upload files to the cloud</h1>
+    <p>Choose a file from your computer and upload it to a permitted folder.</p>
+    <label for="destination">Folder</label>
+    <select id="destination">
+      <option value="">Select a folder</option>
+    </select>
+    <p id="destinationStatus" role="status"></p>
+    <form id="uploadForm">
+      <label for="file">Choose a file</label>
+      <button id="chooseFile" type="button">Choose file</button
+      ><span id="fileSelection">No file selected</span>
+      <input
+        class="visually-hidden"
+        id="file"
+        name="file"
+        type="file"
+        accept=".png,.jpg,.jpeg,.mp4,.mp3,.txt,.pdf,.ppt,.pptx,.doc,.docx"
+      />
+      <small
+        >Supported formats: PNG, JPG, JPEG, MP4, MP3, TXT, PDF, PPT, PPTX, DOC and DOCX. Maximum
+        size: 100 MiB.</small
+      >
+      <button id="submit" type="submit">Upload</button>
+    </form>
+    <hr />
+    <h2>Upload a folder (including subfolders)</h2>
+    <form id="folderForm">
+      <label for="folder">Choose a folder from your computer</label>
+      <button id="chooseFolder" type="button">Choose folder</button
+      ><span id="folderSelection">No folder selected</span>
+      <input class="visually-hidden" id="folder" type="file" webkitdirectory multiple />
+      <small
+        >Folder paths are preserved. Up to 500 files, totaling no more than 100 MiB. Supported
+        formats: PNG, JPG, JPEG, MP4, MP3, TXT, PDF, PPT, PPTX, DOC and DOCX. Empty files and
+        folders are not supported. If some uploads fail, check the result for each file.</small
+      >
+      <button id="folderSubmit" type="submit">Upload folder</button>
+    </form>
+    <div id="folderProgress" hidden>
+      <progress id="folderProgressBar" max="100" value="0"></progress>
+      <p id="folderProgressLabel" role="status"></p>
+    </div>
+    <pre id="folderResult" role="status" aria-live="polite"></pre>
+    <pre id="result" role="status" aria-live="polite"></pre>
+    <p id="links" hidden>
+      <button id="preview" type="button">Preview</button> · <a id="download">Download file</a> ·
+      <a href="/files.html">Open file viewer</a>
+    </p>
+  </main>
+  <script src="/feedback.js"></script>
+  <script src="/auth.js"></script>
+  <script src="/portal.js"></script>
+  <script src="/preview.js"></script>
+  <script>
+    let uploadedFile = null,
+      uploadBusy = false;
+    document.querySelector('#preview').addEventListener('click', () => {
+      if (uploadedFile) mmivPreview.open(uploadedFile.id, uploadedFile.name);
     });
-    if (response.status === 403) throw new Error('No access to folder');
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error || 'Upload failed. HTTP ' + response.status);
-    document.getElementById('folderProgressBar').value=100;document.getElementById('folderProgressLabel').textContent=data.failed?'Finished with some failed files.':'Folder upload complete.';
-    result.textContent = 'Integrity verification passed: ' + data.succeeded + '; failed or unconfirmed: ' + data.failed + '\n' + (data.files || []).map(file => file.relativePath + ': ' + file.status + (file.error ? ' — ' + file.error : '')).join('\n');popup?.finish(data.failed?'Folder upload needs attention':'Folder upload complete',result.textContent,!data.failed);
-  } catch (error) { result.textContent = error.message;document.getElementById('folderProgress').hidden=true;popup?.finish('Folder upload unsuccessful',error.message,false); }
-  finally {uploadBusy=false;document.querySelector('#submit').disabled=false;document.querySelector('#folderSubmit').disabled=false;}
-});
-</script>
-<script src="/english-validation.js"></script>
+    for (const [input, button, label] of [
+      ['file', 'chooseFile', 'fileSelection'],
+      ['folder', 'chooseFolder', 'folderSelection'],
+    ]) {
+      document
+        .getElementById(button)
+        .addEventListener('click', () => document.getElementById(input).click());
+      document.getElementById(input).addEventListener('change', () => {
+        const files = Array.from(document.getElementById(input).files);
+        document.getElementById(label).textContent =
+          input === 'file'
+            ? files[0]?.name || 'No file selected'
+            : files.length
+              ? files.length + ' files selected'
+              : 'No folder selected';
+      });
+    }
+    async function loadDestinations() {
+      const select = document.querySelector('#destination');
+      const status = document.querySelector('#destinationStatus');
+      function noAccess() {
+        const option = document.createElement('option');
+        option.value = '';
+        option.textContent = 'No access to folder';
+        select.replaceChildren(option);
+        select.disabled = true;
+        status.textContent = 'No access to folder';
+      }
+      document.querySelector('#submit').disabled = true;
+      document.querySelector('#folderSubmit').disabled = true;
+      try {
+        const response = await mmivAuth.fetch('/api/v1/destinations');
+        if (response.status === 403) {
+          noAccess();
+          return;
+        }
+        if (!response.ok) throw new Error('Unable to load folders. Please try again.');
+        const data = await response.json();
+        select.replaceChildren();
+        if (data.destinations.length === 0) {
+          noAccess();
+          return;
+        }
+        for (const destination of data.destinations) {
+          const option = document.createElement('option');
+          option.value = destination.destination;
+          option.textContent = destination.destination;
+          select.append(option);
+        }
+        document.querySelector('#submit').disabled = select.options.length === 0;
+        document.querySelector('#folderSubmit').disabled = select.options.length === 0;
+      } catch (error) {
+        document.querySelector('#destinationStatus').textContent = error.message;
+      }
+    }
+    loadDestinations();
+    document.querySelector('#uploadForm').addEventListener('submit', async (event) => {
+      event.preventDefault();
+      if (uploadBusy) return;
+      const file = document.querySelector('#file').files[0];
+      const result = document.querySelector('#result');
+      const button = document.querySelector('#submit');
+      document.querySelector('#links').hidden = true;
+      if (!file || file.size === 0 || file.size > 104857600) {
+        result.textContent = 'Choose a non-empty file no larger than 100 MiB.';
+        globalThis.mmivFeedback?.notice('Check your file', result.textContent, 'error');
+        return;
+      }
+      const body = new FormData();
+      body.append('file', file);
+      body.append('destinationId', document.querySelector('#destination').value);
+      uploadBusy = true;
+      document.querySelector('#submit').disabled = true;
+      document.querySelector('#folderSubmit').disabled = true;
+      result.textContent = 'Uploading…';
+      const popup = globalThis.mmivFeedback?.upload('Uploading ' + file.name);
+      try {
+        const response = await mmivAuth.upload('/api/v1/transfers', body, (event) =>
+          popup?.update(event),
+        );
+        if (response.status === 403) throw new Error('No access to folder');
+        const text = await response.text();
+        let data;
+        try {
+          data = JSON.parse(text);
+        } catch {
+          throw new Error('The server returned invalid JSON. HTTP ' + response.status);
+        }
+        if (!response.ok) throw new Error(data.error || 'Upload failed. HTTP ' + response.status);
+        result.textContent =
+          (data.success
+            ? 'Upload succeeded and integrity verification passed.'
+            : data.cleanupStatus === 'DELETED'
+              ? 'Integrity verification failed. The uploaded file was deleted.'
+              : 'Integrity verification failed. Automatic deletion could not be confirmed; check the file manually.') +
+          '\nFile: ' +
+          data.fileName +
+          '\nFolder: ' +
+          document.querySelector('#destination').value;
+        const id = encodeURIComponent(data.fileId);
+        uploadedFile = { id: data.fileId, name: data.fileName };
+        popup?.finish(
+          data.success ? 'Upload complete' : 'Upload needs attention',
+          result.textContent,
+          data.success,
+        );
+        document.querySelector('#download').href = '/api/v1/files/' + id + '/download';
+        document.querySelector('#links').hidden = !data.success;
+      } catch (error) {
+        result.textContent = error.message;
+        popup?.finish('Upload unsuccessful', error.message, false);
+      } finally {
+        uploadBusy = false;
+        document.querySelector('#submit').disabled = false;
+        document.querySelector('#folderSubmit').disabled = false;
+      }
+    });
+    document.querySelector('#folderForm').addEventListener('submit', async (event) => {
+      event.preventDefault();
+      if (uploadBusy) return;
+      const files = Array.from(document.querySelector('#folder').files);
+      const result = document.querySelector('#folderResult');
+      const button = document.querySelector('#folderSubmit');
+      if (
+        !files.length ||
+        files.length > 500 ||
+        files.reduce((n, f) => n + f.size, 0) > 104857600
+      ) {
+        result.textContent =
+          'Choose a folder containing 1–500 files totaling no more than 100 MiB.';
+        globalThis.mmivFeedback?.notice('Check your folder', result.textContent, 'error');
+        return;
+      }
+      const body = new FormData();
+      body.append('destinationId', document.querySelector('#destination').value);
+      for (const file of files) {
+        if (
+          !file.webkitRelativePath ||
+          !file.size ||
+          !/\.(png|jpe?g|mp4|mp3|txt|pdf|pptx?|docx?)$/i.test(file.name)
+        ) {
+          result.textContent =
+            'The file is empty or its format is not supported: ' +
+            (file.webkitRelativePath || file.name);
+          globalThis.mmivFeedback?.notice('Check your folder files', result.textContent, 'error');
+          return;
+        }
+        body.append('files', file, file.name);
+        body.append('relativePaths', file.webkitRelativePath);
+      }
+      uploadBusy = true;
+      document.querySelector('#submit').disabled = true;
+      document.querySelector('#folderSubmit').disabled = true;
+      result.textContent = '';
+      const popup = globalThis.mmivFeedback?.upload(
+        'Uploading folder (' + files.length + ' files)',
+      );
+      document.getElementById('folderProgress').hidden = false;
+      document.getElementById('folderProgressBar').value = 0;
+      document.getElementById('folderProgressLabel').textContent = 'Preparing upload…';
+      try {
+        const response = await mmivAuth.upload('/api/v1/transfers/folder', body, (progress) => {
+          popup?.update(progress);
+          const bar = document.getElementById('folderProgressBar'),
+            label = document.getElementById('folderProgressLabel');
+          if (progress.phase === 'processing') {
+            bar.removeAttribute('value');
+            label.textContent = 'Files received. Transferring and verifying integrity…';
+          } else {
+            bar.value = progress.percent;
+            label.textContent = 'Uploading folder: ' + Math.round(progress.percent) + '%';
+          }
+        });
+        if (response.status === 403) throw new Error('No access to folder');
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Upload failed. HTTP ' + response.status);
+        document.getElementById('folderProgressBar').value = 100;
+        document.getElementById('folderProgressLabel').textContent = data.failed
+          ? 'Finished with some failed files.'
+          : 'Folder upload complete.';
+        result.textContent =
+          'Integrity verification passed: ' +
+          data.succeeded +
+          '; failed or unconfirmed: ' +
+          data.failed +
+          '\n' +
+          (data.files || [])
+            .map(
+              (file) =>
+                file.relativePath + ': ' + file.status + (file.error ? ' — ' + file.error : ''),
+            )
+            .join('\n');
+        popup?.finish(
+          data.failed ? 'Folder upload needs attention' : 'Folder upload complete',
+          result.textContent,
+          !data.failed,
+        );
+      } catch (error) {
+        result.textContent = error.message;
+        document.getElementById('folderProgress').hidden = true;
+        popup?.finish('Folder upload unsuccessful', error.message, false);
+      } finally {
+        uploadBusy = false;
+        document.querySelector('#submit').disabled = false;
+        document.querySelector('#folderSubmit').disabled = false;
+      }
+    });
+  </script>
+  <script src="/english-validation.js"></script>
 </html>

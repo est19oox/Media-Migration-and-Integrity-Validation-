@@ -1,0 +1,12 @@
+{
+  "name": "mmiv-formatting",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Pinned repository formatting tools for MMIV",
+  "devDependencies": {
+    "prettier": "3.6.2"
+  },
+  "scripts": {
+    "format:check": "prettier --check \"**/*.html\" \"**/*.css\" \"**/*.js\" \"**/*.json\" \"**/*.md\" \"**/*.yml\" \"**/*.yaml\""
+  }
+}

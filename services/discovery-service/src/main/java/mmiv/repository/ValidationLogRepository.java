@@ -1,33 +1,29 @@
-
 package mmiv.repository;
-
-import mmiv.model.ValidationLog;
-
-import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.stereotype.Repository;
 
 import java.sql.Timestamp;
 import java.sql.Types;
+import mmiv.model.ValidationLog;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.stereotype.Repository;
 
 @Repository
 public class ValidationLogRepository {
 
-    private final JdbcTemplate jdbcTemplate;
+  private final JdbcTemplate jdbcTemplate;
 
-    public ValidationLogRepository(
-            JdbcTemplate jdbcTemplate
-    ) {
-        this.jdbcTemplate = jdbcTemplate;
-    }
+  public ValidationLogRepository(JdbcTemplate jdbcTemplate) {
+    this.jdbcTemplate = jdbcTemplate;
+  }
 
-    /**
-     * Save one validation log into Oracle MEDIA_LOG.
-     *
-     * LOG_ID is generated automatically by Oracle.
-     */
-    public int save(ValidationLog log) {
+  /**
+   * Save one validation log into Oracle MEDIA_LOG.
+   *
+   * <p>LOG_ID is generated automatically by Oracle.
+   */
+  public int save(ValidationLog log) {
 
-        String sql = """
+    String sql =
+        """
                 INSERT INTO MEDIA_LOG
                 (
                     FILE_NAME,
@@ -42,32 +38,29 @@ public class ValidationLogRepository {
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """;
 
-        Timestamp checkedAt = log.checkedAt() == null
-                ? null
-                : Timestamp.valueOf(log.checkedAt());
+    Timestamp checkedAt = log.checkedAt() == null ? null : Timestamp.valueOf(log.checkedAt());
 
-        return jdbcTemplate.update(
-                sql,
-                new Object[]{
-                        log.fileName(),
-                        log.fileType(),
-                        log.fileDir(),
-                        log.fileSize(),
-                        log.validationStatus(),
-                        log.checkFailed(),
-                        log.expectedValue(),
-                        checkedAt
-                },
-                new int[]{
-                        Types.VARCHAR,
-                        Types.VARCHAR,
-                        Types.VARCHAR,
-                        Types.NUMERIC,
-                        Types.VARCHAR,
-                        Types.VARCHAR,
-                        Types.VARCHAR,
-                        Types.TIMESTAMP
-                }
-        );
-    }
+    return jdbcTemplate.update(
+        sql,
+        new Object[] {
+          log.fileName(),
+          log.fileType(),
+          log.fileDir(),
+          log.fileSize(),
+          log.validationStatus(),
+          log.checkFailed(),
+          log.expectedValue(),
+          checkedAt
+        },
+        new int[] {
+          Types.VARCHAR,
+          Types.VARCHAR,
+          Types.VARCHAR,
+          Types.NUMERIC,
+          Types.VARCHAR,
+          Types.VARCHAR,
+          Types.VARCHAR,
+          Types.TIMESTAMP
+        });
+  }
 }

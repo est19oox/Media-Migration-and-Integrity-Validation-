@@ -46,14 +46,14 @@ the GitHub verification runner with separate SSM tunnels for each service port.
 
 ## Enabled services
 
-| Service | Host port | Deployment phase |
-| --- | ---: | --- |
-| Oracle (User Access schema) | Internal 1521 only | First |
-| Service Registry | 8761 | First |
-| Transfer | 8081 | Backend group |
-| Integrity | 8082 | Backend group |
-| User Access | 8083 | Backend group |
-| API Gateway | 8080 | Last |
+| Service                     |          Host port | Deployment phase |
+| --------------------------- | -----------------: | ---------------- |
+| Oracle (User Access schema) | Internal 1521 only | First            |
+| Service Registry            |               8761 | First            |
+| Transfer                    |               8081 | Backend group    |
+| Integrity                   |               8082 | Backend group    |
+| User Access                 |               8083 | Backend group    |
+| API Gateway                 |               8080 | Last             |
 
 Reporting 8084 and Discovery 8085 remain commented out until their owners complete the services.
 User Access uses a private immutable Oracle/JWT configuration bundle. Reporting now consumes RabbitMQ events; retained SQS queues are legacy storage.

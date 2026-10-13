@@ -9,7 +9,7 @@ After Terraform apply, host preparation, and Docker deployment, open:
 Terraform permits public IPv4 TCP 8080. Docker Compose publishes api-gateway at
 0.0.0.0:8080:8080. Backend service and registry host ports bind to 127.0.0.1;
 containers communicate over mmiv-backend. Deployment, rescue and rollback use
-the same binding default. API paths remain /api/v1/transfers and /api/v1/files/**.
+the same binding default. API paths remain /api/v1/transfers and /api/v1/files/\*\*.
 
 The gateway currently has no authentication; this configuration makes its
 upload and file APIs reachable by anyone with network access to port 8080.

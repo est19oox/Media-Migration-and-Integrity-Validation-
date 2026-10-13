@@ -15,12 +15,12 @@ RabbitMQ 仅负责传递事件，不负责决定迁移流程的执行顺序。�
 
 ### 发布方职责
 
-| 服务 | 事件 | Routing key |
-|---|---|---|
-| Discovery | `MIGRATION_STARTED` | `migration.started` |
-| Discovery | `FILE_DISCOVERY_COMPLETED` | `discovery.file.completed` |
-| Discovery | `MIGRATION_DISCOVERY_COMPLETED` | `discovery.migration.completed` |
-| Transfer | `FILE_TRANSFER_COMPLETED` | `transfer.file.completed` |
+| 服务      | 事件                             | Routing key                      |
+| --------- | -------------------------------- | -------------------------------- |
+| Discovery | `MIGRATION_STARTED`              | `migration.started`              |
+| Discovery | `FILE_DISCOVERY_COMPLETED`       | `discovery.file.completed`       |
+| Discovery | `MIGRATION_DISCOVERY_COMPLETED`  | `discovery.migration.completed`  |
+| Transfer  | `FILE_TRANSFER_COMPLETED`        | `transfer.file.completed`        |
 | Integrity | `INTEGRITY_VALIDATION_COMPLETED` | `integrity.validation.completed` |
 
 所有事件都必须以持久化 JSON 消息发布到 durable topic exchange `mmiv.events`，并设置：
@@ -106,12 +106,12 @@ RabbitMQ transports events but does not orchestrate the migration workflow. Each
 
 ### Publisher ownership
 
-| Service | Event | Routing key |
-|---|---|---|
-| Discovery | `MIGRATION_STARTED` | `migration.started` |
-| Discovery | `FILE_DISCOVERY_COMPLETED` | `discovery.file.completed` |
-| Discovery | `MIGRATION_DISCOVERY_COMPLETED` | `discovery.migration.completed` |
-| Transfer | `FILE_TRANSFER_COMPLETED` | `transfer.file.completed` |
+| Service   | Event                            | Routing key                      |
+| --------- | -------------------------------- | -------------------------------- |
+| Discovery | `MIGRATION_STARTED`              | `migration.started`              |
+| Discovery | `FILE_DISCOVERY_COMPLETED`       | `discovery.file.completed`       |
+| Discovery | `MIGRATION_DISCOVERY_COMPLETED`  | `discovery.migration.completed`  |
+| Transfer  | `FILE_TRANSFER_COMPLETED`        | `transfer.file.completed`        |
 | Integrity | `INTEGRITY_VALIDATION_COMPLETED` | `integrity.validation.completed` |
 
 Publish every event as a persistent JSON message to the durable topic exchange `mmiv.events`, with:

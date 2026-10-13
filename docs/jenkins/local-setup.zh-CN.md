@@ -208,16 +208,16 @@ Jenkins 会记录实际测试的完整 Git SHA。Jenkins 不会自动 push、mer
 
 流水线红色不一定表示 Jenkins 安装失败，应根据失败阶段联系对应负责人：
 
-| 失败阶段 | 主要负责人 |
-| --- | --- |
-| Unit Test | 业务代码负责人 |
-| Semgrep SAST | 安全负责人或对应代码负责人 |
-| Trivy SCA | 依赖及业务代码负责人 |
-| Terraform/Checkov | Terraform/IaC 负责人 |
-| Docker Build/Image Scan | Docker 负责人 |
-| Deploy/Verify | CD、Ansible、Terraform 或 AWS 负责人 |
-| ZAP DAST | 安全和部署负责人 |
-| Jenkins 启动、分支发现、日志归档 | Jenkins 负责人 |
+| 失败阶段                         | 主要负责人                           |
+| -------------------------------- | ------------------------------------ |
+| Unit Test                        | 业务代码负责人                       |
+| Semgrep SAST                     | 安全负责人或对应代码负责人           |
+| Trivy SCA                        | 依赖及业务代码负责人                 |
+| Terraform/Checkov                | Terraform/IaC 负责人                 |
+| Docker Build/Image Scan          | Docker 负责人                        |
+| Deploy/Verify                    | CD、Ansible、Terraform 或 AWS 负责人 |
+| ZAP DAST                         | 安全和部署负责人                     |
+| Jenkins 启动、分支发现、日志归档 | Jenkins 负责人                       |
 
 当前集成仓库还需要部署负责人提供以下接口：
 

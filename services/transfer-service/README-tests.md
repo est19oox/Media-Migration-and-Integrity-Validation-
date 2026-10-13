@@ -21,11 +21,11 @@ Mockito uses `mock-maker-subclass` so these tests do not require JVM agent attac
 
 Executed with Java 25.0.4.1 and Maven 3.9.11: **57 tests passed; zero failures, errors, or skipped cases**. This includes 56 isolated unit/controller cases and one Spring context test.
 
-| Class | Tests | Failures | Errors | Skipped |
-| --- | ---: | ---: | ---: | ---: |
-| TransferServiceApplicationTest | 1 | 0 | 0 | 0 |
-| TransferControllerTest | 7 | 0 | 0 | 0 |
-| TransferStrategyFactoryTest | 4 | 0 | 0 | 0 |
-| TransferServiceTest | 4 | 0 | 0 | 0 |
-| S3TransferStrategyTest | 20 | 0 | 0 | 0 |
-| TransferRequestValidatorTest | 21 | 0 | 0 | 0 |
+| Class                          | Tests | Failures | Errors | Skipped |
+| ------------------------------ | ----: | -------: | -----: | ------: |
+| TransferServiceApplicationTest |     1 |        0 |      0 |       0 |
+| TransferControllerTest         |     7 |        0 |      0 |       0 |
+| TransferStrategyFactoryTest    |     4 |        0 |      0 |       0 |
+| TransferServiceTest            |     4 |        0 |      0 |       0 |
+| S3TransferStrategyTest         |    20 |        0 |      0 |       0 |
+| TransferRequestValidatorTest   |    21 |        0 |      0 |       0 |

@@ -1,0 +1,105 @@
+
+name: Code Formatting Check
+
+on:
+  push:
+    branches:
+      - main
+      - 'feature/**'
+      - 'fix/**'
+      - 'chore/**'
+      - 'release/**'
+  pull_request:
+    branches:
+      - main
+
+concurrency:
+  group: code-formatting-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  prettier:
+    name: Prettier Check
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install pinned dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Check formatting
+        run: npm run format:check
+
+  spotless:
+    name: Spotless Check
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
+
+      - name: Set up Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: maven
+
+      - name: Check every Maven service
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          count=0
+
+          for pom in services/*/pom.xml; do
+            if [[ ! -f "$pom" ]]; then
+              continue
+            fi
+
+            count=$((count + 1))
+            echo "::group::Spotless check: $pom"
+
+            mvn --batch-mode --no-transfer-progress \
+              --file "$pom" spotless:check
+
+            echo "::endgroup::"
+          done
+
+          if [[ "$count" -eq 0 ]]; then
+            echo "::error::No Maven services found under services/*/pom.xml"
+            exit 1
+          fi
+
+          echo "Spotless checked $count Maven services."
+
+  terraform:
+    name: Terraform Format Check
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: 1.15.8
+          terraform_wrapper: false
+
+      - name: Check Terraform formatting
+        run: terraform -chdir=infrastructure/terraform fmt -check -recursive

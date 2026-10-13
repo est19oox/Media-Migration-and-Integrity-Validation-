@@ -29,29 +29,40 @@ class VerificationAccountControllerTest {
   @Autowired JwtService tokens;
 
   private User user(String name, String role) {
-    User user = new User(UUID.randomUUID().toString(), List.of(), name, role, true, Set.of(), "hash");
+    User user =
+        new User(UUID.randomUUID().toString(), List.of(), name, role, true, Set.of(), "hash");
     users.create(user);
     return user;
   }
 
-  @Test void deletesOnlyTheAuthenticatedGeneratedUser() throws Exception {
+  @Test
+  void deletesOnlyTheAuthenticatedGeneratedUser() throws Exception {
     User caller = user("mmiv_ci_" + "a".repeat(32), "USER");
     User other = user("mmiv_ci_" + "b".repeat(32), "USER");
-    mvc.perform(delete("/api/auth/verification-account").header("Authorization", "Bearer " + tokens.generateToken(caller)))
+    mvc.perform(
+            delete("/api/auth/verification-account")
+                .header("Authorization", "Bearer " + tokens.generateToken(caller)))
         .andExpect(status().isNoContent());
     assertTrue(users.findById(caller.getUserId()).isEmpty());
     assertTrue(users.findById(other.getUserId()).isPresent());
   }
 
-  @Test void rejectsOrdinaryAccountsAndPrivilegedAccounts() throws Exception {
-    for (User user : List.of(user("normal-" + UUID.randomUUID(), "USER"), user("mmiv_ci_" + "c".repeat(32), "ADMIN"))) {
-      mvc.perform(delete("/api/auth/verification-account").header("Authorization", "Bearer " + tokens.generateToken(user)))
+  @Test
+  void rejectsOrdinaryAccountsAndPrivilegedAccounts() throws Exception {
+    for (User user :
+        List.of(
+            user("normal-" + UUID.randomUUID(), "USER"),
+            user("mmiv_ci_" + "c".repeat(32), "ADMIN"))) {
+      mvc.perform(
+              delete("/api/auth/verification-account")
+                  .header("Authorization", "Bearer " + tokens.generateToken(user)))
           .andExpect(status().isForbidden());
       assertTrue(users.findById(user.getUserId()).isPresent());
     }
   }
 
-  @Test void rejectsAnonymousAndForgedRequests() throws Exception {
+  @Test
+  void rejectsAnonymousAndForgedRequests() throws Exception {
     mvc.perform(delete("/api/auth/verification-account")).andExpect(status().isUnauthorized());
     mvc.perform(delete("/api/auth/verification-account").header("Authorization", "Bearer forged"))
         .andExpect(status().isUnauthorized());

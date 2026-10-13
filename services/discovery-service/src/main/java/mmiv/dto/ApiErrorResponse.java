@@ -1,4 +1,3 @@
-
 package mmiv.dto;
 
 import java.time.Instant;
@@ -15,27 +14,17 @@ import java.util.List;
  * @param path request path
  */
 public record ApiErrorResponse(
-        Instant timestamp,
-        int status,
-        String error,
-        String message,
-        List<ValidationErrorDetail> validationErrors,
-        String path
-) {
+    Instant timestamp,
+    int status,
+    String error,
+    String message,
+    List<ValidationErrorDetail> validationErrors,
+    String path) {
 
-    public ApiErrorResponse {
-        validationErrors = validationErrors == null
-                ? List.of()
-                : List.copyOf(validationErrors);
-    }
+  public ApiErrorResponse {
+    validationErrors = validationErrors == null ? List.of() : List.copyOf(validationErrors);
+  }
 
-    /**
-     * Individual CSV validation error.
-     */
-    public record ValidationErrorDetail(
-            long rowNumber,
-            String fieldName,
-            String reason
-    ) {
-    }
+  /** Individual CSV validation error. */
+  public record ValidationErrorDetail(long rowNumber, String fieldName, String reason) {}
 }

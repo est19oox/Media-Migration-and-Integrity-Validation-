@@ -41,7 +41,9 @@ public class AccessService {
       return new AccessCheckResponse(false, "User account is inactive");
     }
 
-    if ("ADMIN".equals(user.getRole()) && ("READ".equalsIgnoreCase(request.getAction()) || "WRITE".equalsIgnoreCase(request.getAction())))
+    if ("ADMIN".equals(user.getRole())
+        && ("READ".equalsIgnoreCase(request.getAction())
+            || "WRITE".equalsIgnoreCase(request.getAction())))
       return new AccessCheckResponse(true, "Access granted");
 
     // 2. Find user's access to the requested destination

@@ -6,15 +6,15 @@ MMIV discovers, transfers, validates, and reports media migrations with destinat
 
 ## Services
 
-| Service | Port | Responsibility |
-| --- | ---: | --- |
-| Service Registry | 8761 | Eureka service registration and discovery |
-| API Gateway | 8080 | Route browser and API requests to backend services |
-| Transfer | 8081 | Transfer media between storage locations |
-| Discovery | 8085 | Discover media and resources |
-| User Access | 8083 | Manage and check access permissions |
-| Reporting | 8084 | Generate migration and validation reports |
-| Integrity | 8082 | Validate migrated media integrity |
+| Service          | Port | Responsibility                                     |
+| ---------------- | ---: | -------------------------------------------------- |
+| Service Registry | 8761 | Eureka service registration and discovery          |
+| API Gateway      | 8080 | Route browser and API requests to backend services |
+| Transfer         | 8081 | Transfer media between storage locations           |
+| Discovery        | 8085 | Discover media and resources                       |
+| User Access      | 8083 | Manage and check access permissions                |
+| Reporting        | 8084 | Generate migration and validation reports          |
+| Integrity        | 8082 | Validate migrated media integrity                  |
 
 ## Documentation
 
@@ -35,9 +35,20 @@ Build and test a service from its own directory:
 mvn clean verify
 ```
 
+Repository formatting uses pinned Prettier plus each service's Spotless configuration and
+`terraform fmt`. Run `npm ci` once, then use `scripts/format/format-all.ps1` and
+`scripts/format/check-all.ps1` on Windows, or run the matching scripts with `bash` on Linux.
+The check scripts never modify files. The `Code Formatting Check` GitHub Actions workflow
+(`.github/workflows/auto-format.yml`) is check-only: on pushes to `main`, `feature/**`, `fix/**`,
+`chore/**` and `release/**`, and on pull requests to `main`, it runs `npm run format:check`
+(Prettier), Spotless for every Maven service, and `terraform fmt -check` for
+`infrastructure/terraform`. It never commits changes. Run `format-all` locally and commit the
+result when a check fails.
+
+Line endings are LF for all text formatted by Prettier (see `.gitattributes`). On Windows, set
+`core.autocrlf` to `input` or `false` so working copies stay LF.
 
 Gateway browser access: see docs/ci-cd/gateway-access.md.
-
 
 ## Merged gateway access
 

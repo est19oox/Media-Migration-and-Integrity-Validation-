@@ -19,6 +19,7 @@ public class VerificationAccountController {
   @DeleteMapping("/api/auth/verification-account")
   public ResponseEntity<Void> delete(@AuthenticationPrincipal Jwt jwt) {
     return ResponseEntity.status(users.deleteVerificationAccount(jwt.getSubject()) ? 204 : 403)
-        .header("Cache-Control", "no-store").build();
+        .header("Cache-Control", "no-store")
+        .build();
   }
 }

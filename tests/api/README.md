@@ -3,6 +3,7 @@
 scripts/cd/test-endpoints.py reads tests/api/endpoints.json. The only common test is GET /actuator/health (HTTP 200, status UP). Each service also runs its own configured tests. Future services remain commented in the workflow and their functional arrays remain empty.
 
 Transfer supports two content types on POST /api/v1/transfers:
+
 - multipart/form-data with field file: uploads bytes sent by the caller to S3.
 - application/json: retained server-path migration API for existing EC2 files.
 
@@ -13,7 +14,6 @@ ZAP imports transfer-openapi.json for the multipart POST, file GET/HEAD routes a
 Active scanning can create multiple S3 objects under uploads/. Use a test bucket and clean up test objects. The workflow retains non-blocking security warnings (-I); scanner errors fail the step. No live AWS/ZAP scan was performed while generating these files.
 
 Future services each have their own OpenAPI file and commented matrix entries. Add implemented API routes and functional cases, uncomment their complete matrix entry, and extend the DAST_SCAN_MODE expression in cicd.yml to select api for that service. Only Transfer uses the upload hook.
-
 
 ## File viewing and download checks
 
