@@ -19,13 +19,13 @@ Before finalising cross-service APIs, the team needs to agree on:
 
 ## 2. Current Services
 
-| Service | Port | Responsibility |
-| --- | ---: | --- |
-| Transfer | 8081 | Transfer media between storage locations |
-| Discovery | 8085 | Discover media/resources |
-| User Access | 8083 | Check user access permissions |
-| Reporting | 8084 | Generate migration/validation reports |
-| Integrity | 8082 | Validate migrated media integrity |
+| Service     | Port | Responsibility                           |
+| ----------- | ---: | ---------------------------------------- |
+| Transfer    | 8081 | Transfer media between storage locations |
+| Discovery   | 8085 | Discover media/resources                 |
+| User Access | 8083 | Check user access permissions            |
+| Reporting   | 8084 | Generate migration/validation reports    |
+| Integrity   | 8082 | Validate migrated media integrity        |
 
 Each service is independently built and containerized.
 
@@ -41,13 +41,13 @@ This grouping does **not** define the final runtime call flow.
 
 ## 3. Draft Domain Contexts
 
-| Context | Responsibility |
-| --- | --- |
-| Discovery | Discover media resources from a source |
+| Context        | Responsibility                                            |
+| -------------- | --------------------------------------------------------- |
+| Discovery      | Discover media resources from a source                    |
 | Access Control | Decide whether a user can perform an action on a resource |
-| Migration | Transfer media from source to destination |
-| Integrity | Validate migrated media integrity |
-| Reporting | Produce migration and validation reports |
+| Migration      | Transfer media from source to destination                 |
+| Integrity      | Validate migrated media integrity                         |
+| Reporting      | Produce migration and validation reports                  |
 
 Potential relationships that still require agreement:
 
@@ -67,15 +67,15 @@ These arrows represent relationships to discuss, **not final service call direct
 
 The following terms should have consistent meanings across services:
 
-| Term | Meaning |
-| --- | --- |
-| User / Subject | Identity performing an operation |
-| Resource | Object protected by access control |
-| Source | Location from which media is read |
-| Destination | Location to which media is written |
-| Media Asset | Media/file being discovered or migrated |
-| READ | Read/access a resource |
-| WRITE | Write to a resource |
+| Term           | Meaning                                 |
+| -------------- | --------------------------------------- |
+| User / Subject | Identity performing an operation        |
+| Resource       | Object protected by access control      |
+| Source         | Location from which media is read       |
+| Destination    | Location to which media is written      |
+| Media Asset    | Media/file being discovered or migrated |
+| READ           | Read/access a resource                  |
+| WRITE          | Write to a resource                     |
 
 ## 5. API Principle
 

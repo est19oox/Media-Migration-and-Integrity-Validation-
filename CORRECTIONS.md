@@ -54,7 +54,6 @@ Configuration checks, conflict-marker scan, XML parsing and deployment template 
 
 Validation: Ansible syntax checks, Docker command execution against a mocked CLI, configuration/syntax checks, CI helper runtime tests and local Java Office-validator execution. Full Maven/JUnit, live AWS/S3/Eureka and live ZAP scans must be verified in CI. This ZIP does not claim an error-free live deployment.
 
-
 ## Semgrep startup ImportError repair
 
 Reproduced the supplied eval_type_backport ImportError in an isolated installation of semgrep==1.138.0. Its package metadata pins mcp==1.12.2; MCP imports eval_type_backport, which Pydantic 2.14 removed. Pinned the Semgrep environment to pydantic==2.13.5 and isolated Checkov in its own environment. Applied the same setup to both GitHub Actions workflows (cicd.yml and validate.yml) and the Jenkins Dockerfile.
@@ -62,7 +61,6 @@ Reproduced the supplied eval_type_backport ImportError in an isolated installati
 Scanner-only command wrappers are placed on PATH so later Python/Ansible installations do not modify the scanner environments. Both installers run pip check, the FastMCP import and scanner version commands before scanning. The Terraform update notice in the supplied log is informational.
 
 Local validation: reproduced the failure before the pin; tested patched scanner startup and pip dependency checks. Live GitHub Actions and rebuilding the Jenkins image remain to be verified.
-
 
 ## Spring SCA correction (2026-10-09)
 

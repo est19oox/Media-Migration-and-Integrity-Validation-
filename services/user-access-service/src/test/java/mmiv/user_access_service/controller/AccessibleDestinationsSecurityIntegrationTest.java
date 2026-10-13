@@ -63,7 +63,13 @@ class AccessibleDestinationsSecurityIntegrationTest {
 
   @BeforeEach
   void setUpUsers() {
-    for(String name:List.of("project-A","project-B","other-user-private-folder","inactive-folder","revocable-folder")) folders.create(name);
+    for (String name :
+        List.of(
+            "project-A",
+            "project-B",
+            "other-user-private-folder",
+            "inactive-folder",
+            "revocable-folder")) folders.create(name);
     userRepository.save(
         user(
             OWNER,

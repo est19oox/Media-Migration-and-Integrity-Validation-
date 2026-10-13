@@ -36,11 +36,11 @@ of a changing source file and uploading another.
 The transfer/upload response retains its existing file metadata and adds:
 `transferId`, `validationResult`, `success`, and `message`.
 
-| validationResult | success | Meaning |
-| --- | --- | --- |
-| PASSED | true | S3 upload completed and integrity verified |
-| FAILED | false | S3 upload completed but checksums differ |
-| UNAVAILABLE | false | S3 upload completed; timeout, HTTP error, missing service, or invalid response prevented confirmation |
+| validationResult | success | Meaning                                                                                               |
+| ---------------- | ------- | ----------------------------------------------------------------------------------------------------- |
+| PASSED           | true    | S3 upload completed and integrity verified                                                            |
+| FAILED           | false   | S3 upload completed but checksums differ                                                              |
+| UNAVAILABLE      | false   | S3 upload completed; timeout, HTTP error, missing service, or invalid response prevented confirmation |
 
 HTTP 200 carries the completed workflow outcome; clients must inspect `success`
 and `validationResult`. S3 upload failure retains the existing HTTP 502 response
@@ -104,12 +104,12 @@ Feign timeouts are configurable with `INTEGRITY_CONNECT_TIMEOUT_MS` (3000) and
 audit operation, so tune it to the largest permitted files. Feign itself keeps its default no-retry behavior; the application explicitly
 retries validation without repeating uploads.
 
-| Environment variable | Default | Allowed range |
-| --- | --- | --- |
-| INTEGRITY_MAX_ATTEMPTS | 3 | 1–10 total attempts |
-| INTEGRITY_RETRY_DELAY_MS | 1000 | 0–5000 milliseconds |
-| CLEANUP_MAX_ATTEMPTS | 3 | 1–10 total attempts |
-| CLEANUP_RETRY_DELAY_MS | 1000 | 0–5000 milliseconds |
+| Environment variable     | Default | Allowed range       |
+| ------------------------ | ------- | ------------------- |
+| INTEGRITY_MAX_ATTEMPTS   | 3       | 1–10 total attempts |
+| INTEGRITY_RETRY_DELAY_MS | 1000    | 0–5000 milliseconds |
+| CLEANUP_MAX_ATTEMPTS     | 3       | 1–10 total attempts |
+| CLEANUP_RETRY_DELAY_MS   | 1000    | 0–5000 milliseconds |
 
 Ensure proxy/client timeouts accommodate up to three Feign read timeouts plus
 retry delays and cleanup time. Each attempt can create an Integrity audit entry;

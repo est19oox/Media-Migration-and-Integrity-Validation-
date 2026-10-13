@@ -1,7 +1,7 @@
 package mmiv.reporting.processing;
 
 public enum EventProcessingResult {
-    APPLIED,
-    IGNORED_CLEANED,
-    DUPLICATE_APPLIED
+  APPLIED,
+  IGNORED_CLEANED,
+  DUPLICATE_APPLIED
 }

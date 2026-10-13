@@ -67,16 +67,22 @@ class OracleUserRepositoryIT {
     String signupUsername = USERNAME + "_signup";
     jdbcTemplate.update("DELETE FROM app_users WHERE user_id = ?", signupId);
     try {
-      repository.create(new User(signupId, signupUsername, "USER", true, Set.of(), "$2a$12$signup-hash"));
+      repository.create(
+          new User(signupId, signupUsername, "USER", true, Set.of(), "$2a$12$signup-hash"));
       User loaded = repository.findByUsername(signupUsername).orElseThrow();
       assertEquals(signupId, loaded.getUserId());
       assertTrue(loaded.getPermissions().isEmpty());
       org.junit.jupiter.api.Assertions.assertThrows(
           org.springframework.dao.DuplicateKeyException.class,
-          () -> repository.create(new User(signupId + "2", signupUsername, "USER", true, Set.of(), "replacement")));
-      assertEquals("$2a$12$signup-hash", repository.findByUsername(signupUsername).orElseThrow().getPasswordHash());
+          () ->
+              repository.create(
+                  new User(signupId + "2", signupUsername, "USER", true, Set.of(), "replacement")));
+      assertEquals(
+          "$2a$12$signup-hash",
+          repository.findByUsername(signupUsername).orElseThrow().getPasswordHash());
     } finally {
-      jdbcTemplate.update("DELETE FROM app_users WHERE user_id IN (?, ?)", signupId, signupId + "2");
+      jdbcTemplate.update(
+          "DELETE FROM app_users WHERE user_id IN (?, ?)", signupId, signupId + "2");
     }
   }
 
@@ -173,14 +179,19 @@ class OracleUserRepositoryIT {
     String id = "IT_TEMP_" + java.util.UUID.randomUUID();
     String name = "mmiv_ci_" + java.util.UUID.randomUUID().toString().replace("-", "");
     try {
-      repository.save(new User(id, List.of(), name, "USER", true, Set.of(Permission.READ), PASSWORD_HASH));
+      repository.save(
+          new User(id, List.of(), name, "USER", true, Set.of(Permission.READ), PASSWORD_HASH));
       repository.grantDestinationAccess(id, "temporary-destination", Permission.WRITE);
       org.junit.jupiter.api.Assertions.assertTrue(repository.deleteVerificationAccount(id));
       org.junit.jupiter.api.Assertions.assertTrue(repository.findById(id).isEmpty());
-      org.junit.jupiter.api.Assertions.assertEquals(0, jdbcTemplate.queryForObject(
-          "SELECT COUNT(*) FROM user_permissions WHERE user_id = ?", Integer.class, id));
-      org.junit.jupiter.api.Assertions.assertEquals(0, jdbcTemplate.queryForObject(
-          "SELECT COUNT(*) FROM user_destination_access WHERE user_id = ?", Integer.class, id));
+      org.junit.jupiter.api.Assertions.assertEquals(
+          0,
+          jdbcTemplate.queryForObject(
+              "SELECT COUNT(*) FROM user_permissions WHERE user_id = ?", Integer.class, id));
+      org.junit.jupiter.api.Assertions.assertEquals(
+          0,
+          jdbcTemplate.queryForObject(
+              "SELECT COUNT(*) FROM user_destination_access WHERE user_id = ?", Integer.class, id));
       org.junit.jupiter.api.Assertions.assertFalse(repository.deleteVerificationAccount(USER_ID));
     } finally {
       jdbcTemplate.update("DELETE FROM app_users WHERE user_id = ?", id);

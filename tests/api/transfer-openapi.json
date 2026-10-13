@@ -43,10 +43,7 @@
             "multipart/form-data": {
               "schema": {
                 "type": "object",
-                "required": [
-                  "file",
-                  "destinationId"
-                ],
+                "required": ["file", "destinationId"],
                 "properties": {
                   "file": {
                     "type": "string",
@@ -63,9 +60,7 @@
             "application/json": {
               "schema": {
                 "type": "object",
-                "required": [
-                  "metadataId"
-                ],
+                "required": ["metadataId"],
                 "properties": {
                   "metadataId": {
                     "type": "string",
@@ -114,11 +109,7 @@
                     },
                     "validationResult": {
                       "type": "string",
-                      "enum": [
-                        "PASSED",
-                        "FAILED",
-                        "UNAVAILABLE"
-                      ]
+                      "enum": ["PASSED", "FAILED", "UNAVAILABLE"]
                     },
                     "success": {
                       "type": "boolean",
@@ -129,11 +120,7 @@
                     },
                     "cleanupStatus": {
                       "type": "string",
-                      "enum": [
-                        "NOT_REQUIRED",
-                        "DELETED",
-                        "DELETE_FAILED"
-                      ]
+                      "enum": ["NOT_REQUIRED", "DELETED", "DELETE_FAILED"]
                     },
                     "objectReference": {
                       "type": "object",

@@ -30,12 +30,12 @@ Build using the project's existing Java 25 and Maven: mvn -B clean verify in ser
 
 The upload response now includes `fileId`. Keep this value to reopen the file. The service streams the original S3 bytes; it does not convert media or generate a preview copy. The upload page includes preview and download links. Open `/files.html` to enter a previously returned fileId and view supported images, MP4, TXT or PDF (PDF rendering depends on the browser).
 
-| Method | Route | Result |
-|---|---|---|
-| POST | `/api/v1/transfers` | Multipart local upload; JSON legacy migration also remains |
-| GET | `/api/v1/files/{fileId}/content` | Inline supported content; unknown types download |
-| GET | `/api/v1/files/{fileId}/download` | Attachment containing original bytes |
-| HEAD | Either read route | Content type, size and ETag, without fetching the body |
+| Method | Route                             | Result                                                     |
+| ------ | --------------------------------- | ---------------------------------------------------------- |
+| POST   | `/api/v1/transfers`               | Multipart local upload; JSON legacy migration also remains |
+| GET    | `/api/v1/files/{fileId}/content`  | Inline supported content; unknown types download           |
+| GET    | `/api/v1/files/{fileId}/download` | Attachment containing original bytes                       |
+| HEAD   | Either read route                 | Content type, size and ETag, without fetching the body     |
 
 Example after uploading (replace FILE_ID with the response value):
 

@@ -22,9 +22,10 @@ public class AccessController {
   private final AccessService accessService;
   private final mmiv.user_access_service.repository.FolderRepository folders;
 
-  public AccessController(AccessService accessService,mmiv.user_access_service.repository.FolderRepository folders) {
+  public AccessController(
+      AccessService accessService, mmiv.user_access_service.repository.FolderRepository folders) {
     this.accessService = accessService;
-    this.folders=folders;
+    this.folders = folders;
   }
 
   @PostMapping("/check")
@@ -46,7 +47,14 @@ public class AccessController {
       throw new ResponseStatusException(HttpStatus.FORBIDDEN);
     }
 
-    var result=accessService.getAccessibleDestinations(subject);
-    return new AccessibleDestinationsResponse(result.destinations().stream().filter(f->!mmiv.user_access_service.repository.FolderRepository.verification(f.destination()) && folders.exists(f.destination())).toList());
+    var result = accessService.getAccessibleDestinations(subject);
+    return new AccessibleDestinationsResponse(
+        result.destinations().stream()
+            .filter(
+                f ->
+                    !mmiv.user_access_service.repository.FolderRepository.verification(
+                            f.destination())
+                        && folders.exists(f.destination()))
+            .toList());
   }
 }

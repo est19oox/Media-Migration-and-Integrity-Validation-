@@ -20,15 +20,20 @@ class SignupControllerTest {
   @BeforeEach
   void setup() {
     registration = mock(RegistrationService.class);
-    mvc = MockMvcBuilders.standaloneSetup(new SignupController(registration))
-        .setControllerAdvice(new AuthExceptionHandler()).build();
+    mvc =
+        MockMvcBuilders.standaloneSetup(new SignupController(registration))
+            .setControllerAdvice(new AuthExceptionHandler())
+            .build();
   }
 
   @Test
   void signupReturnsCreatedAndNoPasswordOrToken() throws Exception {
-    when(registration.register(any())).thenReturn(new SignupResponse("U001", "alice", "Account created."));
-    mvc.perform(post("/api/auth/signup").contentType("application/json")
-            .content("{\"username\":\"alice\",\"password\":\"password123\"}"))
+    when(registration.register(any()))
+        .thenReturn(new SignupResponse("U001", "alice", "Account created."));
+    mvc.perform(
+            post("/api/auth/signup")
+                .contentType("application/json")
+                .content("{\"username\":\"alice\",\"password\":\"password123\"}"))
         .andExpect(status().isCreated())
         .andExpect(jsonPath("$.username").value("alice"))
         .andExpect(jsonPath("$.password").doesNotExist())
@@ -37,8 +42,10 @@ class SignupControllerTest {
 
   @Test
   void invalidRequestNeverCreatesAnAccount() throws Exception {
-    mvc.perform(post("/api/auth/signup").contentType("application/json")
-            .content("{\"username\":\"ab\",\"password\":\"short\"}"))
+    mvc.perform(
+            post("/api/auth/signup")
+                .contentType("application/json")
+                .content("{\"username\":\"ab\",\"password\":\"short\"}"))
         .andExpect(status().isBadRequest());
     verifyNoInteractions(registration);
   }
@@ -46,8 +53,10 @@ class SignupControllerTest {
   @Test
   void duplicateReturnsConflict() throws Exception {
     when(registration.register(any())).thenThrow(new DuplicateUsernameException());
-    mvc.perform(post("/api/auth/signup").contentType("application/json")
-            .content("{\"username\":\"alice\",\"password\":\"password123\"}"))
+    mvc.perform(
+            post("/api/auth/signup")
+                .contentType("application/json")
+                .content("{\"username\":\"alice\",\"password\":\"password123\"}"))
         .andExpect(status().isConflict())
         .andExpect(jsonPath("$.error").value("Username is already taken"));
   }

@@ -44,9 +44,7 @@
         "body": {
           "destinationKey": "endpoint-tests/invalid.txt"
         },
-        "json_nonempty": [
-          "error"
-        ]
+        "json_nonempty": ["error"]
       },
       {
         "name": "missing destination",
@@ -56,9 +54,7 @@
         "body": {
           "sourcePath": "/media/endpoint-test.txt"
         },
-        "json_nonempty": [
-          "error"
-        ]
+        "json_nonempty": ["error"]
       },
       {
         "name": "blank source",
@@ -69,9 +65,7 @@
           "sourcePath": "",
           "destinationKey": "endpoint-tests/invalid.txt"
         },
-        "json_nonempty": [
-          "error"
-        ]
+        "json_nonempty": ["error"]
       },
       {
         "name": "absolute destination key",
@@ -82,9 +76,7 @@
           "sourcePath": "/media/endpoint-test.txt",
           "destinationKey": "/invalid.txt"
         },
-        "json_nonempty": [
-          "error"
-        ]
+        "json_nonempty": ["error"]
       },
       {
         "name": "unavailable source",
@@ -95,9 +87,7 @@
           "sourcePath": "/media/mmiv-nonexistent-${RUN_ID}.txt",
           "destinationKey": "endpoint-tests/invalid.txt"
         },
-        "json_nonempty": [
-          "error"
-        ]
+        "json_nonempty": ["error"]
       },
       {
         "name": "source outside media directory",
@@ -108,9 +98,7 @@
           "sourcePath": "/etc/passwd",
           "destinationKey": "endpoint-tests/invalid.txt"
         },
-        "json_nonempty": [
-          "error"
-        ]
+        "json_nonempty": ["error"]
       },
       {
         "name": "malformed JSON",
@@ -134,9 +122,7 @@
             "content": "${MMIV_VERIFICATION_DESTINATION}"
           }
         ],
-        "json_nonempty": [
-          "error"
-        ]
+        "json_nonempty": ["error"]
       },
       {
         "name": "upload empty file",
@@ -155,9 +141,7 @@
             "content": "${MMIV_VERIFICATION_DESTINATION}"
           }
         ],
-        "json_nonempty": [
-          "error"
-        ]
+        "json_nonempty": ["error"]
       },
       {
         "name": "upload unsupported extension",
@@ -176,9 +160,7 @@
             "content": "${MMIV_VERIFICATION_DESTINATION}"
           }
         ],
-        "json_nonempty": [
-          "error"
-        ]
+        "json_nonempty": ["error"]
       },
       {
         "name": "successful local file upload",
@@ -206,11 +188,7 @@
           "validationResult": "PASSED",
           "cleanupStatus": "NOT_REQUIRED"
         },
-        "json_nonempty": [
-          "bucket",
-          "key",
-          "fileId"
-        ],
+        "json_nonempty": ["bucket", "key", "fileId"],
         "report_fields": [
           "bucket",
           "key",
@@ -303,9 +281,7 @@
         "name": "invalid file identifier",
         "path": "/api/v1/files/invalid!/content",
         "status": 400,
-        "json_nonempty": [
-          "error"
-        ]
+        "json_nonempty": ["error"]
       },
       {
         "name": "successful Word upload",
@@ -331,10 +307,7 @@
           "validationResult": "PASSED",
           "cleanupStatus": "NOT_REQUIRED"
         },
-        "json_nonempty": [
-          "fileId",
-          "key"
-        ],
+        "json_nonempty": ["fileId", "key"],
         "save_fields": {
           "OFFICE_FILE_ID": "fileId"
         },
@@ -395,16 +368,8 @@
           "files.0.upload.success": true,
           "files.1.upload.success": true
         },
-        "json_nonempty": [
-          "prefix",
-          "files"
-        ],
-        "report_fields": [
-          "prefix",
-          "succeeded",
-          "failed",
-          "files"
-        ]
+        "json_nonempty": ["prefix", "files"],
+        "report_fields": ["prefix", "succeeded", "failed", "files"]
       }
     ],
     "integrity-service": [
@@ -433,9 +398,7 @@
         "name": "public JWKS",
         "path": "/.well-known/jwks.json",
         "status": 200,
-        "json_nonempty": [
-          "keys"
-        ],
+        "json_nonempty": ["keys"],
         "json_equals": {
           "keys.0.kty": "RSA",
           "keys.0.use": "sig"
@@ -493,9 +456,7 @@
         "json_equals": {
           "tokenType": "Bearer"
         },
-        "json_nonempty": [
-          "accessToken"
-        ],
+        "json_nonempty": ["accessToken"],
         "save_fields": {
           "USER_ACCESS_TEST_TOKEN": "accessToken"
         }
@@ -599,9 +560,7 @@
           "Accept": "application/json"
         },
         "status": 200,
-        "json_required": [
-          "applications"
-        ]
+        "json_required": ["applications"]
       }
     ],
     "api-gateway": [
@@ -664,9 +623,7 @@
         "body": {
           "destinationKey": "endpoint-tests/invalid.txt"
         },
-        "json_nonempty": [
-          "error"
-        ]
+        "json_nonempty": ["error"]
       },
       {
         "name": "missing destination",
@@ -676,9 +633,7 @@
         "body": {
           "sourcePath": "/media/endpoint-test.txt"
         },
-        "json_nonempty": [
-          "error"
-        ]
+        "json_nonempty": ["error"]
       },
       {
         "name": "blank source",
@@ -689,9 +644,7 @@
           "sourcePath": "",
           "destinationKey": "endpoint-tests/invalid.txt"
         },
-        "json_nonempty": [
-          "error"
-        ]
+        "json_nonempty": ["error"]
       },
       {
         "name": "absolute destination key",
@@ -702,9 +655,7 @@
           "sourcePath": "/media/endpoint-test.txt",
           "destinationKey": "/invalid.txt"
         },
-        "json_nonempty": [
-          "error"
-        ]
+        "json_nonempty": ["error"]
       },
       {
         "name": "unavailable source",
@@ -715,9 +666,7 @@
           "sourcePath": "/media/mmiv-nonexistent-${RUN_ID}.txt",
           "destinationKey": "endpoint-tests/invalid.txt"
         },
-        "json_nonempty": [
-          "error"
-        ]
+        "json_nonempty": ["error"]
       },
       {
         "name": "source outside media directory",
@@ -728,9 +677,7 @@
           "sourcePath": "/etc/passwd",
           "destinationKey": "endpoint-tests/invalid.txt"
         },
-        "json_nonempty": [
-          "error"
-        ]
+        "json_nonempty": ["error"]
       },
       {
         "name": "malformed JSON",
@@ -754,9 +701,7 @@
             "content": "${MMIV_VERIFICATION_DESTINATION}"
           }
         ],
-        "json_nonempty": [
-          "error"
-        ]
+        "json_nonempty": ["error"]
       },
       {
         "name": "upload empty file",
@@ -775,9 +720,7 @@
             "content": "${MMIV_VERIFICATION_DESTINATION}"
           }
         ],
-        "json_nonempty": [
-          "error"
-        ]
+        "json_nonempty": ["error"]
       },
       {
         "name": "upload unsupported extension",
@@ -796,9 +739,7 @@
             "content": "${MMIV_VERIFICATION_DESTINATION}"
           }
         ],
-        "json_nonempty": [
-          "error"
-        ]
+        "json_nonempty": ["error"]
       },
       {
         "name": "successful local file upload",
@@ -826,11 +767,7 @@
           "validationResult": "PASSED",
           "cleanupStatus": "NOT_REQUIRED"
         },
-        "json_nonempty": [
-          "bucket",
-          "key",
-          "fileId"
-        ],
+        "json_nonempty": ["bucket", "key", "fileId"],
         "report_fields": [
           "bucket",
           "key",
@@ -923,9 +860,7 @@
         "name": "invalid file identifier",
         "path": "/api/v1/files/invalid!/content",
         "status": 400,
-        "json_nonempty": [
-          "error"
-        ]
+        "json_nonempty": ["error"]
       },
       {
         "name": "successful Word upload",
@@ -951,10 +886,7 @@
           "validationResult": "PASSED",
           "cleanupStatus": "NOT_REQUIRED"
         },
-        "json_nonempty": [
-          "fileId",
-          "key"
-        ],
+        "json_nonempty": ["fileId", "key"],
         "save_fields": {
           "OFFICE_FILE_ID": "fileId"
         },
@@ -1015,16 +947,8 @@
           "files.0.upload.success": true,
           "files.1.upload.success": true
         },
-        "json_nonempty": [
-          "prefix",
-          "files"
-        ],
-        "report_fields": [
-          "prefix",
-          "succeeded",
-          "failed",
-          "files"
-        ]
+        "json_nonempty": ["prefix", "files"],
+        "report_fields": ["prefix", "succeeded", "failed", "files"]
       },
       {
         "name": "gateway login page",

@@ -8,28 +8,17 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 @RestControllerAdvice
 public class ReportingExceptionHandler {
 
-    @ExceptionHandler(ReportNotFoundException.class)
-    public ResponseEntity<ApiError> reportNotFound(
-            ReportNotFoundException exception
-    ) {
-        return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                .body(new ApiError(
-                        "REPORT_NOT_FOUND",
-                        exception.getMessage()
-                ));
-    }
+  @ExceptionHandler(ReportNotFoundException.class)
+  public ResponseEntity<ApiError> reportNotFound(ReportNotFoundException exception) {
+    return ResponseEntity.status(HttpStatus.NOT_FOUND)
+        .body(new ApiError("REPORT_NOT_FOUND", exception.getMessage()));
+  }
 
-    @ExceptionHandler(IllegalArgumentException.class)
-    public ResponseEntity<ApiError> invalidRequest(
-            IllegalArgumentException exception
-    ) {
-        return ResponseEntity.badRequest()
-                .body(new ApiError(
-                        "INVALID_REQUEST",
-                        exception.getMessage()
-                ));
-    }
+  @ExceptionHandler(IllegalArgumentException.class)
+  public ResponseEntity<ApiError> invalidRequest(IllegalArgumentException exception) {
+    return ResponseEntity.badRequest()
+        .body(new ApiError("INVALID_REQUEST", exception.getMessage()));
+  }
 
-    public record ApiError(String code, String message) {
-    }
+  public record ApiError(String code, String message) {}
 }

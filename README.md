@@ -6,15 +6,15 @@ MMIV discovers, transfers, validates, and reports media migrations with destinat
 
 ## Services
 
-| Service | Port | Responsibility |
-| --- | ---: | --- |
-| Service Registry | 8761 | Eureka service registration and discovery |
-| API Gateway | 8080 | Route browser and API requests to backend services |
-| Transfer | 8081 | Transfer media between storage locations |
-| Discovery | 8085 | Discover media and resources |
-| User Access | 8083 | Manage and check access permissions |
-| Reporting | 8084 | Generate migration and validation reports |
-| Integrity | 8082 | Validate migrated media integrity |
+| Service          | Port | Responsibility                                     |
+| ---------------- | ---: | -------------------------------------------------- |
+| Service Registry | 8761 | Eureka service registration and discovery          |
+| API Gateway      | 8080 | Route browser and API requests to backend services |
+| Transfer         | 8081 | Transfer media between storage locations           |
+| Discovery        | 8085 | Discover media and resources                       |
+| User Access      | 8083 | Manage and check access permissions                |
+| Reporting        | 8084 | Generate migration and validation reports          |
+| Integrity        | 8082 | Validate migrated media integrity                  |
 
 ## Documentation
 
@@ -44,9 +44,7 @@ workflow formats or checks **only files changed by the push** using
 unless the repository variable `MMIV_AUTO_FORMAT_COMMIT` is set to `true`, which should happen only
 after the final-commit validation limitation is reviewed.
 
-
 Gateway browser access: see docs/ci-cd/gateway-access.md.
-
 
 ## Merged gateway access
 

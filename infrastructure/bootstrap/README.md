@@ -11,8 +11,7 @@ The recovery workflow now runs terraform validate after init and before imports,
 ## SQS provisioning while bootstrap is disabled
 
 The current cicd.yml leaves the full bootstrap job commented out. Its SQS policy
-therefore was not applied by normal deployment, causing the reported CreateQueue
-403. Before application Terraform planning, the pipeline now reconciles only
+therefore was not applied by normal deployment, causing the reported CreateQueue 403. Before application Terraform planning, the pipeline now reconciles only
 MMIV-File-Log-Queue-Provisioning on the existing GitHubActions-MMIV-Terraform role.
 The script and this bootstrap root share policies/file-log-queue-provisioning.json.
 The policy covers management of exactly the two MMIV file-log queues, including

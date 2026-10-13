@@ -4,15 +4,15 @@ The Eureka server is `services/service-registry`, on port 8761. It does not
 register itself. Gateway and all five backend services register automatically.
 Registration, Maven dependencies, gateway routes and deployment entries are active.
 
-| Service | Port | Role |
-| --- | --- | --- |
-| service-registry | 8761 | Standalone Eureka server |
-| api-gateway | 8080 | Gateway and LoadBalancer; Eureka client |
-| transfer-service | 8081 | Eureka client |
-| discovery-service | 8085 | Eureka client; separate from registry server |
-| user-access-service | 8083 | Eureka client |
-| reporting-service | 8084 | Eureka client |
-| integrity-service | 8082 | Eureka client |
+| Service             | Port | Role                                         |
+| ------------------- | ---- | -------------------------------------------- |
+| service-registry    | 8761 | Standalone Eureka server                     |
+| api-gateway         | 8080 | Gateway and LoadBalancer; Eureka client      |
+| transfer-service    | 8081 | Eureka client                                |
+| discovery-service   | 8085 | Eureka client; separate from registry server |
+| user-access-service | 8083 | Eureka client                                |
+| reporting-service   | 8084 | Eureka client                                |
+| integrity-service   | 8082 | Eureka client                                |
 
 Each client has an active Spring Cloud 2025.1.3 BOM and Eureka client dependency,
 its own spring.application.name and server.port, and active Eureka configuration.

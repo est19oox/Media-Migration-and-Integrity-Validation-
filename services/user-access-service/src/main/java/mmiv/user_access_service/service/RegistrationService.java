@@ -48,6 +48,7 @@ public class RegistrationService {
     } catch (DuplicateKeyException exception) {
       throw new DuplicateUsernameException();
     }
-    return new SignupResponse(user.getUserId(), user.getUsername(), "Account created. Please sign in.");
+    return new SignupResponse(
+        user.getUserId(), user.getUsername(), "Account created. Please sign in.");
   }
 }

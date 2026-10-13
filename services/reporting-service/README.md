@@ -55,14 +55,14 @@ local ports or credentials. Do not commit a real `.env` file.
 
 ## Local endpoints
 
-| Endpoint | Purpose |
-|---|---|
-| `GET http://localhost:8084/actuator/health` | Runtime health |
-| `GET http://localhost:8084/api/reports/{migrationId}` | One migration report |
-| `GET http://localhost:8084/api/reports?page=0&size=20` | Paged reports |
-| `GET http://localhost:8084/api/reports/{migrationId}/files` | Stable, paged file results |
+| Endpoint                                                     | Purpose                                           |
+| ------------------------------------------------------------ | ------------------------------------------------- |
+| `GET http://localhost:8084/actuator/health`                  | Runtime health                                    |
+| `GET http://localhost:8084/api/reports/{migrationId}`        | One migration report                              |
+| `GET http://localhost:8084/api/reports?page=0&size=20`       | Paged reports                                     |
+| `GET http://localhost:8084/api/reports/{migrationId}/files`  | Stable, paged file results                        |
 | `GET http://localhost:8084/api/reports/{migrationId}/events` | Ordered audit events without processing internals |
-| `http://localhost:15672` | RabbitMQ management UI |
+| `http://localhost:15672`                                     | RabbitMQ management UI                            |
 
 Default local RabbitMQ login: `mmiv` / `mmiv-local`. These are development-only
 defaults and must be overridden outside a developer machine.

@@ -18,8 +18,18 @@ public class OracleSchemaConfiguration {
   @Bean
   InitializingBean userAccessSchema(JdbcTemplate jdbc) {
     return () -> {
-      for (String name : new String[] {"001_create_schema.sql", "002_add_password_hash.sql", "003_create_destination_access.sql", "004_create_admin_bootstrap.sql", "005_create_admin_invitations.sql", "006_password_resets.sql"}) {
-        String sql = new ClassPathResource("db/user-access/" + name).getContentAsString(StandardCharsets.UTF_8);
+      for (String name :
+          new String[] {
+            "001_create_schema.sql",
+            "002_add_password_hash.sql",
+            "003_create_destination_access.sql",
+            "004_create_admin_bootstrap.sql",
+            "005_create_admin_invitations.sql",
+            "006_password_resets.sql"
+          }) {
+        String sql =
+            new ClassPathResource("db/user-access/" + name)
+                .getContentAsString(StandardCharsets.UTF_8);
         var blocks = BLOCK.matcher(sql.replace("\r\n", "\n"));
         int count = 0;
         while (blocks.find()) {

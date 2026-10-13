@@ -2,22 +2,20 @@ package mmiv.model;
 
 public class DiscoveryRunResult {
 
-    private final MigrationFileInventory inventory;
-    private final int insertedCount;
+  private final MigrationFileInventory inventory;
+  private final int insertedCount;
 
-    public DiscoveryRunResult(
-            MigrationFileInventory inventory,
-            int insertedCount) {
+  public DiscoveryRunResult(MigrationFileInventory inventory, int insertedCount) {
 
-        this.inventory = inventory;
-        this.insertedCount = insertedCount;
-    }
+    this.inventory = inventory;
+    this.insertedCount = insertedCount;
+  }
 
-    public MigrationFileInventory getInventory() {
-        return inventory;
-    }
+  public MigrationFileInventory getInventory() {
+    return inventory;
+  }
 
-    public int getInsertedCount() {
-        return insertedCount;
-    }
+  public int getInsertedCount() {
+    return insertedCount;
+  }
 }

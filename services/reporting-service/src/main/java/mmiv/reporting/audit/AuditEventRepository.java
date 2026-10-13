@@ -4,12 +4,8 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.mongodb.repository.MongoRepository;
 
-public interface AuditEventRepository
-        extends MongoRepository<AuditEventDocument, String> {
+public interface AuditEventRepository extends MongoRepository<AuditEventDocument, String> {
 
-    Page<AuditEventDocument>
-    findByMigrationIdOrderByOccurredAtAsc(
-            String migrationId,
-            Pageable pageable
-    );
+  Page<AuditEventDocument> findByMigrationIdOrderByOccurredAtAsc(
+      String migrationId, Pageable pageable);
 }

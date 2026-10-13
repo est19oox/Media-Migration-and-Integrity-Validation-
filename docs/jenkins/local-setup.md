@@ -117,18 +117,18 @@ The Jenkins **Test Result** view presents any retained Maven Surefire results. U
 
 ## Gate-to-owner troubleshooting
 
-| Gate or symptom | Owner and next action |
-| --- | --- |
-| Application test failure or unsupported application command | Application code owner: correct tests, source, or the project's declared test interface. |
-| Semgrep rule error, false positive, or blocking finding | Security owner: tune `security/semgrep/semgrep.yml` or remediate the finding. |
-| Trivy SCA finding | Application/dependency owner: upgrade or replace the affected dependency. |
-| Docker build or image-scan failure | Docker owner: correct the Dockerfile, build inputs, or image vulnerability. |
-| Terraform format, validation, or Checkov failure | Terraform owner: correct infrastructure configuration; Jenkins does not run `terraform apply`. |
-| Ansible command, playbook, or inventory failure | Ansible owner: correct the automation; do not add Ansible deployment logic to Jenkins. |
-| AWS credentials, resource, or deployment failure | AWS owner: correct the AWS-side deployment interface; Jenkins does not receive AWS deployment credentials. |
-| Missing trigger, nonzero trigger exit, missing/invalid `.ci/deployment.env`, SHA mismatch, or unreachable DAST URL | Deployment owner: implement or repair `scripts/cd/trigger-deployment.sh <full-commit-sha>` and its two-key handoff. |
-| ZAP finding or failed baseline scan | Security and deployment owners: remediate the exposed test environment or security issue. |
-| Branch indexing authentication failure | Jenkins host owner: check the read-only `github-pat` token and repository access in `jenkins/.env`, then restart Jenkins. |
+| Gate or symptom                                                                                                    | Owner and next action                                                                                                     |
+| ------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------- |
+| Application test failure or unsupported application command                                                        | Application code owner: correct tests, source, or the project's declared test interface.                                  |
+| Semgrep rule error, false positive, or blocking finding                                                            | Security owner: tune `security/semgrep/semgrep.yml` or remediate the finding.                                             |
+| Trivy SCA finding                                                                                                  | Application/dependency owner: upgrade or replace the affected dependency.                                                 |
+| Docker build or image-scan failure                                                                                 | Docker owner: correct the Dockerfile, build inputs, or image vulnerability.                                               |
+| Terraform format, validation, or Checkov failure                                                                   | Terraform owner: correct infrastructure configuration; Jenkins does not run `terraform apply`.                            |
+| Ansible command, playbook, or inventory failure                                                                    | Ansible owner: correct the automation; do not add Ansible deployment logic to Jenkins.                                    |
+| AWS credentials, resource, or deployment failure                                                                   | AWS owner: correct the AWS-side deployment interface; Jenkins does not receive AWS deployment credentials.                |
+| Missing trigger, nonzero trigger exit, missing/invalid `.ci/deployment.env`, SHA mismatch, or unreachable DAST URL | Deployment owner: implement or repair `scripts/cd/trigger-deployment.sh <full-commit-sha>` and its two-key handoff.       |
+| ZAP finding or failed baseline scan                                                                                | Security and deployment owners: remediate the exposed test environment or security issue.                                 |
+| Branch indexing authentication failure                                                                             | Jenkins host owner: check the read-only `github-pat` token and repository access in `jenkins/.env`, then restart Jenkins. |
 
 Failures in contributor-owned commands are returned to the relevant owner with the archived report and exact tested SHA. The Jenkins owner maintains CI orchestration, credentials, host operation, and evidence retention; they do not fix contributor-owned application, Docker, Terraform, Ansible, or AWS code in Jenkins files.
 

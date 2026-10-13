@@ -28,7 +28,9 @@ class RegistrationServiceTest {
     assertTrue(saved.getDestinationAccesses().isEmpty());
     assertEquals(
         result.userId(),
-        new AuthenticationService(users, passwords).authenticate("alice", "password123").getUserId());
+        new AuthenticationService(users, passwords)
+            .authenticate("alice", "password123")
+            .getUserId());
   }
 
   @Test
@@ -37,21 +39,24 @@ class RegistrationServiceTest {
     assertThrows(
         DuplicateUsernameException.class,
         () -> registration.register(new SignupRequest("alice", "replacement123")));
-    assertTrue(passwords.matches("original123", users.findByUsername("alice").orElseThrow().getPasswordHash()));
+    assertTrue(
+        passwords.matches(
+            "original123", users.findByUsername("alice").orElseThrow().getPasswordHash()));
   }
 
   @Test
   void concurrentSignupsCreateExactlyOneAccount() throws Exception {
     AtomicInteger created = new AtomicInteger();
-    Callable<Void> signup = () -> {
-      try {
-        registration.register(new SignupRequest("same-user", "password123"));
-        created.incrementAndGet();
-      } catch (DuplicateUsernameException expected) {
-        // The duplicate request must not overwrite the winner.
-      }
-      return null;
-    };
+    Callable<Void> signup =
+        () -> {
+          try {
+            registration.register(new SignupRequest("same-user", "password123"));
+            created.incrementAndGet();
+          } catch (DuplicateUsernameException expected) {
+            // The duplicate request must not overwrite the winner.
+          }
+          return null;
+        };
     try (var pool = Executors.newFixedThreadPool(2)) {
       for (var result : pool.invokeAll(List.of(signup, signup))) result.get();
     }
@@ -60,11 +65,12 @@ class RegistrationServiceTest {
 
   @Test
   void invalidNamesAndOversizedUtf8PasswordsAreRejected() {
-    for (var request : List.of(
-        new SignupRequest("ab", "password123"),
-        new SignupRequest("admin name", "password123"),
-        new SignupRequest("alice", "short"),
-        new SignupRequest("alice", "密".repeat(25)))) {
+    for (var request :
+        List.of(
+            new SignupRequest("ab", "password123"),
+            new SignupRequest("admin name", "password123"),
+            new SignupRequest("alice", "short"),
+            new SignupRequest("alice", "密".repeat(25)))) {
       assertThrows(InvalidSignupException.class, () -> registration.register(request));
     }
     assertTrue(users.findByUsername("alice").isEmpty());

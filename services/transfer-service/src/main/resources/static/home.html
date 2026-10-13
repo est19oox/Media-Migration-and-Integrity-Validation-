@@ -1,18 +1,72 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Home · MMIV</title><link rel="stylesheet" href="/portal.css"><!-- PWA disabled: <link rel="manifest" href="/manifest.webmanifest"> --><!-- PWA disabled: <meta name="theme-color" content="#14233b"> --><!-- PWA disabled: <script src="/pwa.js" defer></script> --></head><body>
-<header><strong>MMIV</strong><span id="account"></span><button id="logout" type="button">Sign out</button></header>
-<main><h1>Your workspace</h1><p>Browse your shared folders, upload files and track their progress.</p><p id="status" role="status"></p>
-<div class="cards">
-<a class="card" href="/upload.html" data-upload hidden><h2>Upload files</h2><p>Add files or a folder to a location you can write to.</p></a>
-<a class="card" href="/files.html" data-read hidden><h2>Browse &amp; download</h2><p>Open your permitted folders to preview or download files.</p></a>
-<a class="card" href="/history.html"><h2>My activity</h2><p>Your upload and download history.</p></a>
-<a class="card" href="/logs.html" data-admin hidden><h2>Log dashboard</h2><p>View migration progress and activity.</p></a>
-<a class="card" href="/admin.html" data-admin hidden><h2>Administration</h2><p>Create folders, manage user permissions and invite administrators.</p></a>
-</div><section><h2>Your folders</h2><ul id="folders"></ul><p id="noAccess" hidden>No access to folder</p></section></main>
-<script src="/feedback.js"></script><script src="/auth.js"></script><script src="/portal.js"></script><script>
-mmivPortal.profile.then(user=>{
-  document.getElementById('noAccess').hidden=user.destinations.length!==0;
-  for(const folder of user.destinations){const item=document.createElement('li');const link=document.createElement('a');link.href='/files.html?folder='+encodeURIComponent(folder.destination);link.textContent=folder.destination+' — '+(folder.permission==='WRITE'?'Upload and download':'View and download');item.append(link);document.getElementById('folders').append(item);}
-}).catch(()=>{});
-</script><script src="/english-validation.js"></script></body>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Home · MMIV</title>
+    <link rel="stylesheet" href="/portal.css" />
+    <!-- PWA disabled: <link rel="manifest" href="/manifest.webmanifest"> -->
+    <!-- PWA disabled: <meta name="theme-color" content="#14233b"> -->
+    <!-- PWA disabled: <script src="/pwa.js" defer></script> -->
+  </head>
+  <body>
+    <header>
+      <strong>MMIV</strong><span id="account"></span
+      ><button id="logout" type="button">Sign out</button>
+    </header>
+    <main>
+      <h1>Your workspace</h1>
+      <p>Browse your shared folders, upload files and track their progress.</p>
+      <p id="status" role="status"></p>
+      <div class="cards">
+        <a class="card" href="/upload.html" data-upload hidden
+          ><h2>Upload files</h2>
+          <p>Add files or a folder to a location you can write to.</p></a
+        >
+        <a class="card" href="/files.html" data-read hidden
+          ><h2>Browse &amp; download</h2>
+          <p>Open your permitted folders to preview or download files.</p></a
+        >
+        <a class="card" href="/history.html"
+          ><h2>My activity</h2>
+          <p>Your upload and download history.</p></a
+        >
+        <a class="card" href="/logs.html" data-admin hidden
+          ><h2>Log dashboard</h2>
+          <p>View migration progress and activity.</p></a
+        >
+        <a class="card" href="/admin.html" data-admin hidden
+          ><h2>Administration</h2>
+          <p>Create folders, manage user permissions and invite administrators.</p></a
+        >
+      </div>
+      <section>
+        <h2>Your folders</h2>
+        <ul id="folders"></ul>
+        <p id="noAccess" hidden>No access to folder</p>
+      </section>
+    </main>
+    <script src="/feedback.js"></script>
+    <script src="/auth.js"></script>
+    <script src="/portal.js"></script>
+    <script>
+      mmivPortal.profile
+        .then((user) => {
+          document.getElementById('noAccess').hidden = user.destinations.length !== 0;
+          for (const folder of user.destinations) {
+            const item = document.createElement('li');
+            const link = document.createElement('a');
+            link.href = '/files.html?folder=' + encodeURIComponent(folder.destination);
+            link.textContent =
+              folder.destination +
+              ' — ' +
+              (folder.permission === 'WRITE' ? 'Upload and download' : 'View and download');
+            item.append(link);
+            document.getElementById('folders').append(item);
+          }
+        })
+        .catch(() => {});
+    </script>
+    <script src="/english-validation.js"></script>
+  </body>
 </html>

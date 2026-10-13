@@ -14,107 +14,74 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.UUID;
-
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-
 import mmiv.reporting.config.ReportingProperties;
 import mmiv.reporting.report.MigrationReportDocument;
 import mmiv.reporting.report.MigrationReportRepository;
 import mmiv.reporting.report.MigrationReportStatus;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 class MigrationTimeoutSchedulerTest {
 
-    private static final Instant NOW =
-            Instant.parse("2026-10-11T11:00:00Z");
+  private static final Instant NOW = Instant.parse("2026-10-11T11:00:00Z");
 
-    private MigrationReportRepository repository;
+  private MigrationReportRepository repository;
 
-    private MigrationTimeoutScheduler scheduler;
+  private MigrationTimeoutScheduler scheduler;
 
-    @BeforeEach
-    void setUp() {
-        repository = mock(MigrationReportRepository.class);
+  @BeforeEach
+  void setUp() {
+    repository = mock(MigrationReportRepository.class);
 
-        ReportingProperties properties =
-                new ReportingProperties();
-        properties.setMigrationTimeout(
-                Duration.ofMinutes(30)
-        );
+    ReportingProperties properties = new ReportingProperties();
+    properties.setMigrationTimeout(Duration.ofMinutes(30));
 
-        scheduler = new MigrationTimeoutScheduler(
-                repository,
-                properties,
-                Clock.fixed(NOW, ZoneOffset.UTC)
-        );
-    }
+    scheduler =
+        new MigrationTimeoutScheduler(repository, properties, Clock.fixed(NOW, ZoneOffset.UTC));
+  }
 
-    @Test
-    void migrationAt29MinutesRemainsProcessing() {
-        when(repository.findByStatusAndStartedAtBefore(
-                eq(MigrationReportStatus.PROCESSING),
-                any(Instant.class)
-        )).thenReturn(List.of());
+  @Test
+  void migrationAt29MinutesRemainsProcessing() {
+    when(repository.findByStatusAndStartedAtBefore(
+            eq(MigrationReportStatus.PROCESSING), any(Instant.class)))
+        .thenReturn(List.of());
 
-        scheduler.markTimedOutMigrations();
+    scheduler.markTimedOutMigrations();
 
-        verify(repository, never())
-                .save(any(MigrationReportDocument.class));
-    }
+    verify(repository, never()).save(any(MigrationReportDocument.class));
+  }
 
-    @Test
-    void migrationAt31MinutesBecomesIncomplete() {
-        MigrationReportDocument report =
-                reportStartedAt(
-                        NOW.minus(Duration.ofMinutes(31))
-                );
-        when(repository.findByStatusAndStartedAtBefore(
-                MigrationReportStatus.PROCESSING,
-                NOW.minus(Duration.ofMinutes(30))
-        )).thenReturn(List.of(report));
+  @Test
+  void migrationAt31MinutesBecomesIncomplete() {
+    MigrationReportDocument report = reportStartedAt(NOW.minus(Duration.ofMinutes(31)));
+    when(repository.findByStatusAndStartedAtBefore(
+            MigrationReportStatus.PROCESSING, NOW.minus(Duration.ofMinutes(30))))
+        .thenReturn(List.of(report));
 
-        scheduler.markTimedOutMigrations();
+    scheduler.markTimedOutMigrations();
 
-        assertEquals(
-                MigrationReportStatus.INCOMPLETE,
-                report.getStatus()
-        );
-        assertEquals(NOW, report.getCompletedAt());
-        verify(repository).save(report);
-    }
+    assertEquals(MigrationReportStatus.INCOMPLETE, report.getStatus());
+    assertEquals(NOW, report.getCompletedAt());
+    verify(repository).save(report);
+  }
 
-    @Test
-    void terminalReportIsNeverChangedEvenIfReturned() {
-        MigrationReportDocument report =
-                reportStartedAt(
-                        NOW.minus(Duration.ofMinutes(31))
-                );
-        report.recordDiscoveryCompleted(0);
-        report.markCompleted(
-                MigrationReportStatus.COMPLETED,
-                NOW.minusSeconds(1)
-        );
+  @Test
+  void terminalReportIsNeverChangedEvenIfReturned() {
+    MigrationReportDocument report = reportStartedAt(NOW.minus(Duration.ofMinutes(31)));
+    report.recordDiscoveryCompleted(0);
+    report.markCompleted(MigrationReportStatus.COMPLETED, NOW.minusSeconds(1));
 
-        when(repository.findByStatusAndStartedAtBefore(
-                eq(MigrationReportStatus.PROCESSING),
-                any(Instant.class)
-        )).thenReturn(List.of(report));
+    when(repository.findByStatusAndStartedAtBefore(
+            eq(MigrationReportStatus.PROCESSING), any(Instant.class)))
+        .thenReturn(List.of(report));
 
-        scheduler.markTimedOutMigrations();
+    scheduler.markTimedOutMigrations();
 
-        assertEquals(
-                MigrationReportStatus.COMPLETED,
-                report.getStatus()
-        );
-        verify(repository, never()).save(report);
-    }
+    assertEquals(MigrationReportStatus.COMPLETED, report.getStatus());
+    verify(repository, never()).save(report);
+  }
 
-    private MigrationReportDocument reportStartedAt(
-            Instant startedAt
-    ) {
-        return MigrationReportDocument.processing(
-                UUID.randomUUID(),
-                startedAt
-        );
-    }
+  private MigrationReportDocument reportStartedAt(Instant startedAt) {
+    return MigrationReportDocument.processing(UUID.randomUUID(), startedAt);
+  }
 }
