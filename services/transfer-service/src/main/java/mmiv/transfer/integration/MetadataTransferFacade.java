@@ -55,6 +55,6 @@ public class MetadataTransferFacade {
                 results.add(new FolderUploadResponse.FileResult(relativePaths.get(i),"FAILED",null,"File transfer failed"));
             } finally {MigrationContext.clear();}
         }
-        return new FolderUploadResponse("migrations/",succeeded,files.size()-succeeded,List.copyOf(results));
+        return new FolderUploadResponse(destinationId+"/",succeeded,files.size()-succeeded,List.copyOf(results));
     }
 }

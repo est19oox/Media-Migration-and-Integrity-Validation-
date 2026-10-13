@@ -48,3 +48,4 @@ mmiv.events.outbox-directory: ${MMIV_EVENTS_OUTBOX_DIRECTORY:./.mmiv-outbox}
 mmiv.auth.issuer: ${USER_ACCESS_JWT_ISSUER:https://auth.mmiv.example}
 mmiv.auth.jwk-set-uri: ${USER_ACCESS_JWK_SET_URI:http://user-access-service:8083/.well-known/jwks.json}
 mmiv.metadata.url: ${METADATA_URL:http://discovery-service:8085}
+mmiv.access.url: ${USER_ACCESS_URL:http://user-access-service:8083}

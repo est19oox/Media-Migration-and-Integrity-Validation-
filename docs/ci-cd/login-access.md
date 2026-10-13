@@ -5,14 +5,14 @@ This complete project includes the earlier login-page update. Rebuild and redepl
 ## Browser flow
 
 1. Open http://EC2_PUBLIC_IP:8080/ or http://localhost:8080/ through the Gateway tunnel.
-2. Sign in using a User Access account, or select Create an account to register. Signup returns to login before opening Transfer.
+2. Sign in using a User Access account, or select Create an account to register. Signup returns to login before opening Home.
 3. Login calls /user-access/api/auth/login, then sends the returned Bearer token to POST /api/v1/session. Transfer verifies its signature, issuer, subject and expiry before setting the MMIV_SESSION cookie.
-4. Login confirms the browser cookie with GET /api/v1/session before redirecting to /upload.html. Uploads and file previews/downloads use the HttpOnly SameSite=Strict cookie. The token is no longer stored in sessionStorage.
+4. Login confirms the browser cookie with GET /api/v1/session before redirecting to /home.html. Uploads and file previews/downloads use the HttpOnly SameSite=Strict cookie. The token is no longer stored in sessionStorage.
 5. Sign out clears the browser cookie and returns to /login.html. Expired sessions return to login. Clearing a cookie does not revoke a separately retained JWT; it remains valid until expiry.
 
 Anonymous /upload.html and /files.html requests redirect to /login.html. Anonymous file APIs and uploads are rejected. Cookie-authenticated mutations require a CSRF token from GET /api/v1/session; auth.js handles this. Direct backend API access also checks JWTs. Health endpoints remain available for deployment checks.
 
-Any authenticated account can currently use Transfer and read objects whose IDs it knows. This change enforces login; it does not add per-user ownership or destination permission enforcement.
+Home shows only permitted actions. Files lists objects inside the user's registered folders, with clickable previews and downloads. Every read checks the exact file key's folder, so knowing a file ID does not bypass folder permissions. Administration uses the same cookie and has no second login form; current Oracle roles protect every administrative action. The Log dashboard shows folder migration records to permitted users and system logs to administrators.
 
 ## Configuration
 
@@ -24,7 +24,7 @@ The current development Gateway uses HTTP, so JWT_COOKIE_SECURE defaults to fals
 
 Verification data cleanup runs before account deletion, even after failed checks. One UUID tags the invocation's metadata plans and scanner requests. Only that owner's tagged objects, metadata, reports, migration audit events and associated file logs are removed; all versions of the exact assigned S3 keys are deleted. Supplied accounts and their other data are preserved. Minimal closed-run markers and migration tombstones remain to block delayed writes/events, while temporary run-ID files are removed. CI reports retain the ID and cleanup result. The EC2 role needs `s3:ListBucketVersions` as configured in Terraform; apply that infrastructure change before deploying this cleanup behavior.
 
-The existing anonymous upload smoke tests and DAST have been updated to log in through the Gateway. By default verification signs up one randomly named account, reuses it for the run, and deletes it through the authenticated cleanup endpoint after all checks, including failed checks. To use a supplied account instead, add credentials to the MMIV_RUNTIME_CONFIG GitHub secret:
+The existing anonymous upload smoke tests and DAST have been updated to log in through the Gateway. By default verification uses a registered `verification` folder, signs up one randomly named account, reuses it for the run, and deletes it through the authenticated cleanup endpoint after all checks, including failed checks. To use a supplied account instead, add credentials to the MMIV_RUNTIME_CONFIG GitHub secret:
 
 ```json
 {
@@ -46,7 +46,7 @@ Spring integration tests cover anonymous access, real RSA signatures, wrong issu
 
 Open /signup.html using the Create an account link on login. POST /user-access/api/auth/signup accepts username and password. Successful signup returns HTTP 201 and a userId; duplicates return 409. Usernames are case-sensitive, 3–40 ASCII letters/numbers/dots/underscores/hyphens. Passwords require at least 8 characters and at most 72 UTF-8 bytes; they are hashed using the existing BCrypt encoder.
 
-New accounts are active with role USER and no global or destination permissions. Clients cannot select roles or privileges. Transfers require current destination WRITE permission, and reads require READ permission; metadata ownership checks also apply. Administrators grant access through `/admin.html`; see [administrator setup](../admin/administrator-access.md). Accounts persist in Oracle using the existing APP_USERS schema. Unique username constraints and an INSERT-only repository method prevent duplicate requests from overwriting existing credentials. No new migration or signup secret is needed.
+New accounts are active with role USER and no global or destination permissions. Clients cannot select roles or privileges. Transfers require current destination WRITE permission, and reads require READ permission; metadata ownership checks apply to transfer execution; users with READ may view shared-folder files, metadata and reports. Administrators grant access through `/admin.html`; see [administrator setup](../admin/administrator-access.md). Accounts persist in Oracle using the existing APP_USERS schema. Unique username constraints and an INSERT-only repository method prevent duplicate requests from overwriting existing credentials. No new migration or signup secret is needed.
 
 Signup does not include email verification or password reset. It returns to login after successful creation.
 

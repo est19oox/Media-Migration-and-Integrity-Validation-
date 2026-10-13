@@ -18,11 +18,15 @@ def zap_started(zap, target):
     run=str(uuid.UUID(os.environ['MMIV_VERIFICATION_RUN_ID']))
     zap.replacer.add_rule('mmiv-verification-run',True,'REQ_HEADER',False,'X-MMIV-Verification-Run',run)
     authorization = 'Authorization: Bearer ' + token + '\r\nX-MMIV-Verification-Run: ' + run + '\r\n'
+    folder=os.environ.get('MMIV_VERIFICATION_DESTINATION','verification')
+    if not folder or any(c in folder for c in '\r\n'): raise ValueError('Invalid verification folder')
     content = 'MMIV ZAP upload fixture\n'
     boundary = 'mmiv-' + uuid.uuid4().hex
     body = (f'--{boundary}\r\n'
             'Content-Disposition: form-data; name="file"; filename="zap-fixture.txt"\r\n'
             'Content-Type: text/plain\r\n\r\n' + content +
+            f'\r\n--{boundary}\r\n'
+            'Content-Disposition: form-data; name="destinationId"\r\n\r\n' + folder +
             f'\r\n--{boundary}--\r\n')
     request = (f'POST {root}/api/v1/transfers HTTP/1.1\r\n'
                f'Host: {parsed.netloc}\r\n' + authorization +

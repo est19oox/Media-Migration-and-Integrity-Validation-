@@ -52,6 +52,7 @@ class AccessibleDestinationsSecurityIntegrationTest {
   private static final String PASSWORD_MARKER = "DESTINATIONS_PRIVATE_PASSWORD_HASH";
 
   @Autowired private MockMvc mockMvc;
+  @Autowired private mmiv.user_access_service.repository.InMemoryFolderRepository folders;
 
   @Autowired private JwtEncoder jwtEncoder;
 
@@ -62,6 +63,7 @@ class AccessibleDestinationsSecurityIntegrationTest {
 
   @BeforeEach
   void setUpUsers() {
+    for(String name:List.of("project-A","project-B","other-user-private-folder","inactive-folder","revocable-folder")) folders.create(name);
     userRepository.save(
         user(
             OWNER,

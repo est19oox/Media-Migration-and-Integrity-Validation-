@@ -68,13 +68,18 @@ class TransferSecurityIntegrationTest {
 
     @Test void revokedDestinationReturns403AndPermissionOutageReturns503() throws Exception {
         org.mockito.Mockito.doThrow(new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.FORBIDDEN))
-                .when(metadata).requireAccess("READ");
-        mvc.perform(get("/api/v1/files/probe").header("Authorization","Bearer "+token(ISSUER,Instant.now().plusSeconds(300))))
+                .when(metadata).requireFolder("SW001","READ");
+        mvc.perform(get("/api/v1/files/"+mmiv.transfer.files.FileIds.encode("SW001/probe.txt")+"/content").header("Authorization","Bearer "+token(ISSUER,Instant.now().plusSeconds(300))))
                 .andExpect(status().isForbidden());
         org.mockito.Mockito.doThrow(new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.SERVICE_UNAVAILABLE))
-                .when(metadata).requireAccess("READ");
-        mvc.perform(get("/api/v1/files/probe").header("Authorization","Bearer "+token(ISSUER,Instant.now().plusSeconds(300))))
+                .when(metadata).requireFolder("SW001","READ");
+        mvc.perform(get("/api/v1/files/"+mmiv.transfer.files.FileIds.encode("SW001/probe.txt")+"/content").header("Authorization","Bearer "+token(ISSUER,Instant.now().plusSeconds(300))))
                 .andExpect(status().isServiceUnavailable());
+    }
+    @Test void administratorPageChecksCurrentRoleAndRedirectsInvitationRecipients() throws Exception {
+        org.mockito.Mockito.when(metadata.profile()).thenReturn(new mmiv.transfer.integration.MetadataClient.Profile("U001","alice","USER",java.util.List.of()));
+        mvc.perform(get("/admin.html").header("Authorization","Bearer "+valid())).andExpect(status().isFound()).andExpect(header().string("Location","/invite.html"));
+        org.mockito.Mockito.verify(metadata).profile();
     }
     static String token(String issuer, Instant expiry) throws Exception {
         SignedJWT jwt = new SignedJWT(new JWSHeader.Builder(JWSAlgorithm.RS256).keyID("test-key").build(),
@@ -96,7 +101,7 @@ class TransferSecurityIntegrationTest {
                     .andExpect(header().string("Cache-Control", "no-store"));
         }
         mvc.perform(get("/files.html")).andExpect(status().isFound());
-        mvc.perform(get("/api/v1/files/test/content")).andExpect(status().isUnauthorized());
+        mvc.perform(get("/api/v1/files/"+mmiv.transfer.files.FileIds.encode("SW001/test.txt")+"/content")).andExpect(status().isUnauthorized());
         mvc.perform(head("/api/v1/files/test/download")).andExpect(status().isUnauthorized());
         mvc.perform(post("/api/v1/transfers").contentType("application/json").content("{}"))
                 .andExpect(status().isUnauthorized());
@@ -112,7 +117,7 @@ class TransferSecurityIntegrationTest {
         assertTrue(cookie.contains("SameSite=Strict"));
         mvc.perform(get("/upload.html").cookie(new Cookie("MMIV_SESSION", jwt)))
                 .andExpect(status().isOk());
-        mvc.perform(get("/api/v1/files/test/content").header("Authorization", "Bearer " + jwt))
+        mvc.perform(get("/api/v1/files/"+mmiv.transfer.files.FileIds.encode("SW001/test.txt")+"/content").header("Authorization", "Bearer " + jwt))
                 .andExpect(status().isOk());
     }
 
@@ -124,7 +129,7 @@ class TransferSecurityIntegrationTest {
         for (String jwt : new String[] {token(ISSUER, Instant.now().minusSeconds(1)),
                 token("https://wrong.example", Instant.now().plusSeconds(600)),
                 forged}) {
-            mvc.perform(get("/api/v1/files/test/content").header("Authorization", "Bearer " + jwt))
+            mvc.perform(get("/api/v1/files/"+mmiv.transfer.files.FileIds.encode("SW001/test.txt")+"/content").header("Authorization", "Bearer " + jwt))
                     .andExpect(status().isUnauthorized());
         }
         mvc.perform(get("/upload.html").cookie(new Cookie("MMIV_SESSION", "forged")))
@@ -169,7 +174,7 @@ class TransferSecurityIntegrationTest {
     @RestController
     static class ProtectedProbe {
         @GetMapping("/upload.html") String page() { return "protected"; }
-        @GetMapping("/api/v1/files/test/content") String file() { return "file"; }
+        @GetMapping("/api/v1/files/{id}/content") String file() { return "file"; }
         @PostMapping("/api/v1/transfers") String upload() { return "uploaded"; }
     }
 }

@@ -58,6 +58,12 @@ public class MetadataPlanRepository implements InitializingBean {
         return jdbc.update("DELETE FROM MMIV_TRANSFER_PLANS WHERE OWNER_ID=? AND JSON_VALUE(PLAN_JSON,'$.verificationRunId')=?",owner,run.toString());
     }
     public Optional<MetadataPlan> find(UUID id, String owner) {return find(id,owner,true);}
+    public Optional<MetadataPlan> findAny(UUID id) {
+        return jdbc.query("SELECT PLAN_JSON FROM MMIV_TRANSFER_PLANS WHERE PLAN_ID=?", (rs,row)->json.readValue(rs.getString(1),MetadataPlan.class),id.toString()).stream().findFirst();
+    }
+    public List<MetadataPlan> folderPlans(String folder,int page) {
+        return jdbc.query("SELECT PLAN_JSON FROM MMIV_TRANSFER_PLANS WHERE JSON_VALUE(PLAN_JSON,'$.destinationId')=? ORDER BY EXPIRES_AT DESC,PLAN_ID OFFSET ? ROWS FETCH NEXT 100 ROWS ONLY", (rs,row)->json.readValue(rs.getString(1),MetadataPlan.class),folder,page*100);
+    }
     public Optional<MetadataPlan> find(UUID id,String owner,boolean activeOnly) {
         if(!activeOnly) return jdbc.query("SELECT PLAN_JSON FROM MMIV_TRANSFER_PLANS WHERE PLAN_ID=? AND OWNER_ID=?",
                 (rs,row)->json.readValue(rs.getString(1),MetadataPlan.class),id.toString(),owner).stream().findFirst();

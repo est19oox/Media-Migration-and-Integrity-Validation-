@@ -26,7 +26,7 @@ public class SecurityConfig {
             auth ->
                 auth.dispatcherTypeMatchers(DispatcherType.ERROR)
                     .permitAll()
-                    .requestMatchers(HttpMethod.GET, "/login.html", "/signup.html", "/admin.html", "/admin.js")
+                    .requestMatchers(HttpMethod.GET, "/login.html", "/signup.html")
                     .permitAll()
                     .requestMatchers(HttpMethod.POST, "/api/auth/login", "/api/auth/signup")
                     .permitAll()

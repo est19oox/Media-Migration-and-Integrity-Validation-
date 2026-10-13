@@ -36,6 +36,11 @@ public class InMemoryUserRepository implements UserRepository {
 
   private final Map<String, User> users = new ConcurrentHashMap<>();
 
+  public java.util.List<User> searchUsers(String query) {
+    return users.values().stream().filter(user -> user.getUsername().toLowerCase(java.util.Locale.ROOT).contains(query.toLowerCase(java.util.Locale.ROOT)))
+        .sorted(java.util.Comparator.comparing(User::getUsername)).limit(100).toList();
+  }
+
   @Override
   public synchronized void create(User user) {
     if (users.containsKey(user.getUserId()) || findByUsername(user.getUsername()).isPresent()) {

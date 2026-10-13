@@ -128,8 +128,9 @@ form.addEventListener('submit', async event => {
     password.type = 'password';
     toggle.textContent = 'Show';
     toggle.setAttribute('aria-pressed', 'false');
-    message('Signed in successfully. Opening Transfer…', 'success');
-    const transferUrl = new URL('/upload.html', location.origin);
+    message('Signed in successfully. Opening your home page…', 'success');
+    const invitation = new URLSearchParams(location.hash.slice(1)).get('invite');
+    const transferUrl = new URL(invitation && /^[a-f0-9]{64}$/.test(invitation) ? '/invite.html#invite=' + invitation : '/home.html', location.origin);
     location.assign(transferUrl.href);
   } catch (error) {
       message(error.name === 'AbortError' ? 'The login request timed out. Please try again.'

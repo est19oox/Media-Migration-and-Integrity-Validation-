@@ -17,7 +17,7 @@ def grant_sql(account, destination):
     username = account['username']
     if not re.fullmatch(r'mmiv_ci_[a-f0-9]{32}', username):
         raise ValueError('Only a generated verification account can receive an automatic grant')
-    if not re.fullmatch(r'[a-z0-9][a-z0-9.-]{1,253}', destination):
+    if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9 _.-]{0,79}', destination) or destination.endswith((' ', '.')) or destination in ('migrations','upload'):
         raise ValueError('Invalid verification destination')
     return f"""WHENEVER SQLERROR EXIT FAILURE ROLLBACK
 SET HEADING OFF FEEDBACK OFF
@@ -27,6 +27,10 @@ BEGIN
   SELECT COUNT(*) INTO found FROM APP_USERS
     WHERE USER_ID='{identifier}' AND USERNAME='{username}' AND ROLE='USER' AND ACTIVE=1;
   IF found != 1 THEN RAISE_APPLICATION_ERROR(-20001,'Generated verification account not found'); END IF;
+  MERGE INTO MMIV_FOLDERS target
+  USING (SELECT '{destination}' NAME FROM dual) source
+  ON (target.NAME=source.NAME)
+  WHEN NOT MATCHED THEN INSERT (NAME) VALUES (source.NAME);
   MERGE INTO USER_DESTINATION_ACCESS target
   USING (SELECT '{identifier}' USER_ID, '{destination}' DESTINATION FROM dual) source
   ON (target.USER_ID=source.USER_ID AND target.DESTINATION=source.DESTINATION)

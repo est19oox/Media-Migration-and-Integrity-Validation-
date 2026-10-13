@@ -27,7 +27,7 @@ spring:
             - id: user-access-login-page
               uri: lb://user-access-service
               predicates:
-                - Path=/login.html,/signup.html,/admin.html,/admin.js
+                - Path=/login.html,/signup.html
             - id: transfer-api
               uri: lb://transfer-service
               predicates:
@@ -43,17 +43,21 @@ spring:
             - id: transfer-pages
               uri: lb://transfer-service
               predicates:
-                - Path=/upload.html,/files.html,/auth.js
+                - Path=/home.html,/upload.html,/files.html,/logs.html,/admin.html,/invite.html,/admin.js,/portal.js,/portal.css,/auth.js
+            - id: portal-api
+              uri: lb://transfer-service
+              predicates:
+                - Path=/api/v1/portal/**
             - id: transfer-session
               uri: lb://transfer-service
               predicates:
                 - Path=/api/v1/session,/api/v1/destinations
             - id: home
-              uri: lb://user-access-service
+              uri: lb://transfer-service
               predicates:
                 - Path=/
               filters:
-                - SetPath=/login.html
+                - SetPath=/home.html
             - id: integrity-native-api
               uri: lb://integrity-service
               predicates:

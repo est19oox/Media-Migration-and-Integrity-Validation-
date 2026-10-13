@@ -90,11 +90,11 @@ class GatewayRoutingTest {
         }
         http.get().uri("/api/access/example").exchange().expectStatus().isOk()
                 .expectHeader().valueEquals("X-Test-Path", "/api/access/example");
-        http.get().uri("/upload.html").exchange().expectStatus().isOk()
-                .expectHeader().valueEquals("X-Test-Path", "/upload.html");
+        for(String path:new String[]{"/home.html","/upload.html","/files.html","/admin.html","/admin.js","/logs.html","/portal.js","/portal.css","/api/v1/portal/me"})
+            http.get().uri(path).exchange().expectStatus().isOk().expectHeader().valueMatches("X-Test-Backend","[AB]").expectHeader().valueEquals("X-Test-Path",path);
         http.get().uri("/").exchange().expectStatus().isOk()
-                .expectHeader().valueEquals("X-Test-Backend", "A")
-                .expectHeader().valueEquals("X-Test-Path", "/login.html");
+                .expectHeader().valueMatches("X-Test-Backend", "[AB]")
+                .expectHeader().valueEquals("X-Test-Path", "/home.html");
         for (String page : new String[]{"/login.html", "/signup.html"}) {
             http.get().uri(page).exchange().expectStatus().isOk()
                     .expectHeader().valueEquals("X-Test-Backend", "A")

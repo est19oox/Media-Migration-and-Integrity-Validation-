@@ -4,7 +4,7 @@ const {readFileSync} = require('node:fs');
 const {resolve} = require('node:path');
 const vm = require('node:vm');
 
-function loginHarness(loginOk = true, sessionOk = true, confirmationOk = true) {
+function loginHarness(loginOk = true, sessionOk = true, confirmationOk = true, hash = '') {
   const html = readFileSync(resolve(__dirname,
     '../../services/user-access-service/src/main/resources/static/login.html'), 'utf8');
   const nodes = {};
@@ -16,7 +16,7 @@ function loginHarness(loginOk = true, sessionOk = true, confirmationOk = true) {
   const requests = [], navigations = [];
   vm.runInNewContext(html.match(/<script>([\s\S]*?)<\/script>/)[1], {
     document: {getElementById: id => nodes[id]},
-    location: {port: '8080', protocol: 'http:', origin: 'http://localhost:8080',
+    location: {port: '8080', protocol: 'http:', origin: 'http://localhost:8080', hash,
       assign: url => navigations.push(url)},
     URL, URLSearchParams, AbortController, setTimeout, clearTimeout, Error, TypeError,
     fetch: async (url, options) => {
@@ -41,7 +41,7 @@ test('login redirects only after the server establishes the browser cookie', asy
   assert.equal(app.requests[1].options.headers.Authorization, 'Bearer test-token');
   assert.equal(app.requests[2].url, '/api/v1/session');
   assert.equal(app.requests[2].options.headers, undefined);
-  assert.deepEqual(app.navigations, ['http://localhost:8080/upload.html']);
+  assert.deepEqual(app.navigations, ['http://localhost:8080/home.html']);
   assert.equal(app.nodes.password.value, '');
 });
 
@@ -117,4 +117,8 @@ test('signup handles duplicate usernames and rejects mismatched passwords locall
   await mismatch.submit();
   assert.equal(mismatch.requests.length, 0);
   assert.match(mismatch.nodes.status.textContent, /do not match/);
+});
+
+test('normal login preserves an administrator invitation and opens its acceptance page', async () => {
+  const token='a'.repeat(64);const app=loginHarness(true,true,true,'#invite='+token);await app.submit();assert.deepEqual(app.navigations,['http://localhost:8080/invite.html#invite='+token]);
 });

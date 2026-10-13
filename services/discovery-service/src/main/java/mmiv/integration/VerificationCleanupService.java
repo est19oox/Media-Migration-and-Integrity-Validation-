@@ -26,8 +26,10 @@ public class VerificationCleanupService {
         reporting=RestClient.builder().baseUrl(reportingUrl).requestFactory(factory).build();
     }
     public List<MetadataPlan> plans(Jwt jwt,UUID run) {
-        permissions.require(jwt.getTokenValue(),jwt.getSubject(),destination,"WRITE");
-        return repository.verificationPlans(jwt.getSubject(),run);
+        permissions.requireActive(jwt.getTokenValue());
+        var plans=repository.verificationPlans(jwt.getSubject(),run);
+        for(var plan:plans) permissions.require(jwt.getTokenValue(),jwt.getSubject(),plan.destinationId(),"WRITE");
+        return plans;
     }
     public Object clean(Jwt jwt,UUID run) {
         plans(jwt,run); // Authorize before closing or deleting anything.

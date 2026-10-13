@@ -28,15 +28,18 @@ import org.springframework.test.web.servlet.MockMvc;
 class AdminSecurityIntegrationTest {
   @Autowired MockMvc mvc;
   @Autowired InMemoryUserRepository users;
+  @Autowired mmiv.user_access_service.repository.InMemoryFolderRepository folders;
   @Autowired org.springframework.security.oauth2.jwt.JwtEncoder encoder;
   @org.springframework.beans.factory.annotation.Value("${jwt.key-id}") String keyId;
   @MockitoBean EventPublisher events;
   static final String ADMIN="ADMIN-TEST", TARGET="TARGET-TEST", OTHER="OTHER-TEST";
   @BeforeEach void users() {
+    folders.create("landing");
     users.save(new User(ADMIN,"site-admin","ADMIN",true,Set.of(),"private-hash"));
     users.save(new User(TARGET,"outside-user","USER",true,Set.of(),"private-hash"));
     users.save(new User(OTHER,"other-user","USER",true,Set.of(),"private-hash"));
     users.revokeDestinationAccess(TARGET,"landing");
+    users.revokeDestinationAccess(TARGET,"SW001");users.revokeDestinationAccess(TARGET,"semester2");
   }
   private org.springframework.test.web.servlet.request.RequestPostProcessor caller(String id) {
     return caller(id,"ADMIN");
@@ -51,6 +54,30 @@ class AdminSecurityIntegrationTest {
   @Test void anonymousAndMalformedTokensAreRejected() throws Exception {
     mvc.perform(get("/api/admin/me")).andExpect(status().isUnauthorized());
     mvc.perform(get("/api/admin/me").header("Authorization","Bearer broken")).andExpect(status().isUnauthorized());
+  }
+  @Test void folderCreationAndSearchRequireCurrentAdministratorRole() throws Exception {
+    mvc.perform(post("/api/admin/folders").with(caller(TARGET)).contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"SW001\"}"))
+        .andExpect(status().isForbidden());
+    mvc.perform(post("/api/admin/folders").with(caller(ADMIN)).contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"../escape\"}"))
+        .andExpect(status().isBadRequest());
+    mvc.perform(post("/api/admin/folders").with(caller(ADMIN)).contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"SW001\"}"))
+        .andExpect(status().isOk());
+    mvc.perform(get("/api/admin/user-options").with(caller(TARGET))).andExpect(status().isForbidden());
+    var body=mvc.perform(get("/api/admin/user-options").param("q","outside").with(caller(ADMIN)))
+        .andExpect(status().isOk()).andExpect(jsonPath("$[0].username").value("outside-user")).andReturn().getResponse().getContentAsString();
+    assertFalse(body.contains("private-hash"));
+  }
+  @Test void profileShowsOnlyRegisteredGrantedFoldersAndReadCannotUpload() throws Exception {
+    folders.create("semester2"); folders.create("SW001");
+    users.grantDestinationAccess(TARGET,"SW001",mmiv.user_access_service.model.Permission.READ);
+    users.grantDestinationAccess(TARGET,"old-bucket",mmiv.user_access_service.model.Permission.WRITE);
+    mvc.perform(get("/api/access/me").with(caller(TARGET))).andExpect(status().isOk())
+        .andExpect(jsonPath("$.destinations.length()").value(1)).andExpect(jsonPath("$.destinations[0].destination").value("SW001"));
+    mvc.perform(get("/api/access/folders/semester2").with(caller(TARGET))).andExpect(status().isForbidden());
+    mvc.perform(post("/api/access/check").with(caller(TARGET)).contentType(MediaType.APPLICATION_JSON)
+        .content("{\"userId\":\""+TARGET+"\",\"destination\":\"SW001\",\"action\":\"WRITE\"}"))
+        .andExpect(status().isOk()).andExpect(jsonPath("$.authorised").value(false));
+    users.revokeDestinationAccess(TARGET,"SW001");users.revokeDestinationAccess(TARGET,"old-bucket");
   }
   @Test void ordinaryUserCannotUseForgedAdminClaim() throws Exception {
     mvc.perform(get("/api/admin/me").with(caller(TARGET))).andExpect(status().isForbidden());
@@ -73,6 +100,15 @@ class AdminSecurityIntegrationTest {
     mvc.perform(delete("/api/admin/users/"+TARGET+"/destinations").param("destination","landing").with(caller(ADMIN)))
         .andExpect(status().isOk()).andExpect(jsonPath("$.destinations").isEmpty());
     verify(events).audit(eq("ADMIN_PERMISSION_REVOKED"), anyMap());
+  }
+  @Test void grantsAndRevokesTheSelectedFolderInsteadOfTheOldConfiguredDestination() throws Exception {
+    folders.create("semester2");
+    mvc.perform(put("/api/admin/users/"+TARGET+"/destinations").with(caller(ADMIN))
+        .contentType(MediaType.APPLICATION_JSON).content("{\"destination\":\"semester2\",\"permission\":\"WRITE\"}"))
+        .andExpect(status().isOk()).andExpect(jsonPath("$.destinations.length()").value(1))
+        .andExpect(jsonPath("$.destinations[0].destination").value("semester2"));
+    mvc.perform(delete("/api/admin/users/"+TARGET+"/destinations").param("destination","semester2").with(caller(ADMIN)))
+        .andExpect(status().isOk()).andExpect(jsonPath("$.destinations").isEmpty());
   }
   @Test void demotionAndInactiveStatusOverrideExistingJwt() throws Exception {
     var token=caller(ADMIN);

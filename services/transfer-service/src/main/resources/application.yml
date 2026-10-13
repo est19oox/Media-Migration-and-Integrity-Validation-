@@ -77,6 +77,7 @@ mmiv.events.outbox-directory: ${MMIV_EVENTS_OUTBOX_DIRECTORY:./.mmiv-outbox}
 
 mmiv.metadata.url: ${METADATA_URL:http://discovery-service:8085}
 mmiv.access.url: ${USER_ACCESS_URL:http://user-access-service:8083}
+mmiv.reporting.url: ${REPORTING_URL:http://reporting-service:8084}
 mmiv.metadata.destination-id: ${MMIV_DESTINATION_ID:${MMIV_BUCKET_NAME:media-migration-dev-landing}}
 
 mmiv.s3.endpoint: ${MMIV_S3_ENDPOINT:}

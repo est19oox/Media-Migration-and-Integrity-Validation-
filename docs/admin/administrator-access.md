@@ -10,7 +10,7 @@ After the deployment succeeds, open an authorized EC2 Systems Manager shell and 
 sudo python3 -c "import json; print(json.load(open('/etc/mmiv/managed-oracle/bootstrap-admin.json'))['password'])"
 ```
 
-Open `/admin.html` through the Gateway and sign in as `admin` using that password. Use HTTPS for external administrator access. Alternatively, an operator can use an encrypted SSM port-forwarding session and open the local Gateway port:
+Open `/login.html` through the Gateway and sign in as `admin` using that password. Home then links to Administration. Use HTTPS for external administrator access. Alternatively, an operator can use an encrypted SSM port-forwarding session and open the local Gateway port:
 
 ```sh
 aws ssm start-session --target i-YOUR_INSTANCE \
@@ -18,16 +18,16 @@ aws ssm start-session --target i-YOUR_INSTANCE \
   --parameters '{"portNumber":["8080"],"localPortNumber":["18080"]}'
 ```
 
-The page keeps its Bearer JWT only in memory. Closing, refreshing, or signing out ends that page's session. Admin API authorization checks the current Oracle role and active status on every request; a JWT role claim does not grant administrator access by itself. Changing destination grants takes effect on the user's next operation, including existing login sessions.
+The administration page reuses the same HttpOnly browser cookie as Home, Upload, Files and Logs; it has no second login form. Login lasts up to 30 minutes and survives page navigation or refresh. Signing out clears the shared cookie. Admin API authorization checks the current Oracle role and active status on every request; a JWT role claim does not grant administrator access by itself. Changing destination grants takes effect on the user's next operation, including existing login sessions.
 
 For an externally managed Oracle deployment, default-account creation is opt-in: configure `MMIV_BOOTSTRAP_ADMIN_ENABLED=true`, `MMIV_BOOTSTRAP_ADMIN_USERNAME`, and a private `MMIV_BOOTSTRAP_ADMIN_PASSWORD` of at least 16 characters and at most 72 UTF-8 bytes before first startup. Never put this password in tracked configuration. Managed EC2 injects these values only into User Access, not other services.
 
 ## Invite an external administrator
 
 1. The external administrator registers a normal account at `/signup.html` and chooses their own password.
-2. Sign in to `/admin.html`, enter their exact registered username under **Invite another administrator**, and create an invitation. The website address must be reachable by the recipient; if you administer through a local SSM tunnel, replace the local address with the public Gateway origin before creating the link.
+2. Sign in at `/login.html`, open Administration from Home, and enter their registered username under **Invite another administrator**, and create an invitation. The website address must be reachable by the recipient; if you administer through a local SSM tunnel, replace the local address with the public Gateway origin before creating the link.
 3. Copy the generated link and send it privately using your email or chat application. The system does not send email automatically; no mail provider is configured.
-4. The recipient opens `/admin.html#invite=...` and signs in with their own username and password.
+4. The recipient opens `/invite.html#invite=...`. Their existing login is reused; otherwise the normal login page preserves the invitation in the URL fragment and returns to the invitation page after sign-in. Click Accept invitation to open Administration.
 5. The server checks the signed login token, account ownership, active status, token hash, expiry, and unused state. It consumes the invitation and promotes that account to ADMIN in one transaction. Other pending invitations for that account are invalidated too.
 
 Invitations contain 256 bits of randomness, expire after 24 hours, and store only SHA-256 hashes in Oracle. The fragment is removed from the address bar when the page loads. The secret is sent only in the authenticated redemption request body; audit records omit invitation secrets, passwords, and JWTs. Merely opening a link does not grant privileges, and a different account cannot consume it.
@@ -36,7 +36,9 @@ Once admitted, an external administrator can manage destination permissions and 
 
 ## Manage destination permissions
 
-Find a user by exact username, select READ or WRITE, then save or revoke their permission. The page uses the configured `MMIV_DESTINATION_ID` (default: `MMIV_BUCKET_NAME`) and refuses arbitrary destinations. WRITE includes READ. Administrator role itself does not grant file access or bypass metadata ownership checks; administrators can assign destination access using this page.
+See the [folder workspace guide](folder-workspace.md) for the shared home page, folder creation, browser flows and deployment requirements.
+
+Create a top-level folder such as `SW001` or `semester2` through Administration. The portal creates an empty S3 folder marker without overwriting an existing marker, then registers the folder in Oracle `MMIV_FOLDERS`. Search users and choose one from the dropdown (up to 100 matching accounts); filter folders and choose one from the folder dropdown. Select View and download (READ) or Upload, view and download (WRITE), then save or revoke permission. WRITE includes READ. Active administrators can manage and access all registered folders. Ordinary users see only their current registered folder grants. Bucket-level grants do not authorize new folder uploads.
 
 Gateway API routes are:
 
@@ -47,7 +49,7 @@ Gateway API routes are:
 - `POST /user-access/api/admin/invitations` with `{"username":"..."}`
 - `POST /user-access/api/admin/invitations/accept` with `{"token":"..."}`; requires the invited user's authenticated session
 
-Permission and invitation actions emit RabbitMQ audit events after database commit. Lookup responses exclude password hashes. Administrator endpoints require Bearer authentication and do not accept browser cookies.
+Permission and invitation actions emit RabbitMQ audit events after database commit. Lookup responses exclude password hashes. User Access endpoints require Bearer authentication. Browser calls use the fixed `/api/v1/portal/admin/**` routes at Transfer, which validates the shared cookie and CSRF token and forwards the JWT internally. User search responses exclude password hashes.
 
 ## Optional operator bootstrap invitation
 

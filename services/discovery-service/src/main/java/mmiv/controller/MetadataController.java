@@ -21,6 +21,7 @@ public class MetadataController {
     }
     @GetMapping("/verification/{run}/plans") public java.util.List<MetadataPlan> verificationPlans(@AuthenticationPrincipal Jwt jwt,@PathVariable UUID run) {return cleanup.plans(jwt,run);}
     @PostMapping("/verification/{run}/cleanup") public Object cleanup(@AuthenticationPrincipal Jwt jwt,@PathVariable UUID run) {return cleanup.clean(jwt,run);}
+    @GetMapping("/folders/{folder}/plans") public Object folderPlans(@AuthenticationPrincipal Jwt jwt,@PathVariable String folder,@RequestParam(defaultValue="0") int page) {return metadata.folderPlans(jwt,folder,page);}
     @GetMapping("/plans/{id}") public MetadataPlan read(@AuthenticationPrincipal Jwt jwt,@PathVariable UUID id) {
         return metadata.get(jwt,id,"READ");
     }

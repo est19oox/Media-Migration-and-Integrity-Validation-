@@ -164,7 +164,7 @@ def main():
     if args.service not in config["services"]:
         parser.error(f"No tests configured for {args.service}")
     run_id = uuid.uuid4().hex
-    variables = {**os.environ, "RUN_ID": run_id,
+    variables = {"MMIV_VERIFICATION_DESTINATION": "verification", **os.environ, "RUN_ID": run_id,
                  "TEST_OBJECT_KEY": f"endpoint-tests/{run_id}.txt"}
     cases = config.get("common", []) + config["services"][args.service]
     if not cases:

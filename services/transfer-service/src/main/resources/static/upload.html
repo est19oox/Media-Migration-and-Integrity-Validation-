@@ -1,47 +1,53 @@
 <!doctype html>
-<html lang="zh-CN">
+<html lang="en">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>MMIV 文件上传</title>
-<style>
-body{font:16px system-ui;max-width:680px;margin:60px auto;padding:24px;background:#f4f6fa;color:#162033}
-main{background:white;padding:32px;border-radius:16px}button{padding:12px 24px;background:#225be0;color:white;border:0;border-radius:8px;cursor:pointer;margin-top:20px}button:disabled{opacity:.5}pre{white-space:pre-wrap;overflow-wrap:anywhere}small{display:block;margin:16px 0;color:#566174}
-</style>
+<title>Upload files · MMIV</title>
+<link rel="stylesheet" href="/portal.css">
+<header><strong>MMIV</strong><nav><a href="/home.html">Home</a><a href="/files.html">Files</a><a href="/logs.html">Logs</a><a href="/admin.html" data-admin hidden>Administration</a></nav><button id="logout" type="button">Sign out</button></header>
 <main>
-<button id="logout" type="button" style="float:right">退出登录 / Sign out</button>
-<h1>上传文件到云</h1>
-<p>选择电脑上的文件，由 Transfer Service 上传到 Amazon S3。</p>
-<label for="destination">上传目的地 / Destination</label>
-<select id="destination" required><option value="">正在读取权限…</option></select>
+<h1>Upload files to the cloud</h1>
+<p>Choose a file from your computer and upload it to a permitted folder.</p>
+<label for="destination">Folder</label>
+<select id="destination" required><option value="">Select a folder</option></select>
 <p id="destinationStatus" role="status"></p>
 <form id="uploadForm">
-<label for="file">选择文件</label>
+<label for="file">Choose a file</label>
 <input id="file" name="file" type="file" accept=".png,.jpg,.jpeg,.mp4,.mp3,.txt,.pdf,.ppt,.pptx,.doc,.docx" required>
-<small>支持 PNG、JPG、JPEG、MP4、MP3、TXT、PDF、PPT、PPTX、DOC、DOCX，最大 100 MiB。</small>
-<button id="submit" type="submit">上传</button>
+<small>Supported formats: PNG, JPG, JPEG, MP4, MP3, TXT, PDF, PPT, PPTX, DOC and DOCX. Maximum size: 100 MiB.</small>
+<button id="submit" type="submit">Upload</button>
 </form>
 <hr>
-<h2>上传文件夹（包括子文件夹）</h2>
+<h2>Upload a folder (including subfolders)</h2>
 <form id="folderForm">
-<label for="folder">选择本地文件夹</label>
+<label for="folder">Choose a folder from your computer</label>
 <input id="folder" type="file" webkitdirectory multiple required>
-<small>保留文件夹路径。最多 500 个文件，总计 100 MiB；支持 PNG、JPG、JPEG、MP4、MP3、TXT、PDF、PPT、PPTX、DOC、DOCX。空文件和空文件夹不支持。部分失败时，请查看每个文件的结果。</small>
-<button id="folderSubmit" type="submit">上传文件夹</button>
+<small>Folder paths are preserved. Up to 500 files, totaling no more than 100 MiB. Supported formats: PNG, JPG, JPEG, MP4, MP3, TXT, PDF, PPT, PPTX, DOC and DOCX. Empty files and folders are not supported. If some uploads fail, check the result for each file.</small>
+<button id="folderSubmit" type="submit">Upload folder</button>
 </form>
 <pre id="folderResult" role="status" aria-live="polite"></pre>
 <pre id="result" role="status" aria-live="polite"></pre>
-<p id="links" hidden><a id="preview" target="_blank" rel="noopener">查看文件</a> · <a id="download">下载文件</a> · <a href="/files.html">打开文件查看页面</a></p>
+<p id="links" hidden><a id="preview" target="_blank" rel="noopener">View file</a> · <a id="download">Download file</a> · <a href="/files.html">Open file viewer</a></p>
 </main>
-<script src="/auth.js"></script>
+<script src="/auth.js"></script><script src="/portal.js"></script>
 <script>
 async function loadDestinations() {
   const select = document.querySelector('#destination');
+  const status = document.querySelector('#destinationStatus');
+  function noAccess() {
+    const option = document.createElement('option');
+    option.value = ''; option.textContent = 'No access to folder';
+    select.replaceChildren(option); select.disabled = true;
+    status.textContent = 'No access to folder';
+  }
   document.querySelector('#submit').disabled = true;
   document.querySelector('#folderSubmit').disabled = true;
   try {
     const response = await mmivAuth.fetch('/api/v1/destinations');
-    if (!response.ok) throw new Error('您没有此目的地的上传权限，请联系管理员。');
+    if (response.status === 403) { noAccess(); return; }
+    if (!response.ok) throw new Error('Unable to load folders. Please try again.');
     const data = await response.json(); select.replaceChildren();
+    if (data.destinations.length === 0) { noAccess(); return; }
     for (const destination of data.destinations) {
       const option = document.createElement('option'); option.value = destination.destination;
       option.textContent = destination.destination; select.append(option);
@@ -58,17 +64,18 @@ document.querySelector('#uploadForm').addEventListener('submit', async event => 
   const button = document.querySelector('#submit');
   document.querySelector('#links').hidden = true;
   if (!file || file.size === 0 || file.size > 104857600) {
-    result.textContent = '请选择非空且不超过 100 MiB 的文件。'; return;
+    result.textContent = 'Choose a non-empty file no larger than 100 MiB.'; return;
   }
   const body = new FormData(); body.append('file', file);
   body.append('destinationId', document.querySelector('#destination').value);
-  button.disabled = true; result.textContent = '正在上传……';
+  button.disabled = true; result.textContent = 'Uploading…';
   try {
     const response = await mmivAuth.fetch('/api/v1/transfers', {method: 'POST', body});
+    if (response.status === 403) throw new Error('No access to folder');
     const text = await response.text();
-    let data; try { data = JSON.parse(text); } catch { throw new Error('服务器未返回有效 JSON，HTTP ' + response.status); }
-    if (!response.ok) throw new Error(data.error || '上传失败，HTTP ' + response.status);
-    result.textContent = (data.success ? '传输成功，完整性验证通过' : data.cleanupStatus === 'DELETED' ? '传输未通过验证，已删除上传文件' : '传输未通过验证，自动删除未确认，请手动处理') + '\n' + JSON.stringify(data, null, 2);
+    let data; try { data = JSON.parse(text); } catch { throw new Error('The server returned invalid JSON. HTTP ' + response.status); }
+    if (!response.ok) throw new Error(data.error || 'Upload failed. HTTP ' + response.status);
+    result.textContent = (data.success ? 'Upload succeeded and integrity verification passed.' : data.cleanupStatus === 'DELETED' ? 'Integrity verification failed. The uploaded file was deleted.' : 'Integrity verification failed. Automatic deletion could not be confirmed; check the file manually.') + '\nFile: ' + file.name + '\nFolder: ' + document.querySelector('#destination').value;
     const id = encodeURIComponent(data.fileId);
     document.querySelector('#preview').href = '/api/v1/files/' + id + '/content';
     document.querySelector('#download').href = '/api/v1/files/' + id + '/download';
@@ -82,23 +89,24 @@ document.querySelector('#folderForm').addEventListener('submit', async event => 
   const result = document.querySelector('#folderResult');
   const button = document.querySelector('#folderSubmit');
   if (!files.length || files.length > 500 || files.reduce((n, f) => n + f.size, 0) > 104857600) {
-    result.textContent = '请选择包含 1–500 个文件且总计不超过 100 MiB 的文件夹。'; return;
+    result.textContent = 'Choose a folder containing 1–500 files totaling no more than 100 MiB.'; return;
   }
   const body = new FormData();
   body.append('destinationId', document.querySelector('#destination').value);
   for (const file of files) {
-    if (!file.webkitRelativePath || !file.size || !/\.(png|jpe?g|mp4|txt|pdf|pptx?|docx?)$/i.test(file.name)) {
-      result.textContent = '文件为空或类型不支持：' + (file.webkitRelativePath || file.name); return;
+    if (!file.webkitRelativePath || !file.size || !/\.(png|jpe?g|mp4|mp3|txt|pdf|pptx?|docx?)$/i.test(file.name)) {
+      result.textContent = 'The file is empty or its format is not supported: ' + (file.webkitRelativePath || file.name); return;
     }
     body.append('files', file, file.name);
     body.append('relativePaths', file.webkitRelativePath);
   }
-  button.disabled = true; result.textContent = '正在上传文件夹……';
+  button.disabled = true; result.textContent = 'Uploading folder…';
   try {
     const response = await mmivAuth.fetch('/api/v1/transfers/folder', {method: 'POST', body});
+    if (response.status === 403) throw new Error('No access to folder');
     const data = await response.json();
-    if (!response.ok) throw new Error(data.error || '上传失败，HTTP ' + response.status);
-    result.textContent = '完整性验证通过：' + data.succeeded + '，失败或未确认：' + data.failed + '\n' + JSON.stringify(data, null, 2);
+    if (!response.ok) throw new Error(data.error || 'Upload failed. HTTP ' + response.status);
+    result.textContent = 'Integrity verification passed: ' + data.succeeded + '; failed or unconfirmed: ' + data.failed + '\n' + (data.files || []).map(file => file.relativePath + ': ' + file.status + (file.error ? ' — ' + file.error : '')).join('\n');
   } catch (error) { result.textContent = error.message; }
   finally { button.disabled = false; }
 });

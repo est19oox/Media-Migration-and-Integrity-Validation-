@@ -41,7 +41,7 @@ public class MetadataClient {
     public Plan allocate(String name,long size,String destinationId) {return allocate(name,size,destinationId,null);}
     public Plan allocate(String name,long size,String destinationId,String relativePath) {
         var payload=new java.util.LinkedHashMap<String,Object>();payload.put("fileName",name);payload.put("sizeBytes",size);
-        payload.put("destinationId",destinationId==null?destination:destinationId);if(relativePath!=null)payload.put("relativePath",relativePath);
+        payload.put("destinationId",destinationId);if(relativePath!=null)payload.put("relativePath",relativePath);
         return request(()->metadata.post().uri("/api/metadata/allocations").headers(headers->{headers.setBearerAuth(currentJwt().getTokenValue());
             if(org.springframework.web.context.request.RequestContextHolder.getRequestAttributes() instanceof org.springframework.web.context.request.ServletRequestAttributes attributes) {
                 String run=attributes.getRequest().getHeader("X-MMIV-Verification-Run");if(run!=null)headers.set("X-MMIV-Verification-Run",UUID.fromString(run).toString());
@@ -61,14 +61,31 @@ public class MetadataClient {
         catch(RestClientException error){throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,"Metadata unavailable");}
     }
     public Object destinations() {
-        requireAccess("WRITE");
-        return Map.of("destinations",java.util.List.of(Map.of("destination",destination,"permission","WRITE")));
+        return Map.of("destinations",profile().destinations().stream().filter(f->"WRITE".equals(f.permission())).toList());
     }
+    public Profile profile() {
+        try {return access.get().uri("/api/access/me").header("Authorization","Bearer "+currentJwt().getTokenValue()).retrieve().body(Profile.class);}
+        catch(HttpClientErrorException e){throw new ResponseStatusException(e.getStatusCode(),"Account unavailable");}
+        catch(RestClientException e){throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,"Account service unavailable");}
+    }
+    public record Folder(String destination,String permission) {}
+    public record Profile(String userId,String username,String role,List<Folder> destinations) {}
     public void requireAccess(String action) {
+        requireAccess(destination,action);
+    }
+    public void requireFolder(String folder,String action) {
+        if(folder==null || !folder.matches("[A-Za-z0-9][A-Za-z0-9 _.-]{0,79}") || folder.equals(bucket) || folder.equals("migrations") || folder.equals("upload"))
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,"No access to folder");
+        try {access.get().uri("/api/access/folders/{name}",folder).header("Authorization","Bearer "+currentJwt().getTokenValue()).retrieve().toBodilessEntity();}
+        catch(HttpClientErrorException e){throw new ResponseStatusException(HttpStatus.FORBIDDEN,"No access to folder");}
+        catch(RestClientException e){throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,"Folder service unavailable");}
+        requireAccess(folder,action);
+    }
+    public void requireAccess(String folder,String action) {
         var jwt=currentJwt();
         try {
             var decision=access.post().uri("/api/access/check").header("Authorization","Bearer "+jwt.getTokenValue())
-                .body(Map.of("userId",jwt.getSubject(),"destination",destination,"action",action)).retrieve().body(Decision.class);
+                .body(Map.of("userId",jwt.getSubject(),"destination",folder,"action",action)).retrieve().body(Decision.class);
             if(decision==null || !decision.authorised()) throw new ResponseStatusException(HttpStatus.FORBIDDEN,"Destination permission required");
         } catch(HttpClientErrorException e) {throw new ResponseStatusException(HttpStatus.FORBIDDEN,"Destination permission required");}
         catch(RestClientException e) {throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,"Permission service unavailable");}
@@ -77,12 +94,13 @@ public class MetadataClient {
         try {
             var p=action.get();
             if(p==null || p.metadataId()==null || !p.metadataId().equals(p.migrationId()) || p.fileId()==null
-                    || !currentJwt().getSubject().equals(p.ownerId()) || !bucket.equals(p.bucket()) || !destination.equals(p.destinationId())
+                    || !currentJwt().getSubject().equals(p.ownerId()) || !bucket.equals(p.bucket()) || p.destinationId()==null
+                    || !p.destinationId().matches("[A-Za-z0-9][A-Za-z0-9 _.-]{0,79}")
                     || p.fileName()==null || !p.fileName().matches("[\\p{L}\\p{N}._ ()-]{1,200}")
                     || p.objectPath()==null || p.objectPath().startsWith("/") || p.objectPath().contains("\\")
                     || java.util.Arrays.stream(p.objectPath().split("/",-1)).anyMatch(part->part.isBlank() || part.equals(".") || part.equals(".."))
                     || !p.objectPath().substring(p.objectPath().lastIndexOf('/')+1).equals(p.fileName())
-                    || !("migrations/"+p.metadataId()+"/"+p.objectPath()).equals(p.destinationKey()))
+                    || !(p.destinationId()+"/migrations/"+p.metadataId()+"/"+p.objectPath()).equals(p.destinationKey()))
                 throw new ResponseStatusException(HttpStatus.BAD_GATEWAY,"Invalid metadata assignment");
             return p;
         } catch(HttpClientErrorException e) {throw new ResponseStatusException(e.getStatusCode(),"Metadata assignment rejected");}

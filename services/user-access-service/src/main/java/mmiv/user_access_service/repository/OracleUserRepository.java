@@ -68,6 +68,11 @@ public class OracleUserRepository implements UserRepository {
         .findFirst();
   }
 
+  public List<User> searchUsers(String query) {
+    return jdbcTemplate.queryForList("SELECT USER_ID FROM APP_USERS WHERE (? IS NULL OR INSTR(LOWER(USERNAME),LOWER(?))>0) ORDER BY USERNAME FETCH FIRST 100 ROWS ONLY", String.class, query,query)
+        .stream().map(this::findById).flatMap(Optional::stream).toList();
+  }
+
   private Set<Permission> loadGlobalPermissions(String userId) {
     List<String> values =
         jdbcTemplate.queryForList(
