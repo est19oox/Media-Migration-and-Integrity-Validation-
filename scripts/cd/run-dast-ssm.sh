@@ -47,7 +47,12 @@ if [[ -z "${MMIV_VERIFICATION_RUN_ID:-}" ]]; then
   OWNS_VERIFICATION_RUN=true
 fi
 export MMIV_VERIFICATION_RUN_ID
-export MMIV_VERIFICATION_DESTINATION="${MMIV_VERIFICATION_DESTINATION:-verification}"
+if [[ -z "${USER_ACCESS_TEST_USERNAME:-}" ]]; then
+  export MMIV_VERIFICATION_DESTINATION="mmiv-verification-$MMIV_VERIFICATION_RUN_ID"
+else
+  export MMIV_VERIFICATION_DESTINATION="${MMIV_VERIFICATION_DESTINATION:-}"
+  [[ -n "$MMIV_VERIFICATION_DESTINATION" ]] || { echo 'Supply a verification destination for the existing test account.' >&2; exit 1; }
+fi
 TOTAL_STARTED=$SECONDS
 aws_ssm() {
   aws ssm "$@" --region "$REGION" --cli-connect-timeout 10 --cli-read-timeout 20

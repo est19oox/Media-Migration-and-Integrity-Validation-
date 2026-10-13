@@ -25,7 +25,7 @@ input:focus{outline:3px solid #cbe0ff;border-color:#2667c9}.password{position:re
 .note{color:#68778d;font-size:12px;line-height:1.7;margin:28px 0 0;border-top:1px solid #e7edf4;padding-top:20px}
 [hidden]{display:none!important}@media(max-width:700px){body{padding:16px}.shell{grid-template-columns:1fr}.brand{padding:28px;gap:24px}.brand h1{font-size:28px}.brand small{display:none}.panel{padding:32px 28px}}
 </style>
-</head>
+<!-- PWA disabled: <link rel="manifest" href="/manifest.webmanifest"> --><!-- PWA disabled: <meta name="theme-color" content="#14233b"> --><!-- PWA disabled: <script src="/pwa.js" defer></script> --></head>
 <body>
 <main class="shell">
 <section class="brand" aria-label="Media Migration and Integrity Validation">
@@ -46,7 +46,7 @@ input:focus{outline:3px solid #cbe0ff;border-color:#2667c9}.password{position:re
 <p class="note">New to MMIV? <a href="/signup.html">Create an account</a><br>For a password reset, contact your project administrator.<br><a href="/admin.html">Administrator access</a></p>
 </section>
 </main>
-<script>
+<script src="/feedback.js"></script><script>
 'use strict';
 const form = document.getElementById('loginForm');
 const username = document.getElementById('username');
@@ -61,6 +61,7 @@ const loginUrl = location.port === '8083'
 function message(text, kind) {
   status.textContent = text;
   status.className = 'status' + (kind ? ' ' + kind : '');
+  if(kind==='error')globalThis.mmivFeedback?.notice('Please check your account details',text,'error');
 }
 if (new URLSearchParams(location.search).get('registered') === '1') {
   message('Account created. Sign in with your new username and password.', 'success');
@@ -98,7 +99,7 @@ form.addEventListener('submit', async event => {
       signal: controller.signal
     });
     if (!response.ok) {
-      if (response.status === 401) throw new Error('Invalid username or password.');
+      if (response.status === 401) throw new Error('Invalid username or password. If you do not have an account, use Create an account below.');
       if (response.status === 400) throw new Error('Check your username and password and try again.');
       if (response.status === 429) throw new Error('Too many requests. Please try again later.');
       if (response.status === 403 || response.status === 404) throw new Error('The login endpoint is unavailable. Check the Gateway route and service configuration.');
@@ -144,5 +145,6 @@ form.addEventListener('submit', async event => {
   }
 });
 </script>
+<script src="/english-validation.js"></script>
 </body>
 </html>

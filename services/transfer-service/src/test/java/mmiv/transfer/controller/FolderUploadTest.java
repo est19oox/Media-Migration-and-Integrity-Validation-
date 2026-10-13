@@ -50,19 +50,19 @@ class FolderUploadTest {
         var transfers = new TransferService(new mmiv.transfer.service.TransferSourcePreparer(validator, 104857600), new TransferStrategyFactory(strategy), passingIntegrity(), passingCleanup(), mock(mmiv.transfer.logging.FileEventLogger.class));
         folders = new FolderUploadService(transfers, validator);
         var metadata=mock(mmiv.transfer.integration.MetadataClient.class);
-        when(metadata.allocate(anyString(),anyLong(),nullable(String.class),anyString())).thenAnswer(call -> {
+        when(metadata.allocate(anyString(),anyLong(),nullable(String.class),anyString(),anySet())).thenAnswer(call -> {
             String name=call.getArgument(0);long size=call.getArgument(1);String path=call.getArgument(3);
             var id=java.util.UUID.randomUUID();
             return new mmiv.transfer.integration.MetadataClient.Plan(id,id,java.util.UUID.randomUUID(),"owner","test-bucket","test-bucket",
                     "migrations/"+id+"/"+path,null,name,validator.uploadContentType(name),size,"UPLOAD",path);
         });
-        mvc = MockMvcBuilders.standaloneSetup(new FolderUploadController(new mmiv.transfer.integration.MetadataTransferFacade(metadata,transfers,folders,mock(mmiv.events.EventPublisher.class),validator,new mmiv.transfer.integration.VerificationRunGuard())))
+        mvc = MockMvcBuilders.standaloneSetup(new FolderUploadController(new mmiv.transfer.integration.MetadataTransferFacade(metadata,transfers,folders,mock(mmiv.events.EventPublisher.class),validator,new mmiv.transfer.integration.VerificationRunGuard(),new mmiv.transfer.integration.FolderAccessGuard(),mock(mmiv.transfer.service.ExistingFileNames.class))))
                 .setControllerAdvice(new TransferExceptionHandler()).build();
     }
     @Test void preservesNestedPathsAndDuplicateBasenamesAndCleansTemporaryFiles() throws Exception {
         when(s3.putObject(any(PutObjectRequest.class), any(RequestBody.class)))
                 .thenReturn(PutObjectResponse.builder().build());
-        mvc.perform(multipart("/api/v1/transfers/folder").file(file("a.txt")).file(file("a.txt"))
+        mvc.perform(multipart("/api/v1/transfers/folder").param("destinationId","landing").file(file("a.txt")).file(file("a.txt"))
                 .param("relativePaths", "album/a.txt", "album/sub/deep/a.txt"))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.succeeded").value(2))
                 .andExpect(jsonPath("$.failed").value(0))
@@ -82,7 +82,7 @@ class FolderUploadTest {
         when(gateway.validate(anyString(), anyString(), anyString(), anyString())).thenReturn(
                 new mmiv.transfer.integration.IntegrityValidationGateway.Outcome("UNAVAILABLE", false, "Unconfirmed"),
                 new mmiv.transfer.integration.IntegrityValidationGateway.Outcome("PASSED", true, "Verified"));
-        mvc.perform(multipart("/api/v1/transfers/folder").file(file("a.txt")).file(file("b.txt"))
+        mvc.perform(multipart("/api/v1/transfers/folder").param("destinationId","landing").file(file("a.txt")).file(file("b.txt"))
                 .param("relativePaths", "album/a.txt", "album/b.txt"))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.succeeded").value(1))
                 .andExpect(jsonPath("$.failed").value(1))
@@ -94,21 +94,21 @@ class FolderUploadTest {
     @Test void rejectsUnsafePathsBeforeAnyS3Write() throws Exception {
         for (String path : List.of("/album/a.txt", "album/../a.txt", "album/./a.txt",
                 "album//a.txt", "C:\\album\\a.txt", "album/sub/", "album/evil:a.txt")) {
-            mvc.perform(multipart("/api/v1/transfers/folder").file(file("a.txt"))
+            mvc.perform(multipart("/api/v1/transfers/folder").param("destinationId","landing").file(file("a.txt"))
                     .param("relativePaths", path)).andExpect(status().isBadRequest());
         }
         verifyNoInteractions(s3);
     }
     @Test void rejectsBadManifestAndUnsupportedFilesBeforeUploading() throws Exception {
-        mvc.perform(multipart("/api/v1/transfers/folder").file(file("a.txt")))
+        mvc.perform(multipart("/api/v1/transfers/folder").param("destinationId","landing").file(file("a.txt")))
                 .andExpect(status().isBadRequest());
-        mvc.perform(multipart("/api/v1/transfers/folder").file(file("a.txt")).file(file("bad.exe"))
+        mvc.perform(multipart("/api/v1/transfers/folder").param("destinationId","landing").file(file("a.txt")).file(file("bad.exe"))
                 .param("relativePaths", "album/a.txt", "album/bad.exe"))
                 .andExpect(status().isBadRequest());
-        mvc.perform(multipart("/api/v1/transfers/folder").file(file("a.txt")).file(file("a.txt"))
+        mvc.perform(multipart("/api/v1/transfers/folder").param("destinationId","landing").file(file("a.txt")).file(file("a.txt"))
                 .param("relativePaths", "album/a.txt", "album/a.txt"))
                 .andExpect(status().isBadRequest());
-        mvc.perform(multipart("/api/v1/transfers/folder").file(file("a.txt"))
+        mvc.perform(multipart("/api/v1/transfers/folder").param("destinationId","landing").file(file("a.txt"))
                 .param("relativePaths", "album/b.txt")).andExpect(status().isBadRequest());
         verifyNoInteractions(s3);
     }
@@ -126,7 +126,7 @@ class FolderUploadTest {
         when(s3.putObject(any(PutObjectRequest.class), any(RequestBody.class)))
                 .thenThrow(new IllegalStateException("private details"))
                 .thenReturn(PutObjectResponse.builder().build());
-        mvc.perform(multipart("/api/v1/transfers/folder").file(file("a.txt")).file(file("b.txt"))
+        mvc.perform(multipart("/api/v1/transfers/folder").param("destinationId","landing").file(file("a.txt")).file(file("b.txt"))
                 .param("relativePaths", "album/a.txt", "album/sub/b.txt"))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.succeeded").value(1))
                 .andExpect(jsonPath("$.failed").value(1))
@@ -141,7 +141,7 @@ class FolderUploadTest {
     @org.junit.jupiter.params.ParameterizedTest
     @org.junit.jupiter.params.provider.ValueSource(strings = {"deck.ppt", "deck.pptx", "report.doc", "report.docx"})
     void uploadsOfficeFileWithItsNestedPath(String name) throws Exception {
-        mvc.perform(multipart("/api/v1/transfers/folder").file(file(name))
+        mvc.perform(multipart("/api/v1/transfers/folder").param("destinationId","landing").file(file(name))
                 .param("relativePaths", "Office/sub/" + name))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.succeeded").value(1))
                 .andExpect(jsonPath("$.failed").value(0))

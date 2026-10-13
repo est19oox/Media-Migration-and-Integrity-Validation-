@@ -66,6 +66,8 @@ def values(config, mode):
         if smoke is not None:
             for key, name in [('username', 'USERNAME'), ('password', 'PASSWORD')]:
                 output['USER_ACCESS_TEST_' + name] = text(smoke, key)
+            if smoke.get('destination') is not None:
+                output['MMIV_VERIFICATION_DESTINATION'] = text(smoke, 'destination')
             if smoke.get('userId') is not None:
                 output['USER_ACCESS_TEST_USER_ID'] = text(smoke, 'userId')
     return output

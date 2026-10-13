@@ -16,7 +16,7 @@ ACCOUNT = {'username': 'mmiv_ci_' + 'a' * 32, 'userId': '12345678-1234-4234-8234
 
 class VerificationPermissionTest(unittest.TestCase):
     def test_grant_sql_is_scoped_to_generated_active_user_and_destination(self):
-        sql = grant.grant_sql(ACCOUNT, 'test-landing')
+        sql = grant.grant_sql(ACCOUNT, 'mmiv-verification-12345678-1234-4234-8234-123456789012')
         self.assertIn("USERNAME='mmiv_ci_" + 'a' * 32 + "' AND ROLE='USER' AND ACTIVE=1", sql)
         self.assertIn("PERMISSION='WRITE'", sql)
         self.assertIn("IF found != 1", sql)

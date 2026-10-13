@@ -16,13 +16,15 @@ public class ProfileController {
   @ModelAttribute void noCache(jakarta.servlet.http.HttpServletResponse response){response.setHeader("Cache-Control","no-store");}
   @GetMapping("/me") public Object me(@AuthenticationPrincipal Jwt jwt) {
     var user = users.findById(jwt.getSubject()).filter(u -> u.isActive()).orElseThrow(() -> new ResponseStatusException(HttpStatus.FORBIDDEN));
-    var visible = "ADMIN".equals(user.getRole()) ? folders.list().stream().map(name -> Map.of("destination",name,"permission","WRITE")).toList() : user.getDestinationAccesses().stream().filter(a -> folders.exists(a.getDestination()))
+    var visible = "ADMIN".equals(user.getRole()) ? folders.list().stream().map(name -> Map.of("destination",name,"permission","WRITE")).toList() : user.getDestinationAccesses().stream().filter(a -> !FolderRepository.verification(a.getDestination()) && folders.exists(a.getDestination()))
         .map(a -> Map.of("destination",a.getDestination(),"permission",a.getPermission().name())).toList();
     return Map.of("userId",user.getUserId(),"username",user.getUsername(),"role",user.getRole(),"destinations",visible);
   }
   @GetMapping("/folders/{name}") public Object folder(@AuthenticationPrincipal Jwt jwt,@PathVariable String name) {
     if(!folders.exists(name)) throw new ResponseStatusException(HttpStatus.NOT_FOUND,"Folder not found");
     var user=users.findById(jwt.getSubject()).filter(u->u.isActive()).orElseThrow(()->new ResponseStatusException(HttpStatus.FORBIDDEN));
+    if(FolderRepository.verification(name) && (!user.getUsername().matches("mmiv_ci_[0-9a-f]{32}") || !"USER".equals(user.getRole())))
+      throw new ResponseStatusException(HttpStatus.FORBIDDEN,"No access to folder");
     if(!"ADMIN".equals(user.getRole()) && user.getDestinationAccesses().stream().noneMatch(a->name.equals(a.getDestination())))
       throw new ResponseStatusException(HttpStatus.FORBIDDEN,"No access to folder");
     return Map.of("name",name);

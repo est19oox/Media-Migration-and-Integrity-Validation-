@@ -55,6 +55,18 @@ class AdminSecurityIntegrationTest {
     mvc.perform(get("/api/admin/me")).andExpect(status().isUnauthorized());
     mvc.perform(get("/api/admin/me").header("Authorization","Bearer broken")).andExpect(status().isUnauthorized());
   }
+  @Test void nonexistentPermissionAndAdministratorTargetsReturnNotFound() throws Exception {
+    mvc.perform(put("/api/admin/users/missing-user/destinations").with(caller(ADMIN)).contentType(MediaType.APPLICATION_JSON).content("{\"destination\":\"landing\",\"permission\":\"WRITE\"}"))
+        .andExpect(status().isNotFound());
+    mvc.perform(post("/api/admin/invitations").with(caller(ADMIN)).contentType(MediaType.APPLICATION_JSON).content("{\"username\":\"does-not-exist\"}"))
+        .andExpect(status().isNotFound());
+  }
+  @Test void onlyAdministratorCanDeleteRegisteredFolderAndGrantsAreRemoved() throws Exception {
+    folders.create("delete-test");users.grantDestinationAccess(TARGET,"delete-test",mmiv.user_access_service.model.Permission.WRITE);
+    mvc.perform(delete("/api/admin/folders/delete-test").with(caller(TARGET))).andExpect(status().isForbidden());
+    mvc.perform(delete("/api/admin/folders/delete-test").with(caller(ADMIN))).andExpect(status().isOk());assertFalse(folders.exists("delete-test"));
+    assertTrue(users.findById(TARGET).orElseThrow().getDestinationAccesses().stream().noneMatch(a->a.getDestination().equals("delete-test")));
+  }
   @Test void folderCreationAndSearchRequireCurrentAdministratorRole() throws Exception {
     mvc.perform(post("/api/admin/folders").with(caller(TARGET)).contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"SW001\"}"))
         .andExpect(status().isForbidden());

@@ -16,7 +16,7 @@ test('one folder submission sends one request and restores the button', async ()
         const key = selector + ':' + type;
         (listeners[key] ||= []).push(callback);
       },
-      files: [], disabled: false, textContent: '', options: [], value: '',
+      removeAttribute(){}, files: [], disabled: false, textContent: '', options: [], value: '',
       replaceChildren() { this.options = []; },
       append(option) { this.options.push(option); this.value ||= option.value; }
     });
@@ -28,8 +28,8 @@ test('one folder submission sends one request and restores the button', async ()
     append(...part) { this.parts.push(part); }
   }
   vm.runInNewContext(script, {
-    document: { querySelector: select, createElement: () => ({ value: '', textContent: '' }) }, FormData, encodeURIComponent,
-    mmivAuth: { fetch: async (url, options) => {
+    document: { getElementById:id=>select('#'+id), querySelector: select, createElement: () => ({ value: '', textContent: '' }) }, FormData, encodeURIComponent,
+    mmivAuth: {upload:async(url,body,onProgress)=>{onProgress({percent:50,phase:'uploading'});onProgress({phase:'processing'});requests.push({url,options:{body}});return {ok:true,json:async()=>({succeeded:1,failed:0})};}, fetch: async (url, options) => {
       requests.push({ url, options });
       return { ok: true, json: async () => url === '/api/v1/destinations' ? { destinations: [{ destination: 'landing', permission: 'WRITE' }] } : ({ succeeded: 1, failed: 0 }) };
     }}
@@ -50,6 +50,8 @@ test('one folder submission sends one request and restores the button', async ()
   assert.equal(requests[0].options.body.parts[0][1], 'landing');
   assert.equal(requests[0].options.body.parts[2][1], 'Office/docs/a.docx');
   assert.equal(select('#folderSubmit').disabled, false);
+  assert.equal(select('#folderProgressBar').value,100);
+  assert.equal(select('#folderProgressLabel').textContent,'Folder upload complete.');
 });
 
 
@@ -64,7 +66,7 @@ for (const denied of [true, false]) test(denied
       options: [], replaceChildren(...options) { this.options = options; } });
     return elements.get(selector);
   };
-  vm.runInNewContext(script, { document: { querySelector: select, createElement: () => ({}) }, FormData: class {},
+  vm.runInNewContext(script, { document: { getElementById:id=>select('#'+id), querySelector: select, createElement: () => ({}) }, FormData: class {},
     mmivAuth: { fetch: async () => ({ ok: !denied, status: denied ? 403 : 200, json: async () => ({destinations: []}) }) } });
   await new Promise(setImmediate);
   assert.equal(select('#submit').disabled, true);

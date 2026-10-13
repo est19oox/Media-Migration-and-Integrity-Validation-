@@ -27,6 +27,7 @@ public class AdminController {
   @GetMapping("/folders") public java.util.List<String> folders(@AuthenticationPrincipal Jwt jwt) { return admins.folders(jwt); }
   @PostMapping("/folders") public java.util.List<String> createFolder(@AuthenticationPrincipal Jwt jwt,@RequestBody Folder request) { return admins.createFolder(jwt,request.name()); }
   public record Folder(String name) {}
+  @DeleteMapping("/folders/{name}") public Object deleteFolder(@AuthenticationPrincipal Jwt jwt,@PathVariable String name){return admins.deleteFolder(jwt,name);}
 
   @GetMapping("/users")
   public AdminService.UserDetails lookup(@AuthenticationPrincipal Jwt jwt, @RequestParam String username) {
@@ -45,6 +46,8 @@ public class AdminController {
     return admins.revoke(jwt, userId, destination);
   }
 
+  @PostMapping("/users/{userId}/password-reset") public Object reset(@AuthenticationPrincipal Jwt jwt,@PathVariable String userId){return admins.createPasswordReset(jwt,userId);}
+  @DeleteMapping("/users/{userId}") public org.springframework.http.ResponseEntity<Void> deleteUser(@AuthenticationPrincipal Jwt jwt,@PathVariable String userId){admins.deleteAccount(jwt,userId);return org.springframework.http.ResponseEntity.noContent().build();}
   @PostMapping("/invitations")
   public AdminService.Invitation invite(@AuthenticationPrincipal Jwt jwt, @Valid @RequestBody Invite request) {
     return admins.createInvitation(jwt, request.username());

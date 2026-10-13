@@ -26,7 +26,8 @@ public class IntegrityValidationGateway {
         var request = new IntegrityValidationRequest(transferId, bucket, key, checksum);
         Outcome last = unavailable();
         for (int attempt = 1; attempt <= maxAttempts; attempt++) {
-            last = validateOnce(request);
+            try { last = validateOnce(request); }
+            catch(io.github.resilience4j.circuitbreaker.CallNotPermittedException open) { return unavailable(); }
             if (last.success() || attempt == maxAttempts) return last;
             try { Thread.sleep(retryDelayMs); }
             catch (InterruptedException e) {
@@ -43,7 +44,15 @@ public class IntegrityValidationGateway {
         String key = request.objectKey();
         String checksum = request.sourceChecksum();
         try {
-            var response = client.validate(request);
+            var response = mmiv.resilience.DependencyCircuits.breaker("integrity","eureka:integrity-service")
+                    .executeSupplier(() -> {
+                        try{return client.validate(request);}
+                        catch(FeignException error){
+                            if(error.status()>=400 && error.status()<500 && error.status()!=408 && error.status()!=429)
+                                throw new mmiv.resilience.DependencyCircuits.NonAvailabilityFailure(error);
+                            throw error;
+                        }
+                    });
             if (response == null || !Objects.equals(transferId, response.transferId())
                     || !Objects.equals(bucket, response.bucket()) || !Objects.equals(key, response.objectKey())
                     || !"SHA-256".equals(response.algorithm()) || checksum == null
@@ -61,7 +70,7 @@ public class IntegrityValidationGateway {
             return matches
                     ? new Outcome("PASSED", true, "Transfer completed and integrity verified")
                     : new Outcome("FAILED", false, "File uploaded, but integrity validation failed");
-        } catch (FeignException e) {
+        } catch (FeignException | mmiv.resilience.DependencyCircuits.NonAvailabilityFailure e) {
             // Timeouts, discovery failures, HTTP errors and decoding errors never imply success.
             return unavailable();
         }

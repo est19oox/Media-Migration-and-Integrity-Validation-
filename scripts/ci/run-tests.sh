@@ -101,7 +101,14 @@ run_service() {
     (
         cd "$service_dir"
         if [ "$(basename "$service_dir")" = user-access-service ] && [ "${MMIV_USER_ACCESS_ORACLE_IT:-false}" = true ]; then
+            for integration_source in controller/AuthLoginIT.java repository/OracleUserRepositoryIT.java; do
+                if [ ! -s "src/test/java/mmiv/user_access_service/$integration_source" ]; then
+                    fail "Missing Oracle integration test: $integration_source. Check the checkout/commit before building."
+                    exit 1
+                fi
+            done
             mvn --batch-mode -Poracle-it clean verify
+            python3 "$SCRIPT_DIR/validate-oracle-reports.py" target/failsafe-reports
         else
             mvn --batch-mode clean verify
         fi

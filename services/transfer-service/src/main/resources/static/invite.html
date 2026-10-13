@@ -1,9 +1,10 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Administrator invitation · MMIV</title><link rel="stylesheet" href="/portal.css"></head><body>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Administrator invitation · MMIV</title><link rel="stylesheet" href="/portal.css"><!-- PWA disabled: <link rel="manifest" href="/manifest.webmanifest"> --><!-- PWA disabled: <meta name="theme-color" content="#14233b"> --><!-- PWA disabled: <script src="/pwa.js" defer></script> --></head><body>
 <header><strong>MMIV</strong><nav><a href="/home.html">Home</a></nav><button id="logout" type="button">Sign out</button></header>
 <main><h1>Administrator invitation</h1><p id="status" role="status">Administrator access required.</p><section id="invitation" hidden><p>Accept this invitation using the account named by the administrator who sent it.</p><button id="accept">Accept invitation</button></section></main>
-<script src="/auth.js"></script><script src="/portal.js"></script><script>
+<script src="/feedback.js"></script><script src="/auth.js"></script><script src="/portal.js"></script><script>
 const invitation=new URLSearchParams(location.hash.slice(1)).get('invite');
 mmivAuth.ready.then(()=>{history.replaceState(null,'',location.pathname);if(invitation && /^[a-f0-9]{64}$/.test(invitation)){document.getElementById('invitation').hidden=false;document.getElementById('status').textContent='Your invitation is ready to accept.';}}).catch(()=>{});
-document.getElementById('accept').addEventListener('click',async()=>{const button=document.getElementById('accept');button.disabled=true;try{await mmivPortal.api('/invitations/accept',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:invitation})});location.assign('/admin.html');}catch(error){document.getElementById('status').textContent='Invitation invalid, expired, already used, or issued to another account.';button.disabled=false;}});
-</script></body></html>
+document.getElementById('accept').addEventListener('click',async()=>{const button=document.getElementById('accept');button.disabled=true;try{await mmivPortal.api('/invitations/accept',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:invitation})});if(globalThis.mmivFeedback)mmivFeedback.notice('Administrator access granted','Your invitation was accepted. Press OK to open Administration.','success',()=>location.assign('/admin.html'));else location.assign('/admin.html');}catch(error){document.getElementById('status').textContent='Invitation invalid, expired, already used, or issued to another account.';globalThis.mmivFeedback?.notice('Invitation unsuccessful',document.getElementById('status').textContent,'error');button.disabled=false;}});
+</script><script src="/english-validation.js"></script></body>
+</html>

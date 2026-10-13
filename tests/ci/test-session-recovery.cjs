@@ -59,3 +59,15 @@ test('an authorization rejection is never replayed', async () => {
   assert.equal(result.status, 403);
   assert.equal(requests, 2);
 });
+
+test('folder upload sends CSRF and reports actual transfer progress without replaying permission failures',async()=>{
+ const calls=[],progress=[];
+ class XHR {
+  constructor(){this.listeners={};this.upload={addEventListener:(event,fn)=>{this.upload[event]=fn;}};this.status=403;this.responseText='{"error":"ACCESS_DENIED"}';}
+  open(method,url){calls.push({method,url});}setRequestHeader(key,value){calls.at(-1)[key]=value;}
+  addEventListener(event,fn){this.listeners[event]=fn;}
+  send(){this.upload.progress({lengthComputable:true,loaded:4,total:8});this.upload.load();this.listeners.load();}
+ }
+ const context={window:{},Headers,Error,Date,setTimeout:()=>0,XMLHttpRequest:XHR,document:{getElementById:()=>null},location:{replace(){}},fetch:async()=>session('csrf')};
+ vm.runInNewContext(script,context);const result=await context.window.mmivAuth.upload('/api/v1/transfers/folder','body',event=>progress.push(event));assert.equal(result.status,403);assert.equal(calls.length,1);assert.equal(calls[0]['X-XSRF-TOKEN'],'csrf');assert.equal(progress[0].percent,50);assert.equal(progress[1].phase,'processing');
+});

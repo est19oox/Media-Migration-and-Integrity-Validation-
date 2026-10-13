@@ -7,6 +7,7 @@ on:
 #      - transfer-service
     paths:
       - 'services/**'
+      - 'common/**'
       - 'infrastructure/bootstrap/**'
       - 'infrastructure/terraform/**'
       - 'infrastructure/ansible/**'
@@ -206,7 +207,7 @@ jobs:
           python3 tests/ci/test-verification-data-cleanup.py
           python3 tests/ci/test-admin-bootstrap.py
           python3 tests/ci/test-stack-lifecycle.py
-          node --test tests/ci/test-upload-page.cjs tests/ci/test-transfer-auth-pages.cjs tests/ci/test-session-recovery.cjs tests/ci/test-admin-page.cjs tests/ci/test-file-browser.cjs
+          node --test tests/ci/*.cjs
 
       - name: Reclaim and verify User Access Oracle database storage
         env:

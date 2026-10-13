@@ -12,6 +12,8 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 @RestControllerAdvice
 public class AuthExceptionHandler {
 
+  @ExceptionHandler(org.springframework.web.server.ResponseStatusException.class)
+  public ResponseEntity<Map<String,String>> status(org.springframework.web.server.ResponseStatusException error){return ResponseEntity.status(error.getStatusCode()).header("Cache-Control","no-store").body(Map.of("error",error.getReason()==null?"Request rejected":error.getReason()));}
   @ExceptionHandler(InvalidCredentialsException.class)
   public ResponseEntity<Map<String, String>> handleInvalidCredentials(
       InvalidCredentialsException exception) {

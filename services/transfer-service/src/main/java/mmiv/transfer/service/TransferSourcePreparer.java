@@ -46,7 +46,9 @@ public class TransferSourcePreparer {
 
     public PreparedTransfer prepare(MultipartFile file, String fileName, String key) {
         String validatedName = validateUpload(file);
-        if (!validatedName.equals(fileName)) {
+        int dot=validatedName.lastIndexOf('.');String base=dot>0?validatedName.substring(0,dot):validatedName,extension=dot>0?validatedName.substring(dot):"";
+        boolean suffix=fileName!=null&&fileName.matches(java.util.regex.Pattern.quote(base+" (")+"(?:[2-9]|[1-9][0-9]+)"+java.util.regex.Pattern.quote(")"+extension));
+        if (!validatedName.equals(fileName)&&!suffix) {
             throw new IllegalArgumentException("Assigned file name must match the uploaded file");
         }
         if (key == null || key.isBlank() || key.startsWith("/")) {

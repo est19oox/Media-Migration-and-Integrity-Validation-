@@ -15,7 +15,7 @@ public class IntegrityMetadataGuard {
     private final RestClient client;
     public IntegrityMetadataGuard(@Value("${mmiv.metadata.url:http://discovery-service:8085}") String url){
         var factory=new JdkClientHttpRequestFactory(HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(3)).build());
-        factory.setReadTimeout(Duration.ofSeconds(10));client=RestClient.builder().baseUrl(url).requestFactory(factory).build();
+        factory.setReadTimeout(Duration.ofSeconds(10));client=RestClient.builder().requestInterceptor(mmiv.resilience.DependencyCircuits.http("metadata",url)).baseUrl(url).requestFactory(factory).build();
     }
     public Plan require(Jwt jwt,UUID metadataId,UUID migrationId,UUID fileId,ValidationRequest request){
         if(jwt==null || metadataId==null || migrationId==null || fileId==null)

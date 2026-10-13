@@ -50,13 +50,13 @@ class LocalFileUploadTest {
         strategy = spy(new S3TransferStrategy(s3, "test-bucket"));
         var service = new TransferService(new mmiv.transfer.service.TransferSourcePreparer(validator, 104857600), new TransferStrategyFactory(strategy), passingIntegrity(), passingCleanup(), mock(mmiv.transfer.logging.FileEventLogger.class));
         var metadata=mock(mmiv.transfer.integration.MetadataClient.class);
-        when(metadata.allocate(anyString(),anyLong(),nullable(String.class))).thenAnswer(call -> {
+        when(metadata.allocate(anyString(),anyLong(),nullable(String.class),nullable(String.class),anySet())).thenAnswer(call -> {
             String name=call.getArgument(0);long size=call.getArgument(1);
             var id=java.util.UUID.randomUUID();
             return new mmiv.transfer.integration.MetadataClient.Plan(id,id,java.util.UUID.randomUUID(),"owner","test-bucket","test-bucket",
                     "migrations/"+id+"/"+name,null,name,validator.uploadContentType(name),size,"UPLOAD",name);
         });
-        mvc = MockMvcBuilders.standaloneSetup(new TransferController(new mmiv.transfer.integration.MetadataTransferFacade(metadata,service,new mmiv.transfer.service.FolderUploadService(service,validator),mock(mmiv.events.EventPublisher.class),validator,new mmiv.transfer.integration.VerificationRunGuard())))
+        mvc = MockMvcBuilders.standaloneSetup(new TransferController(new mmiv.transfer.integration.MetadataTransferFacade(metadata,service,new mmiv.transfer.service.FolderUploadService(service,validator),mock(mmiv.events.EventPublisher.class),validator,new mmiv.transfer.integration.VerificationRunGuard(),new mmiv.transfer.integration.FolderAccessGuard(),mock(mmiv.transfer.service.ExistingFileNames.class))))
                 .setControllerAdvice(new TransferExceptionHandler()).build();
     }
 
@@ -75,7 +75,7 @@ class LocalFileUploadTest {
             }
             return PutObjectResponse.builder().build();
         });
-        mvc.perform(multipart("/api/v1/transfers").file(new MockMultipartFile(
+        mvc.perform(multipart("/api/v1/transfers").param("destinationId","landing").file(new MockMultipartFile(
                 "file", "C:\\fakepath\\notes.txt", "application/x-spoofed", bytes)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.fileName").value("notes.txt"))
@@ -89,7 +89,7 @@ class LocalFileUploadTest {
     @Test void integrityFailureStillReturnsUploadedMetadataWithoutSuccess() throws Exception {
         when(gateway.validate(anyString(), anyString(), anyString(), anyString())).thenReturn(
                 new mmiv.transfer.integration.IntegrityValidationGateway.Outcome("FAILED", false, "Checksum mismatch"));
-        mvc.perform(multipart("/api/v1/transfers").file(new MockMultipartFile(
+        mvc.perform(multipart("/api/v1/transfers").param("destinationId","landing").file(new MockMultipartFile(
                 "file", "notes.txt", "text/plain", "hello".getBytes())))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.success").value(false))
                 .andExpect(jsonPath("$.validationResult").value("FAILED"))
@@ -97,20 +97,20 @@ class LocalFileUploadTest {
     }
 
     @Test void missingFileReturns400WithoutUploading() throws Exception {
-        mvc.perform(multipart("/api/v1/transfers").param("note", "missing"))
+        mvc.perform(multipart("/api/v1/transfers").param("destinationId","landing").param("note", "missing"))
                 .andExpect(status().isBadRequest()).andExpect(jsonPath("$.error").value("file is required"));
         verifyNoInteractions(s3);
     }
 
     @Test void emptyFileReturns400WithoutUploading() throws Exception {
-        mvc.perform(multipart("/api/v1/transfers").file(new MockMultipartFile(
+        mvc.perform(multipart("/api/v1/transfers").param("destinationId","landing").file(new MockMultipartFile(
                 "file", "empty.txt", "text/plain", new byte[0])))
                 .andExpect(status().isBadRequest());
         verifyNoInteractions(s3);
     }
 
     @Test void unsupportedExtensionReturns400WithoutUploading() throws Exception {
-        mvc.perform(multipart("/api/v1/transfers").file(new MockMultipartFile(
+        mvc.perform(multipart("/api/v1/transfers").param("destinationId","landing").file(new MockMultipartFile(
                 "file", "bad.exe", "text/plain", "bad".getBytes())))
                 .andExpect(status().isBadRequest());
         verifyNoInteractions(s3);
@@ -119,7 +119,7 @@ class LocalFileUploadTest {
     @Test void storageFailureReturns502AndDeletesStagedFile() throws Exception {
         when(s3.putObject(any(PutObjectRequest.class), any(RequestBody.class)))
                 .thenThrow(new IllegalStateException("secret storage details"));
-        mvc.perform(multipart("/api/v1/transfers").file(new MockMultipartFile(
+        mvc.perform(multipart("/api/v1/transfers").param("destinationId","landing").file(new MockMultipartFile(
                 "file", "notes.txt", "text/plain", "hello".getBytes())))
                 .andExpect(status().isBadGateway())
                 .andExpect(jsonPath("$.error").value("Storage transfer failed"));

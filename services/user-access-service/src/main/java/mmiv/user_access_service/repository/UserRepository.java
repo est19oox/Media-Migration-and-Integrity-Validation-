@@ -13,6 +13,10 @@ public interface UserRepository {
   void create(User user);
 
   boolean deleteVerificationAccount(String userId);
+  /** Soft delete: retain account and permissions, deactivate login and revoke sessions/links. */
+  boolean deleteAccount(String actorId,String targetId);
+  boolean createPasswordReset(String actorId,String targetId,String tokenHash,java.time.Instant expiresAt);
+  java.util.Optional<String> consumePasswordReset(String tokenHash,java.util.function.Supplier<String> passwordHash,java.time.Instant now);
 
   Optional<User> findByUsername(String username);
 

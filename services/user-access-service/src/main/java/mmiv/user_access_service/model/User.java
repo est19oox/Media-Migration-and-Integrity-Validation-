@@ -12,6 +12,7 @@ public class User {
   private final boolean active;
   private final Set<Permission> permissions;
   private final String passwordHash;
+  private final long authVersion;
 
   public User(String userId, List<DestinationAccess> destinationAccesses) {
 
@@ -23,6 +24,7 @@ public class User {
     this.active = true;
     this.permissions = Set.of();
     this.passwordHash = null;
+    this.authVersion = 0;
   }
 
   public User(
@@ -49,7 +51,10 @@ public class User {
       boolean active,
       Set<Permission> permissions,
       String passwordHash) {
-
+    this(userId,destinationAccesses,username,role,active,permissions,passwordHash,0);
+  }
+  public User(String userId,List<DestinationAccess> destinationAccesses,String username,String role,boolean active,Set<Permission> permissions,String passwordHash,long authVersion){
+    this.authVersion=authVersion;
     this.userId = userId;
     this.username = username;
     this.role = role;
@@ -83,6 +88,8 @@ public class User {
   public Set<Permission> getPermissions() {
     return permissions;
   }
+
+  public long getAuthVersion(){return authVersion;}
 
   public String getPasswordHash() {
     return passwordHash;

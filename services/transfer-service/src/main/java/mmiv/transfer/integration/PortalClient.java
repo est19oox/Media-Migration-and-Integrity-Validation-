@@ -13,8 +13,8 @@ public class PortalClient {
       @Value("${mmiv.reporting.url:http://reporting-service:8084}") String reportUrl) {
     var factory=new org.springframework.http.client.JdkClientHttpRequestFactory(java.net.http.HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(3)).build());
     factory.setReadTimeout(Duration.ofSeconds(20));
-    access=RestClient.builder().baseUrl(accessUrl).requestFactory(factory).build();
-    reporting=RestClient.builder().baseUrl(reportUrl).requestFactory(factory).build();
+    access=RestClient.builder().requestInterceptor(mmiv.resilience.DependencyCircuits.http("user-access",accessUrl)).baseUrl(accessUrl).requestFactory(factory).build();
+    reporting=RestClient.builder().requestInterceptor(mmiv.resilience.DependencyCircuits.http("reporting",reportUrl)).baseUrl(reportUrl).requestFactory(factory).build();
     accessBase=java.net.URI.create(accessUrl);reportBase=java.net.URI.create(reportUrl);
   }
   public Object access(HttpMethod method,String path,Object body) { return call(access,method,path,body); }

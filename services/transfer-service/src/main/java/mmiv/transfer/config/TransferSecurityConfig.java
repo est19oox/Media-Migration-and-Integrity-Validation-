@@ -32,6 +32,7 @@ import org.springframework.security.web.csrf.CsrfFilter;
 @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
 public class TransferSecurityConfig {
     public static final String AUTH_COOKIE = "MMIV_SESSION";
+    private static final String[] PUBLIC_APP_ASSETS={"/manifest.webmanifest","/icon-192.png","/icon-512.png","/sw.js","/pwa.js"};
 
     @Bean
     public JwtDecoder transferJwtDecoder(
@@ -54,6 +55,7 @@ public class TransferSecurityConfig {
         return request -> {
             // An explicit Authorization header takes priority, even if it is invalid.
             if (request.getHeader("Authorization") != null) return headerResolver.resolve(request);
+            if ("GET".equals(request.getMethod()) && java.util.Arrays.asList(PUBLIC_APP_ASSETS).contains(request.getRequestURI().substring(request.getContextPath().length()))) return null;
             if (request.getCookies() != null) {
                 for (Cookie cookie : request.getCookies()) {
                     if (AUTH_COOKIE.equals(cookie.getName())) return cookie.getValue();
@@ -123,7 +125,8 @@ public class TransferSecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .dispatcherTypeMatchers(DispatcherType.ERROR).permitAll()
                         .requestMatchers(HttpMethod.GET, "/actuator/health", "/actuator/health/**", "/actuator/info").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/", "/home.html", "/upload.html", "/files.html", "/logs.html", "/admin.html", "/invite.html", "/admin.js", "/portal.js", "/portal.css", "/auth.js").authenticated()
+                        .requestMatchers(HttpMethod.GET,PUBLIC_APP_ASSETS).permitAll()
+                        .requestMatchers(HttpMethod.GET, "/", "/home.html", "/upload.html", "/files.html", "/logs.html", "/admin.html", "/invite.html", "/admin.js", "/portal.js", "/portal.css", "/auth.js", "/preview.js", "/file-browser.js", "/history.html").authenticated()
                         .requestMatchers("/api/v1/transfers", "/api/v1/transfers/**",
                                 "/api/v1/files", "/api/v1/files/**", "/api/v1/session", "/api/v1/destinations", "/api/v1/verification/**", "/api/v1/portal/**").authenticated()
                         .anyRequest().denyAll())

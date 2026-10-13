@@ -15,7 +15,7 @@ public class ReportAuthorization {
     private final RestClient metadata;
     public ReportAuthorization(@Value("${mmiv.metadata.url:http://discovery-service:8085}") String url){
         var f=new JdkClientHttpRequestFactory(HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(3)).build());f.setReadTimeout(Duration.ofSeconds(5));
-        metadata=RestClient.builder().baseUrl(url).requestFactory(f).build();
+        metadata=RestClient.builder().requestInterceptor(mmiv.resilience.DependencyCircuits.http("metadata",url)).baseUrl(url).requestFactory(f).build();
     }
     public void require(UUID id){
         if(!(SecurityContextHolder.getContext().getAuthentication() instanceof JwtAuthenticationToken token))

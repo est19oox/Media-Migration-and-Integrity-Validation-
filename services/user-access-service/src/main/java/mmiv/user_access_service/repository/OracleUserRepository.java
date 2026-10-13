@@ -26,7 +26,7 @@ public class OracleUserRepository implements UserRepository {
   public Optional<User> findById(String userId) {
     return findOne(
         """
-                SELECT user_id, username, role, active, password_hash
+                SELECT user_id, username, role, active, password_hash, auth_version
                 FROM app_users
                 WHERE user_id = ?
                 """,
@@ -41,7 +41,7 @@ public class OracleUserRepository implements UserRepository {
 
     return findOne(
         """
-                SELECT user_id, username, role, active, password_hash
+                SELECT user_id, username, role, active, password_hash, auth_version
                 FROM app_users
                 WHERE username = ?
                 """,
@@ -61,7 +61,7 @@ public class OracleUserRepository implements UserRepository {
                   rs.getString("role"),
                   rs.getInt("active") == 1,
                   loadGlobalPermissions(userId),
-                  rs.getString("password_hash"));
+                  rs.getString("password_hash"),rs.getLong("auth_version"));
             },
             value)
         .stream()
@@ -240,11 +240,40 @@ public class OracleUserRepository implements UserRepository {
         java.sql.Timestamp.from(now), tokenHash, userId, java.sql.Timestamp.from(now));
     if (consumed != 1) return false;
     jdbcTemplate.update("UPDATE APP_USERS SET ROLE='ADMIN' WHERE USER_ID=?", userId);
+    jdbcTemplate.update("DELETE FROM PASSWORD_RESETS WHERE USER_ID=?",userId);
     jdbcTemplate.update("UPDATE ADMIN_INVITATIONS SET CONSUMED_AT=? WHERE USER_ID=? AND CONSUMED_AT IS NULL",
         java.sql.Timestamp.from(now), userId);
     return true;
   }
 
+
+  private record LockedAccount(String role,boolean active){}
+  private boolean accountManagementAllowed(String actorId,String targetId,boolean requireActiveTarget){
+    var ids=new java.util.TreeSet<String>(java.util.List.of(actorId,targetId));var accounts=new java.util.HashMap<String,LockedAccount>();
+    for(String id:ids){var rows=jdbcTemplate.query("SELECT ROLE,ACTIVE FROM APP_USERS WHERE USER_ID=? FOR UPDATE",(rs,n)->new LockedAccount(rs.getString("ROLE"),rs.getInt("ACTIVE")==1),id);if(!rows.isEmpty())accounts.put(id,rows.getFirst());}
+    var actor=accounts.get(actorId);var target=accounts.get(targetId);return actor!=null&&actor.active()&&"ADMIN".equals(actor.role())&&target!=null&&(!requireActiveTarget||target.active())&&(actorId.equals(targetId)||"USER".equals(target.role()));
+  }
+  @Override @Transactional public boolean deleteAccount(String actorId,String targetId){
+    // Recheck roles while locked: an invitation cannot promote a target mid-delete.
+    if(!accountManagementAllowed(actorId,targetId,false))return false;
+    jdbcTemplate.update("UPDATE ADMIN_INVITATIONS SET EXPIRES_AT=SYSTIMESTAMP WHERE USER_ID=? OR ISSUER_USER_ID=?",targetId,targetId);
+    jdbcTemplate.update("UPDATE PASSWORD_RESETS SET EXPIRES_AT=SYSTIMESTAMP WHERE USER_ID=? OR ISSUER_USER_ID=?",targetId,targetId);
+    return jdbcTemplate.update("UPDATE APP_USERS SET ACTIVE=0, AUTH_VERSION=AUTH_VERSION+1 WHERE USER_ID=?",targetId)==1;
+  }
+  @Override @Transactional public boolean createPasswordReset(String actorId,String targetId,String hash,java.time.Instant expires){
+    if(!accountManagementAllowed(actorId,targetId,true))return false;
+    jdbcTemplate.update("DELETE FROM PASSWORD_RESETS WHERE USER_ID=?",targetId);
+    jdbcTemplate.update("INSERT INTO PASSWORD_RESETS(TOKEN_HASH,USER_ID,ISSUER_USER_ID,EXPIRES_AT) VALUES (?,?,?,?)",hash,targetId,actorId,java.sql.Timestamp.from(expires));return true;
+  }
+  @Override @Transactional public Optional<String> consumePasswordReset(String hash,java.util.function.Supplier<String> password,java.time.Instant now){
+    var targets=jdbcTemplate.queryForList("SELECT USER_ID FROM PASSWORD_RESETS WHERE TOKEN_HASH=?",String.class,hash);if(targets.isEmpty())return Optional.empty();String id=targets.getFirst();
+    var active=jdbcTemplate.queryForList("SELECT USER_ID FROM APP_USERS WHERE USER_ID=? AND ACTIVE=1 FOR UPDATE",String.class,id);if(active.isEmpty())return Optional.empty();
+    int consumed=jdbcTemplate.update("DELETE FROM PASSWORD_RESETS WHERE TOKEN_HASH=? AND USER_ID=? AND EXPIRES_AT>?",hash,id,java.sql.Timestamp.from(now));if(consumed!=1)return Optional.empty();
+    jdbcTemplate.update("UPDATE APP_USERS SET PASSWORD_HASH=?,AUTH_VERSION=AUTH_VERSION+1 WHERE USER_ID=?",password.get(),id);
+    jdbcTemplate.update("DELETE FROM PASSWORD_RESETS WHERE USER_ID=?",id);
+    jdbcTemplate.update("DELETE FROM ADMIN_INVITATIONS WHERE USER_ID=?",id);
+    return Optional.of(id);
+  }
   private static void validateDestinationAccessArguments(
       String userId, String destination, Permission permission) {
     if (userId == null

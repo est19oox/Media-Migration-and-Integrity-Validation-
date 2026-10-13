@@ -29,6 +29,8 @@ public class MetadataService {
         if (request == null || request.destinationId() == null || !request.destinationId().matches("[A-Za-z0-9][A-Za-z0-9 _.-]{0,79}") || bucket.equals(request.destinationId()))
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Choose a registered folder");
         permissions.requireFolder(jwt.getTokenValue(),request.destinationId());
+        if(request.destinationId().startsWith("mmiv-verification-") && (verificationRun==null || !request.destinationId().equals("mmiv-verification-"+verificationRun)))
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,"Verification folder requires its run ID");
         permissions.require(jwt.getTokenValue(), jwt.getSubject(), request.destinationId(),"WRITE");
         String name; String source = null; long size;
         if (upload) { name=request.fileName(); size=request.sizeBytes()==null?0:request.sizeBytes(); }
@@ -53,7 +55,8 @@ public class MetadataService {
         if((request.destinationId()+"/migrations/"+id+"/"+objectPath).getBytes(java.nio.charset.StandardCharsets.UTF_8).length>1024)
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"File path is too long");
         var plan=new MetadataPlan(id,id,file,jwt.getSubject(),request.destinationId(),bucket,request.destinationId()+"/migrations/"+id+"/"+objectPath,source,name,contentType,size,upload?"UPLOAD":"SOURCE",objectPath,verificationRun);
-        plans.save(plan);
+        if(request.occupiedPaths()!=null&&(request.occupiedPaths().size()>100000||request.occupiedPaths().stream().anyMatch(p->p==null||p.length()>900)))throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Invalid folder inventory");
+        var named=plans.saveNamed(plan,request.occupiedPaths());if(named!=null)plan=named;
         events.migration("MIGRATION_STARTED","migration.started",id,null,
                 Map.of("initiatedBy",jwt.getSubject(),"source",Map.of("type","DIRECT_UPLOAD","rootId","media")));
         events.migration("FILE_DISCOVERY_COMPLETED","discovery.file.completed",id,file,
@@ -66,6 +69,7 @@ public class MetadataService {
     public MetadataPlan get(Jwt jwt, UUID id, String action) {
         var found="READ".equals(action)?plans.findAny(id):plans.find(id,jwt.getSubject());
         var plan=found.orElseThrow(()->new ResponseStatusException(HttpStatus.NOT_FOUND,"Metadata not found"));
+        if("WRITE".equals(action))permissions.requireFolder(jwt.getTokenValue(),plan.destinationId());
         if("READ".equals(action) && !plan.destinationKey().startsWith(plan.destinationId()+"/") && !plan.ownerId().equals(jwt.getSubject()))
             throw new ResponseStatusException(HttpStatus.NOT_FOUND,"Metadata not found");
         permissions.require(jwt.getTokenValue(),jwt.getSubject(),plan.destinationId(),action);
@@ -74,6 +78,25 @@ public class MetadataService {
         return plan;
     }
     public String destination() { return destination; }
+    public MetadataPlan deleteAuthorization(Jwt jwt,UUID id) {
+        var plan=plans.find(id,jwt.getSubject(),false).orElseThrow(()->new ResponseStatusException(HttpStatus.FORBIDDEN,"Only the uploader can delete this file"));
+        permissions.requireFolder(jwt.getTokenValue(),plan.destinationId());permissions.require(jwt.getTokenValue(),jwt.getSubject(),plan.destinationId(),"WRITE");return plan;
+    }
+    public void releaseName(Jwt jwt,UUID id){var plan=plans.find(id,jwt.getSubject(),false).orElseThrow(()->new ResponseStatusException(HttpStatus.FORBIDDEN,"Assignment owner required"));permissions.require(jwt.getTokenValue(),jwt.getSubject(),plan.destinationId(),"WRITE");plans.releaseName(id,jwt.getSubject());}
+    public int deletePlan(Jwt jwt,UUID id,String key) {
+        var plan=plans.findAny(id).orElse(null);if(plan==null)return 0;if(!plan.destinationKey().equals(key))throw new ResponseStatusException(HttpStatus.CONFLICT,"File assignment mismatch");
+        if(!plan.ownerId().equals(jwt.getSubject()))permissions.requireAdmin(jwt.getTokenValue());
+        permissions.require(jwt.getTokenValue(),jwt.getSubject(),plan.destinationId(),"WRITE");return plans.delete(id);
+    }
+    public int deleteFolderPlans(Jwt jwt,String folder,String path) {
+        permissions.requireAdmin(jwt.getTokenValue());permissions.requireFolder(jwt.getTokenValue(),folder);
+        if(path!=null && (path.isBlank()||path.length()>900||Arrays.stream(path.split("/",-1)).anyMatch(p->p.equals(".")||p.equals("..")||!p.matches("[\\p{L}\\p{N}._ ()-]{1,200}"))))
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Invalid folder path");
+        return plans.deleteFolder(folder,path);
+    }
+    public List<String> ownedKeys(Jwt jwt,List<UUID> ids) {
+        permissions.requireActive(jwt.getTokenValue());if(ids==null||ids.size()>100)throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Too many IDs");return plans.ownedKeys(jwt.getSubject(),ids);
+    }
     public List<MetadataPlan> folderPlans(Jwt jwt,String folder,int page) {
         if(page<0 || page>100000) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Invalid page");
         permissions.requireFolder(jwt.getTokenValue(),folder);
@@ -87,7 +110,8 @@ public class MetadataService {
             case "pptx"->"application/vnd.openxmlformats-officedocument.presentationml.presentation";
             default->throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Unsupported media type"); };
     }
-    public record CreatePlan(String destinationId,String sourcePath,String fileName,Long sizeBytes,String relativePath) {
-        public CreatePlan(String destinationId,String sourcePath,String fileName,long sizeBytes){this(destinationId,sourcePath,fileName,sizeBytes,null);}
+    public record CreatePlan(String destinationId,String sourcePath,String fileName,Long sizeBytes,String relativePath,java.util.List<String> occupiedPaths) {
+        public CreatePlan(String destinationId,String sourcePath,String fileName,Long sizeBytes,String relativePath){this(destinationId,sourcePath,fileName,sizeBytes,relativePath,null);}
+        public CreatePlan(String destinationId,String sourcePath,String fileName,long sizeBytes){this(destinationId,sourcePath,fileName,sizeBytes,null,null);}
     }
 }

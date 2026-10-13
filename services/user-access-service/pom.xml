@@ -77,6 +77,7 @@
     </dependencies>
   </dependencyManagement>
   <dependencies>
+    <dependency><groupId>io.github.resilience4j</groupId><artifactId>resilience4j-circuitbreaker</artifactId><version>2.3.0</version></dependency>
     <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-amqp</artifactId></dependency>
     <dependency>
       <groupId>org.springframework.boot</groupId>
@@ -181,7 +182,16 @@
         <executions><execution><goals>
           <goal>integration-test</goal><goal>verify</goal>
         </goals></execution></executions>
-        <configuration><failIfNoTests>true</failIfNoTests></configuration>
+        <configuration>
+          <failIfNoTests>true</failIfNoTests>
+          <includes>
+            <include>**/*IT.java</include>
+          </includes>
+          <systemPropertyVariables>
+            <mmiv.events.enabled>false</mmiv.events.enabled>
+            <management.health.rabbit.enabled>false</management.health.rabbit.enabled>
+          </systemPropertyVariables>
+        </configuration>
       </plugin></plugins></build>
     </profile>
   </profiles>

@@ -22,9 +22,10 @@ public class VerificationCleanupService {
         this.repository=repository;this.permissions=permissions;this.destination=destination;
         var factory=new org.springframework.http.client.JdkClientHttpRequestFactory(java.net.http.HttpClient.newBuilder().connectTimeout(java.time.Duration.ofSeconds(3)).build());
         factory.setReadTimeout(java.time.Duration.ofMinutes(5));
-        transfer=RestClient.builder().baseUrl(transferUrl).requestFactory(factory).build();
-        reporting=RestClient.builder().baseUrl(reportingUrl).requestFactory(factory).build();
+        transfer=RestClient.builder().requestInterceptor(mmiv.resilience.DependencyCircuits.http("transfer",transferUrl)).baseUrl(transferUrl).requestFactory(factory).build();
+        reporting=RestClient.builder().requestInterceptor(mmiv.resilience.DependencyCircuits.http("reporting",reportingUrl)).baseUrl(reportingUrl).requestFactory(factory).build();
     }
+    public boolean closed(Jwt jwt,UUID run){permissions.requireActive(jwt.getTokenValue());return repository.isClosed(jwt.getSubject(),run);}
     public List<MetadataPlan> plans(Jwt jwt,UUID run) {
         permissions.requireActive(jwt.getTokenValue());
         var plans=repository.verificationPlans(jwt.getSubject(),run);
@@ -40,6 +41,9 @@ public class VerificationCleanupService {
         } catch(RestClientException error) {
             throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,"Verification cleanup incomplete; retry with the same run ID");
         }
-        return Map.of("deletedPlans",repository.deleteVerificationPlans(jwt.getSubject(),run),"runId",run);
+        int deleted=repository.deleteVerificationPlans(jwt.getSubject(),run);
+        try{transfer.post().uri("/api/v1/verification/{run}/finish",run).header("Authorization","Bearer "+jwt.getTokenValue()).retrieve().toBodilessEntity();}
+        catch(RestClientException e){throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,"Verification folder cleanup incomplete; retry with the same run ID");}
+        return Map.of("deletedPlans",deleted,"runId",run);
     }
 }
