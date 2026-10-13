@@ -39,6 +39,11 @@ TEMP_DIR=$(mktemp -d)
 TUNNEL_PID=
 SCAN_PID=
 ZAP_CONTAINER="mmiv-ec2-dast-$$"
+ZAP_CONTAINER_CREATED=false
+ZAP_CLEANUP_ATTEMPTED=false
+ZAP_EVIDENCE_CAPTURED=false
+CURRENT_ATTEMPT=0
+SCAN_CODE=
 # Never use a previous scan's session ID during cleanup of an early failure.
 : > "$REPORT_DIR/tunnel.log"
 OWNS_VERIFICATION_RUN=false
@@ -57,12 +62,76 @@ TOTAL_STARTED=$SECONDS
 aws_ssm() {
   aws ssm "$@" --region "$REGION" --cli-connect-timeout 10 --cli-read-timeout 20
 }
+preserve_zap_evidence() {
+  local PREFIX="$1"
+  [[ "$ZAP_CONTAINER_CREATED" == true ]] || return 0
+
+  if ! timeout 10s docker logs "$ZAP_CONTAINER" \
+    > "$REPORT_DIR/${PREFIX}container.log" 2>&1; then
+    echo "::warning::Could not collect ZAP container logs; see ${PREFIX}container.log." >&2
+  fi
+  if ! timeout 10s docker inspect --format '{{json .State}}' "$ZAP_CONTAINER" \
+    > "$REPORT_DIR/${PREFIX}container-state.json" 2> "$REPORT_DIR/${PREFIX}container-inspect.log"; then
+    echo "::warning::Could not inspect ZAP container; see ${PREFIX}container-inspect.log." >&2
+  fi
+  if ! timeout 10s docker cp "$ZAP_CONTAINER:/root/.ZAP/zap.log" \
+    "$REPORT_DIR/${PREFIX}zap-internal.log" 2> "$REPORT_DIR/${PREFIX}zap-internal-copy.log"; then
+    echo "::warning::Could not copy the internal ZAP log; see ${PREFIX}zap-internal-copy.log." >&2
+  fi
+  if [[ "$SCAN_MODE" == api ]]; then
+    if ! timeout 10s docker cp "$ZAP_CONTAINER:/zap/wrk/openapi.json" \
+      "$REPORT_DIR/${PREFIX}openapi.json" 2> "$REPORT_DIR/${PREFIX}openapi-copy.log"; then
+      echo "::warning::Could not copy the scanner OpenAPI file; see ${PREFIX}openapi-copy.log." >&2
+    fi
+  fi
+  for NAME in zap-report.json zap-report.html; do
+    if ! timeout 10s docker cp "$ZAP_CONTAINER:/zap/wrk/$NAME" \
+      "$REPORT_DIR/${PREFIX}$NAME" 2> "$REPORT_DIR/${PREFIX}${NAME}.copy.log"; then
+      echo "::warning::Could not copy partial $NAME; see ${PREFIX}${NAME}.copy.log." >&2
+    fi
+  done
+  if [[ "$SERVICE_NAME" == transfer-service && "$SCAN_MODE" == api ]]; then
+    if ! timeout 10s docker cp "$ZAP_CONTAINER:/zap/wrk/upload-seed.json" \
+      "$REPORT_DIR/${PREFIX}upload-seed.json" 2> "$REPORT_DIR/${PREFIX}upload-seed-copy.log"; then
+      echo "::warning::Could not copy partial upload seed evidence; see ${PREFIX}upload-seed-copy.log." >&2
+    fi
+  fi
+  ZAP_EVIDENCE_CAPTURED=true
+}
+remove_zap_container() {
+  [[ "$ZAP_CONTAINER_CREATED" == true ]] || return 0
+  ZAP_CLEANUP_ATTEMPTED=true
+  if timeout 15s docker rm -f -v "$ZAP_CONTAINER" \
+    > "$REPORT_DIR/zap-container-cleanup.log" 2>&1; then
+    ZAP_CONTAINER_CREATED=false
+    return 0
+  fi
+  cat "$REPORT_DIR/zap-container-cleanup.log" >&2
+  echo "::error::Could not remove ZAP scan container $ZAP_CONTAINER; see zap-container-cleanup.log." >&2
+  return 1
+}
+stop_scan_process() {
+  [[ -n "$SCAN_PID" ]] || return 0
+  kill -TERM -- "-$SCAN_PID" 2>/dev/null
+  for _ in $(seq 1 50); do
+    kill -0 -- "-$SCAN_PID" 2>/dev/null || break
+    sleep 0.1
+  done
+  kill -KILL -- "-$SCAN_PID" 2>/dev/null
+  wait "$SCAN_PID" 2>/dev/null
+  SCAN_PID=
+}
 cleanup() {
   EXIT_CODE=$?
   trap - EXIT
   set +e
-  timeout 15s docker rm -f -v "$ZAP_CONTAINER" >/dev/null 2>&1
-  if [[ -n "$SCAN_PID" ]]; then kill "$SCAN_PID" 2>/dev/null; wait "$SCAN_PID" 2>/dev/null; fi
+  if [[ "$ZAP_CONTAINER_CREATED" == true && "$ZAP_EVIDENCE_CAPTURED" != true ]]; then
+    preserve_zap_evidence "zap-interrupted-"
+  fi
+  stop_scan_process
+  if [[ "$ZAP_CONTAINER_CREATED" == true && "$ZAP_CLEANUP_ATTEMPTED" != true ]]; then
+    if ! remove_zap_container; then EXIT_CODE=1; fi
+  fi
   if [[ "$OWNS_VERIFICATION_RUN" == true && "$PORT" == 8080 && -f "$TEMP_DIR/auth.env" && "${DAST_CLEANUP_ONLY:-false}" != true ]]; then
     MMIV_VERIFICATION_ACCOUNT_FILE="$ACCOUNT_FILE" VERIFICATION_AUTH_BASE_PATH=/user-access \
       python3 scripts/cd/login-for-verification.py "http://127.0.0.1:$LOCAL_PORT" "$TEMP_DIR/auth.env" \
@@ -214,7 +283,6 @@ API_TEST_TOKEN="$ENDPOINT_TOKEN" python3 scripts/cd/test-endpoints.py \
 prepare_auth
 echo '[3/3] Running ZAP on GitHub runner; scanner output streams below'
 echo "ZAP scan starts at: $TARGET_URL"
-SCAN_ARGS=(zap-baseline.py -t "$TARGET_URL" -m 1 -T 5 -d -l WARN -I)
 SCAN_TIMEOUT=600s
 if [[ "$SCAN_MODE" == api ]]; then
   # JSON OpenAPI uses the standard library and needs no Swagger dependency.
@@ -227,58 +295,130 @@ if not spec.get('paths'):
 spec['servers'] = [{'url': 'http://127.0.0.1:' + sys.argv[1]}]
 Path(sys.argv[2]).write_text(json.dumps(spec, indent=2) + '\n')
 PY
-  SCAN_ARGS=(zap-api-scan.py -t /zap/wrk/openapi.json -f openapi -T 5 -d -l WARN -I
-    -z "-config ascan.maxScanDurationInMins=10 -config ascan.maxRuleDurationInMins=1")
   SCAN_TIMEOUT=1200s
-  if [[ "$SERVICE_NAME" == transfer-service ]]; then
-    SCAN_ARGS+=(--hook /zap/wrk/zap-upload-hook.py)
-  fi
   echo "Active API scan: $SERVICE_NAME using $OPENAPI_FILE; requests may change test data."
 fi
-docker create --user 0:0 --name "$ZAP_CONTAINER" --network host \
-  --volume /zap/wrk -e PYTHONUNBUFFERED=1 "${AUTH_DOCKER_ARGS[@]}" "$ZAP_IMAGE" \
-  "${SCAN_ARGS[@]}" \
-  -J zap-report.json -r zap-report.html > "$REPORT_DIR/container-id.txt"
-if [[ "$SCAN_MODE" == api ]]; then
-  timeout 15s docker cp "$TEMP_DIR/openapi.json" "$ZAP_CONTAINER:/zap/wrk/openapi.json"
-  cp "$TEMP_DIR/openapi.json" "$REPORT_DIR/openapi.json"
-  if [[ "$SERVICE_NAME" == transfer-service ]]; then
-    timeout 15s docker cp tests/api/zap-upload-hook.py "$ZAP_CONTAINER:/zap/wrk/zap-upload-hook.py"
-  fi
-fi
-SCAN_STARTED=$SECONDS
-# Save the scanner status separately so tee cannot hide a failure.
-(
-  set +e
-  timeout --kill-after=15s "$SCAN_TIMEOUT" docker start --attach "$ZAP_CONTAINER" 2>&1 | tee "$REPORT_DIR/zap.log"
-  PIPE_CODES=("${PIPESTATUS[@]}")
-  SCAN_CODE=${PIPE_CODES[0]}
-  if ((PIPE_CODES[1] != 0)); then SCAN_CODE=1; fi
-  printf '%s\n' "$SCAN_CODE" > "$TEMP_DIR/scan-code"
-) &
-SCAN_PID=$!
-while kill -0 "$SCAN_PID" 2>/dev/null; do
-  if ! kill -0 "$TUNNEL_PID" 2>/dev/null; then
-    echo '::error::SSM tunnel closed during the scan.'
-    cat "$REPORT_DIR/tunnel.log"
+ATTEMPT_LIMIT=3
+SCAN_PASSED=false
+USED_ZAP_PROXY_PORTS=()
+for CURRENT_ATTEMPT in $(seq 1 "$ATTEMPT_LIMIT"); do
+  ZAP_PROXY_PORT=
+  for PORT_SELECTION_ATTEMPT in $(seq 1 10); do
+    CANDIDATE_PROXY_PORT=$(python3 - <<'PY'
+import socket
+
+with socket.socket() as proxy:
+    proxy.bind(('0.0.0.0', 0))
+    print(proxy.getsockname()[1])
+PY
+)
+    if [[ " ${USED_ZAP_PROXY_PORTS[*]} " != *" $CANDIDATE_PROXY_PORT "* ]]; then
+      ZAP_PROXY_PORT="$CANDIDATE_PROXY_PORT"
+      break
+    fi
+  done
+  if [[ -z "$ZAP_PROXY_PORT" ]]; then
+    echo "::error::Could not select a fresh ZAP proxy port after 10 candidates."
     exit 1
   fi
-  echo "ZAP running on runner: elapsed $((SECONDS - SCAN_STARTED))s; total $((SECONDS - TOTAL_STARTED))s"
-  sleep 10
+  USED_ZAP_PROXY_PORTS+=("$ZAP_PROXY_PORT")
+  echo "ZAP startup attempt $CURRENT_ATTEMPT/$ATTEMPT_LIMIT using proxy port $ZAP_PROXY_PORT"
+  ZAP_PROXY_CONFIG="-config network.localServers.mainProxy.port=$ZAP_PROXY_PORT"
+  if [[ "$SCAN_MODE" == baseline ]]; then
+    SCAN_ARGS=(zap-baseline.py -t "$TARGET_URL" -m 1 -T 5 -d -l WARN -I -z "$ZAP_PROXY_CONFIG")
+  else
+    SCAN_ARGS=(zap-api-scan.py -t /zap/wrk/openapi.json -f openapi -T 5 -d -l WARN -I
+      -z "-config ascan.maxScanDurationInMins=10 -config ascan.maxRuleDurationInMins=1 $ZAP_PROXY_CONFIG")
+    if [[ "$SERVICE_NAME" == transfer-service ]]; then
+      SCAN_ARGS+=(--hook /zap/wrk/zap-upload-hook.py)
+    fi
+  fi
+  ZAP_CONTAINER="mmiv-ec2-dast-$$-$CURRENT_ATTEMPT"
+  ZAP_EVIDENCE_CAPTURED=false
+  ZAP_CLEANUP_ATTEMPTED=false
+  docker create --user 0:0 --name "$ZAP_CONTAINER" --network host \
+    --volume /zap/wrk -e PYTHONUNBUFFERED=1 "${AUTH_DOCKER_ARGS[@]}" "$ZAP_IMAGE" \
+    "${SCAN_ARGS[@]}" -J zap-report.json -r zap-report.html \
+    > "$REPORT_DIR/container-id.txt"
+  ZAP_CONTAINER_CREATED=true
+  if [[ "$SCAN_MODE" == api ]]; then
+    timeout 15s docker cp "$TEMP_DIR/openapi.json" "$ZAP_CONTAINER:/zap/wrk/openapi.json"
+    cp "$TEMP_DIR/openapi.json" "$REPORT_DIR/openapi.json"
+    if [[ "$SERVICE_NAME" == transfer-service ]]; then
+      timeout 15s docker cp tests/api/zap-upload-hook.py "$ZAP_CONTAINER:/zap/wrk/zap-upload-hook.py"
+    fi
+  fi
+
+  ATTEMPT_LOG="$REPORT_DIR/zap-attempt-$CURRENT_ATTEMPT.log"
+  rm -f "$TEMP_DIR/scan-code"
+  SCAN_STARTED=$SECONDS
+  # The scanner may fail to bind after the port probe has released its socket.
+  setsid bash -c '
+    set +e
+    timeout --kill-after=15s "$1" docker start --attach "$2" 2>&1 | tee "$3" | tee -a "$4"
+    PIPE_CODES=("${PIPESTATUS[@]}")
+    SCAN_RESULT=${PIPE_CODES[0]}
+    if ((PIPE_CODES[1] != 0 || PIPE_CODES[2] != 0)); then SCAN_RESULT=1; fi
+    printf "%s\n" "$SCAN_RESULT" > "$5"
+  ' _ "$SCAN_TIMEOUT" "$ZAP_CONTAINER" "$ATTEMPT_LOG" "$REPORT_DIR/zap.log" "$TEMP_DIR/scan-code" &
+  SCAN_PID=$!
+  while [[ ! -f "$TEMP_DIR/scan-code" ]]; do
+    if ! kill -0 "$SCAN_PID" 2>/dev/null; then
+      wait "$SCAN_PID"
+      echo '::error::ZAP scanner process exited without recording an exit code.'
+      exit 1
+    fi
+    if ! kill -0 "$TUNNEL_PID" 2>/dev/null; then
+      echo '::error::SSM tunnel closed during the scan.'
+      cat "$REPORT_DIR/tunnel.log"
+      exit 1
+    fi
+    if (( (SECONDS - SCAN_STARTED) % 10 == 0 )); then
+      echo "ZAP running: attempt $CURRENT_ATTEMPT/$ATTEMPT_LIMIT; elapsed $((SECONDS - SCAN_STARTED))s; total $((SECONDS - TOTAL_STARTED))s"
+    fi
+    sleep 1
+  done
+  wait "$SCAN_PID"
+  SCAN_PID=
+  SCAN_CODE=$(cat "$TEMP_DIR/scan-code")
+  echo "ZAP attempt $CURRENT_ATTEMPT exit code: $SCAN_CODE"
+  preserve_zap_evidence "zap-attempt-$CURRENT_ATTEMPT-"
+
+  if [[ "$SCAN_CODE" == 0 ]]; then
+    SCAN_PASSED=true
+    break
+  fi
+  if ! grep -Eiq '(BindException[^[:cntrl:]]*Address already in use|bind[^[:cntrl:]]*address already in use|address already in use[^[:cntrl:]]*bind|EADDRINUSE)' "$ATTEMPT_LOG"; then
+    echo "::error::ZAP failed with code $SCAN_CODE. Review zap-attempt-$CURRENT_ATTEMPT.log and captured container evidence."
+    exit "$SCAN_CODE"
+  fi
+  if [[ "$CURRENT_ATTEMPT" == "$ATTEMPT_LIMIT" ]]; then
+    echo "::error::ZAP could not start because of a proxy-port binding conflict after $ATTEMPT_LIMIT attempts."
+    echo "::error::Original ZAP exit code: $SCAN_CODE."
+    exit "$SCAN_CODE"
+  fi
+  echo "::warning::ZAP startup reported a proxy-port binding conflict on attempt $CURRENT_ATTEMPT."
+  if ! remove_zap_container; then
+    echo "::error::Original ZAP exit code: $SCAN_CODE; container cleanup also failed."
+    echo "::error::Stopping DAST retries because failed-attempt container cleanup failed." >&2
+    exit "$SCAN_CODE"
+  fi
 done
-wait "$SCAN_PID"
-SCAN_PID=
-SCAN_CODE=$(cat "$TEMP_DIR/scan-code")
-echo "ZAP exit code: $SCAN_CODE"
-# Preserve evidence before container cleanup, including after timeout/failure.
-timeout 15s docker inspect --format '{{json .State}}' "$ZAP_CONTAINER" > "$REPORT_DIR/container-state.json" || true
-timeout 15s docker cp "$ZAP_CONTAINER:/root/.ZAP/zap.log" "$REPORT_DIR/zap-internal.log" 2> "$REPORT_DIR/zap-internal-copy.log" || true
-if [[ "$SCAN_MODE" == "api" ]]; then
-  timeout 15s docker cp "$ZAP_CONTAINER:/zap/wrk/openapi.json" "$REPORT_DIR/openapi.json" || true
+
+if [[ "$SCAN_PASSED" != true ]]; then
+  echo '::error::ZAP did not complete successfully.'
+  exit 1
 fi
+cp "$REPORT_DIR/zap-attempt-$CURRENT_ATTEMPT-zap-report.json" "$REPORT_DIR/zap-report.json" 2>/dev/null || true
+cp "$REPORT_DIR/zap-attempt-$CURRENT_ATTEMPT-zap-report.html" "$REPORT_DIR/zap-report.html" 2>/dev/null || true
+REPORTS_OK=true
+for NAME in zap-report.json zap-report.html; do
+  if [[ ! -s "$REPORT_DIR/$NAME" ]]; then REPORTS_OK=false; fi
+done
 SEED_OK=true
 if [[ "$SERVICE_NAME" == transfer-service && "$SCAN_MODE" == api ]]; then
-  timeout 15s docker cp "$ZAP_CONTAINER:/zap/wrk/upload-seed.json" "$REPORT_DIR/upload-seed.json" || SEED_OK=false
+  cp "$REPORT_DIR/zap-attempt-$CURRENT_ATTEMPT-upload-seed.json" "$REPORT_DIR/upload-seed.json" 2>/dev/null || true
+  if [[ ! -s "$REPORT_DIR/upload-seed.json" ]]; then SEED_OK=false; fi
   if [[ "$SEED_OK" == true ]]; then
     python3 - "$REPORT_DIR/upload-seed.json" <<'PY' || SEED_OK=false
 import json, sys
@@ -287,18 +427,11 @@ if json.load(open(sys.argv[1])).get('validated') is not True:
 PY
   fi
 fi
-REPORTS_OK=true
-for NAME in zap-report.json zap-report.html; do
-  timeout 15s docker cp "$ZAP_CONTAINER:/zap/wrk/$NAME" "$REPORT_DIR/$NAME" || REPORTS_OK=false
-done
-if [[ "$SCAN_CODE" != 0 ]]; then
-  echo "::error::ZAP failed with code $SCAN_CODE. Review ec2-dast artifacts."
-  exit "$SCAN_CODE"
-fi
 if [[ "$REPORTS_OK" != true ]]; then
-  echo '::error::ZAP completed without the required HTML/JSON reports.'; exit 1
+  echo '::error::ZAP completed without the required non-empty HTML/JSON reports.'; exit 1
 fi
 if [[ "$SEED_OK" != true ]]; then
   echo '::error::ZAP did not capture a successful multipart upload. Review upload-seed.json and zap.log.'; exit 1
 fi
+if ! remove_zap_container; then exit 1; fi
 echo "DAST passed against deployed EC2 service in $((SECONDS - TOTAL_STARTED))s."

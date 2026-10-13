@@ -74,6 +74,9 @@ jobs:
           python3 tests/ci/test-stack-lifecycle.py
           node --test tests/ci/*.cjs
 
+      - name: Test DAST tunnel and scanner lifecycle
+        run: python3 tests/ci/test-dast-tunnel.py
+
       - name: Build and test services
         run: bash scripts/ci/run-tests.sh .
 
