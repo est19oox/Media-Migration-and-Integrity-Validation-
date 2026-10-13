@@ -122,3 +122,5 @@ test('signup handles duplicate usernames and rejects mismatched passwords locall
 test('normal login preserves an administrator invitation and opens its acceptance page', async () => {
   const token='a'.repeat(64);const app=loginHarness(true,true,true,'#invite='+token);await app.submit();assert.deepEqual(app.navigations,['http://localhost:8080/invite.html#invite='+token]);
 });
+
+test('failed login offers account creation in English',async()=>{const app=loginHarness(false);await app.submit();assert.match(app.nodes.status.textContent,/Create an account/);});

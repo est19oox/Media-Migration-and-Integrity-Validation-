@@ -3,12 +3,12 @@ const assert=require('node:assert/strict');
 const {readFileSync}=require('node:fs');
 const vm=require('node:vm');
 const source=readFileSync('services/transfer-service/src/main/resources/static/admin.js','utf8');
-async function page(role='ADMIN',hash=''){
+async function page(role='ADMIN',hash='',clipboard=true){
  const nodes=new Map(),requests=[],historyCalls=[],copied=[];
- const element=id=>{if(!nodes.has(id))nodes.set(id,{value:'',textContent:'',hidden:id==='management',disabled:false,options:[],listeners:{},addEventListener(event,fn){this.listeners[event]=fn;},replaceChildren(){this.options=[];this.value='';}});return nodes.get(id);};
+ const element=id=>{if(!nodes.has(id))nodes.set(id,{value:'',textContent:'',hidden:id==='management',disabled:false,options:[],listeners:{},focus(){},select(){},setSelectionRange(){},addEventListener(event,fn){this.listeners[event]=fn;},replaceChildren(){this.options=[];this.value='';}});return nodes.get(id);};
  const user={userId:'11111111-1111-4111-8111-111111111111',username:'alice',active:true,destinations:[]};
  let folders=['SW001','semester2'];
- const context={document:{getElementById:element,querySelectorAll:()=>['grant','revoke','copyInvitation'].map(element)},location:{origin:'https://mmiv.example',hash,pathname:'/admin.html'},history:{replaceState(...args){historyCalls.push(args);}},navigator:{clipboard:{async writeText(text){copied.push(text);}}},URL,URLSearchParams,Error,mmivAuth:{ready:Promise.resolve()},mmivPortal:{option(select,value,text){select.options.push({value,textContent:text});select.value ||= value;},async api(path,options){requests.push({path,options});if(path==='/me')return {role};if(path==='/admin/folders'){if(options){folders.push(JSON.parse(options.body).name);}return folders;}if(path.startsWith('/admin/users?q='))return [user];if(path.includes('/permissions')){user.destinations=options.method==='DELETE'?[]:[JSON.parse(options.body)];return {...user};}if(path==='/admin/invitations')return {token:'b'.repeat(64)};if(path==='/invitations/accept')return {};throw new Error('Unexpected request '+path);}}};
+ const context={document:{getElementById:element,execCommand(){copied.push(element('invitationLink').value);return true;},querySelectorAll:()=>['grant','revoke','copyInvitation'].map(element)},location:{origin:'https://mmiv.example',hash,pathname:'/admin.html'},history:{replaceState(...args){historyCalls.push(args);}},navigator:{clipboard:clipboard?{async writeText(text){copied.push(text);}}:undefined},URL,URLSearchParams,Error,mmivAuth:{ready:Promise.resolve()},mmivPortal:{option(select,value,text){select.options.push({value,textContent:text});select.value ||= value;},async api(path,options){requests.push({path,options});if(path==='/me')return {role};if(path==='/admin/folders'){if(options){folders.push(JSON.parse(options.body).name);}return folders;}if(path.startsWith('/admin/users?q='))return [user];if(path.includes('/permissions')){user.destinations=options.method==='DELETE'?[]:[JSON.parse(options.body)];return {...user};}if(path==='/admin/invitations')return {token:'b'.repeat(64)};if(path==='/invitations/accept')return {};throw new Error('Unexpected request '+path);}}};
  vm.runInNewContext(source,context);const flush=async()=>{for(let i=0;i<10;i++)await new Promise(setImmediate);};await flush();
  return {element,requests,historyCalls,copied,async trigger(id,event='click'){element(id).listeners[event]({preventDefault(){}});await flush();}};
 }
@@ -28,5 +28,7 @@ test('invitation uses the shared session and is removed from the address',async(
  const app=await page('ADMIN','#invite='+'a'.repeat(64));assert.ok(app.requests.some(r=>r.path==='/invitations/accept'));assert.equal(app.historyCalls[0][2],'/admin.html');
 });
 test('invitation link can be delivered with a recipient-accessible origin',async()=>{
- const app=await page();app.element('invitationOrigin').value='https://website.example';app.element('inviteUsername').value='alice';await app.trigger('inviteAdmin','submit');assert.equal(app.element('invitationLink').textContent,'https://website.example/invite.html#invite='+'b'.repeat(64));await app.trigger('copyInvitation');assert.deepEqual(app.copied,[app.element('invitationLink').textContent]);
+ const app=await page();app.element('invitationOrigin').value='https://website.example';app.element('inviteUsername').value='alice';await app.trigger('inviteAdmin','submit');assert.equal(app.element('invitationLink').value,'https://website.example/invite.html#invite='+'b'.repeat(64));await app.trigger('copyInvitation');assert.deepEqual(app.copied,[app.element('invitationLink').value]);
 });
+
+test('copy invitation falls back on HTTP when Clipboard API is unavailable',async()=>{const app=await page('ADMIN','',false);app.element('inviteUsername').value='alice';await app.trigger('inviteAdmin','submit');await app.trigger('copyInvitation');assert.deepEqual(app.copied,[app.element('invitationLink').value]);});

@@ -2,18 +2,20 @@
 <html lang="en">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- PWA disabled: <link rel="manifest" href="/manifest.webmanifest"> --><!-- PWA disabled: <meta name="theme-color" content="#14233b"> --><!-- PWA disabled: <script src="/pwa.js" defer></script> -->
 <title>Upload files · MMIV</title>
 <link rel="stylesheet" href="/portal.css">
-<header><strong>MMIV</strong><nav><a href="/home.html">Home</a><a href="/files.html">Files</a><a href="/logs.html">Logs</a><a href="/admin.html" data-admin hidden>Administration</a></nav><button id="logout" type="button">Sign out</button></header>
+<header><strong>MMIV</strong><nav><a href="/home.html">Home</a><a href="/files.html">Files</a><a href="/history.html">My activity</a><a href="/logs.html" data-admin hidden>Log dashboard</a><a href="/admin.html" data-admin hidden>Administration</a></nav><button id="logout" type="button">Sign out</button></header>
 <main>
 <h1>Upload files to the cloud</h1>
 <p>Choose a file from your computer and upload it to a permitted folder.</p>
 <label for="destination">Folder</label>
-<select id="destination" required><option value="">Select a folder</option></select>
+<select id="destination"><option value="">Select a folder</option></select>
 <p id="destinationStatus" role="status"></p>
 <form id="uploadForm">
 <label for="file">Choose a file</label>
-<input id="file" name="file" type="file" accept=".png,.jpg,.jpeg,.mp4,.mp3,.txt,.pdf,.ppt,.pptx,.doc,.docx" required>
+<button id="chooseFile" type="button">Choose file</button><span id="fileSelection">No file selected</span>
+<input class="visually-hidden" id="file" name="file" type="file" accept=".png,.jpg,.jpeg,.mp4,.mp3,.txt,.pdf,.ppt,.pptx,.doc,.docx">
 <small>Supported formats: PNG, JPG, JPEG, MP4, MP3, TXT, PDF, PPT, PPTX, DOC and DOCX. Maximum size: 100 MiB.</small>
 <button id="submit" type="submit">Upload</button>
 </form>
@@ -21,16 +23,21 @@
 <h2>Upload a folder (including subfolders)</h2>
 <form id="folderForm">
 <label for="folder">Choose a folder from your computer</label>
-<input id="folder" type="file" webkitdirectory multiple required>
+<button id="chooseFolder" type="button">Choose folder</button><span id="folderSelection">No folder selected</span>
+<input class="visually-hidden" id="folder" type="file" webkitdirectory multiple>
 <small>Folder paths are preserved. Up to 500 files, totaling no more than 100 MiB. Supported formats: PNG, JPG, JPEG, MP4, MP3, TXT, PDF, PPT, PPTX, DOC and DOCX. Empty files and folders are not supported. If some uploads fail, check the result for each file.</small>
 <button id="folderSubmit" type="submit">Upload folder</button>
 </form>
+<div id="folderProgress" hidden><progress id="folderProgressBar" max="100" value="0"></progress><p id="folderProgressLabel" role="status"></p></div>
 <pre id="folderResult" role="status" aria-live="polite"></pre>
 <pre id="result" role="status" aria-live="polite"></pre>
-<p id="links" hidden><a id="preview" target="_blank" rel="noopener">View file</a> · <a id="download">Download file</a> · <a href="/files.html">Open file viewer</a></p>
+<p id="links" hidden><button id="preview" type="button">Preview</button> · <a id="download">Download file</a> · <a href="/files.html">Open file viewer</a></p>
 </main>
-<script src="/auth.js"></script><script src="/portal.js"></script>
+<script src="/auth.js"></script><script src="/portal.js"></script><script src="/preview.js"></script>
 <script>
+let uploadedFile=null;
+document.querySelector('#preview').addEventListener('click',()=>{if(uploadedFile)mmivPreview.open(uploadedFile.id,uploadedFile.name);});
+for(const [input,button,label] of [['file','chooseFile','fileSelection'],['folder','chooseFolder','folderSelection']]){document.getElementById(button).addEventListener('click',()=>document.getElementById(input).click());document.getElementById(input).addEventListener('change',()=>{const files=Array.from(document.getElementById(input).files);document.getElementById(label).textContent=input==='file'?(files[0]?.name||'No file selected'):(files.length?files.length+' files selected':'No folder selected');});}
 async function loadDestinations() {
   const select = document.querySelector('#destination');
   const status = document.querySelector('#destinationStatus');
@@ -77,7 +84,7 @@ document.querySelector('#uploadForm').addEventListener('submit', async event => 
     if (!response.ok) throw new Error(data.error || 'Upload failed. HTTP ' + response.status);
     result.textContent = (data.success ? 'Upload succeeded and integrity verification passed.' : data.cleanupStatus === 'DELETED' ? 'Integrity verification failed. The uploaded file was deleted.' : 'Integrity verification failed. Automatic deletion could not be confirmed; check the file manually.') + '\nFile: ' + file.name + '\nFolder: ' + document.querySelector('#destination').value;
     const id = encodeURIComponent(data.fileId);
-    document.querySelector('#preview').href = '/api/v1/files/' + id + '/content';
+    uploadedFile={id:data.fileId,name:file.name};
     document.querySelector('#download').href = '/api/v1/files/' + id + '/download';
     document.querySelector('#links').hidden = !data.success;
   } catch (error) { result.textContent = error.message; }
@@ -100,15 +107,22 @@ document.querySelector('#folderForm').addEventListener('submit', async event => 
     body.append('files', file, file.name);
     body.append('relativePaths', file.webkitRelativePath);
   }
-  button.disabled = true; result.textContent = 'Uploading folder…';
+  button.disabled = true; result.textContent = '';
+  document.getElementById('folderProgress').hidden=false;document.getElementById('folderProgressBar').value=0;document.getElementById('folderProgressLabel').textContent='Preparing upload…';
   try {
-    const response = await mmivAuth.fetch('/api/v1/transfers/folder', {method: 'POST', body});
+    const response = await mmivAuth.upload('/api/v1/transfers/folder', body, progress => {
+      const bar=document.getElementById('folderProgressBar'),label=document.getElementById('folderProgressLabel');
+      if(progress.phase==='processing'){bar.removeAttribute('value');label.textContent='Files received. Transferring and verifying integrity…';}
+      else {bar.value=progress.percent;label.textContent='Uploading folder: '+Math.round(progress.percent)+'%';}
+    });
     if (response.status === 403) throw new Error('No access to folder');
     const data = await response.json();
     if (!response.ok) throw new Error(data.error || 'Upload failed. HTTP ' + response.status);
+    document.getElementById('folderProgressBar').value=100;document.getElementById('folderProgressLabel').textContent=data.failed?'Finished with some failed files.':'Folder upload complete.';
     result.textContent = 'Integrity verification passed: ' + data.succeeded + '; failed or unconfirmed: ' + data.failed + '\n' + (data.files || []).map(file => file.relativePath + ': ' + file.status + (file.error ? ' — ' + file.error : '')).join('\n');
-  } catch (error) { result.textContent = error.message; }
+  } catch (error) { result.textContent = error.message;document.getElementById('folderProgress').hidden=true; }
   finally { button.disabled = false; }
 });
 </script>
+<script src="/english-validation.js"></script>
 </html>

@@ -15,6 +15,10 @@ public class DestinationPermissionFilter extends OncePerRequestFilter {
     @Override protected void doFilterInternal(HttpServletRequest request,HttpServletResponse response,FilterChain chain)
             throws ServletException,IOException {
         String path=request.getRequestURI().substring(request.getContextPath().length());
+        if(path.equals("/logs.html") && SecurityContextHolder.getContext().getAuthentication() instanceof JwtAuthenticationToken) {
+            try {if(!"ADMIN".equals(metadata.profile().role())){response.setStatus(302);response.setHeader("Location","/history.html");response.setHeader("Cache-Control","no-store");return;}}
+            catch(ResponseStatusException error){response.sendError(error.getStatusCode().value());return;}
+        }
         if(path.equals("/admin.html") && SecurityContextHolder.getContext().getAuthentication() instanceof JwtAuthenticationToken) {
             try {
                 if(!"ADMIN".equals(metadata.profile().role())) {

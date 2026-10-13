@@ -15,7 +15,7 @@ public class TransferClient {
     private final RestClient client;
     public TransferClient(@Value("${mmiv.transfer.url:http://transfer-service:8081}") String url) {
         var factory=new JdkClientHttpRequestFactory(HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(3)).build());
-        factory.setReadTimeout(Duration.ofMinutes(3)); client=RestClient.builder().baseUrl(url).requestFactory(factory).build();
+        factory.setReadTimeout(Duration.ofMinutes(3)); client=RestClient.builder().requestInterceptor(mmiv.resilience.DependencyCircuits.http("transfer",url)).baseUrl(url).requestFactory(factory).build();
     }
     public Object transfer(UUID metadataId,String token) {
         try {return client.post().uri("/api/v1/transfers").headers(headers->{headers.setBearerAuth(token);

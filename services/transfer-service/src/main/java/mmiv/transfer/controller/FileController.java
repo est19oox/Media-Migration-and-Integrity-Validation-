@@ -72,7 +72,7 @@ public class FileController {
 
     private void headers(HttpServletResponse response, StoredFile file, ByteRange range, boolean download) {
         String type = previewType(file.fileName());
-        boolean inline = !download && (type.startsWith("image/") || type.startsWith("video/")
+        boolean inline = !download && (type.startsWith("image/") || type.startsWith("video/") || type.startsWith("audio/")
                 || type.startsWith("text/plain") || type.equals("application/pdf"));
         response.setStatus(range == null ? 200 : 206);
         response.setContentType(type);
@@ -95,6 +95,7 @@ public class FileController {
             case "png" -> "image/png";
             case "jpg", "jpeg" -> "image/jpeg";
             case "mp4" -> "video/mp4";
+            case "mp3" -> "audio/mpeg";
             case "pdf" -> "application/pdf";
             case "ppt" -> "application/vnd.ms-powerpoint";
             case "pptx" -> "application/vnd.openxmlformats-officedocument.presentationml.presentation";

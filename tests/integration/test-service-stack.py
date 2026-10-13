@@ -130,6 +130,14 @@ class S3Fixture(http.server.BaseHTTPRequestHandler):
         self.end_headers()
         if not head:
             self.wfile.write(body)
+    def do_POST(self):
+        import xml.etree.ElementTree as ET
+        root=ET.fromstring(self.rfile.read(int(self.headers['Content-Length'])))
+        bucket=urllib.parse.urlsplit(self.path).path.strip('/')
+        for item in root.findall('{*}Object'):
+            key=item.findtext('{*}Key');self.objects.pop('/'+bucket+'/'+urllib.parse.quote(key,safe='/'),None)
+        body=b'<DeleteResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/"/>'
+        self.send_response(200);self.send_header('Content-Type','application/xml');self.send_header('Content-Length',str(len(body)));self.end_headers();self.wfile.write(body)
     def do_DELETE(self):
         self.objects.pop(urllib.parse.urlsplit(self.path).path, None)
         self.send_response(204)
@@ -347,7 +355,7 @@ def main():
         assert request(gateway+'/api/v1/files/'+result['fileId']+'/download',token=viewer_token)[0]==200
         assert request(gateway+'/api/reports/'+plan['migrationId'],token=viewer_token)[0]==200
         assert request(gateway+'/api/metadata/allocations','POST',{'destinationId':'SW001','fileName':'blocked.txt','sizeBytes':1},viewer_token)[0]==403
-        assert request(gateway+'/api/v1/portal/logs?folder=SW001',token=viewer_token)[0]==200
+        assert request(gateway+'/api/v1/portal/logs?folder=SW001',token=viewer_token)[0]==403
         assert request(gateway+'/api/v1/portal/logs?folder=semester2',token=viewer_token)[0]==403
         assert request(gateway+'/api/v1/portal/logs',token=admin_token)[0]==200
         assert request(gateway+'/api/v1/portal/files?folder=SW001',token=viewer_token)[0]==200
@@ -355,6 +363,13 @@ def main():
         guessed=base64.urlsafe_b64encode(b'semester2/private.txt').decode().rstrip('=')
         S3Fixture.objects['/it-landing/semester2/private.txt']=(b'private','text/plain')
         assert request(gateway+'/api/v1/files/'+guessed+'/download',token=viewer_token)[0]==403
+        assert request(gateway+'/api/v1/portal/files/'+result['fileId'],'DELETE',token=viewer_token)[0]==403
+        assert request(admin_api+'/users/'+viewer_id+'/destinations','PUT',{'destination':'SW001','permission':'WRITE'},admin_token)[0]==200
+        assert request(gateway+'/api/v1/portal/files/'+result['fileId'],'DELETE',token=viewer_token)[0]==403
+        assert request(gateway+'/api/v1/portal/folders?folder=SW001','DELETE',token=viewer_token)[0]==403
+        def personal_history():
+            data=json.loads(request(gateway+'/api/v1/portal/history',token=viewer_token)[1]);return data if any(e['action']=='Download' for e in data['entries']) else False
+        history=wait(personal_history,60);assert all(e['action']!='Upload' for e in history['entries']);assert 'migrationId' not in json.dumps(history)
         print('PASS folder browsing, shared READ downloads/reports, WRITE isolation and scoped dashboards',flush=True)
 
         assert request(admin_api + '/users/' + user_id + '/destinations', 'PUT',
@@ -390,6 +405,32 @@ def main():
         assert request(cleanup_url,'POST',{},token)[0]==200
         assert int(mongo("db.getSiblingDB('mmiv_reporting').migration_reports.countDocuments({_id:"+json.dumps(plan['metadataId'])+"})"))==0
         assert int(mongo("db.getSiblingDB('mmiv_reporting').audit_events.countDocuments({migrationId:"+json.dumps(plan['metadataId'])+"})"))==0
+        # Temporary verification catalog entry is never visible and is removed last.
+        temporary_run=str(uuid.uuid4());temporary_folder='mmiv-verification-'+temporary_run
+        sql("INSERT INTO MMIV_FOLDERS(NAME) VALUES ('"+temporary_folder+"');\nINSERT INTO USER_DESTINATION_ACCESS(USER_ID,DESTINATION,PERMISSION) VALUES ('"+user_id+"','"+temporary_folder+"','WRITE');\nCOMMIT;")
+        for actor in [token,admin_token]:
+            assert temporary_folder not in json.dumps(json.loads(request(gateway+'/api/v1/portal/me',token=actor)[1]))
+        assert request(gateway+'/api/metadata/allocations','POST',{'destinationId':temporary_folder,'fileName':'test.txt','sizeBytes':4},token)[0]==403
+        status,body=request(gateway+'/api/metadata/plans','POST',{'destinationId':temporary_folder,'sourcePath':'test.txt'},token,headers={'X-MMIV-Verification-Run':temporary_run});assert status==200,(status,body)
+        temporary_plan=json.loads(body)
+        assert request(gateway+'/api/metadata/plans/'+temporary_plan['metadataId']+'/transfer','POST',{},token)[0]==200
+        status,body=request(gateway+'/api/v1/verification/'+temporary_run+'/finish','POST',{},token);assert status==409,(status,body)
+        temp_cleanup=gateway+'/api/metadata/verification/'+temporary_run+'/cleanup'
+        status,body=request(temp_cleanup,'POST',{},token);assert status==200,(status,body)
+        assert all(not k.startswith('/it-landing/'+temporary_folder+'/') for k in S3Fixture.objects)
+        assert sql("SELECT COUNT(*) FROM MMIV_FOLDERS WHERE NAME='"+temporary_folder+"';").strip()=='0'
+        assert sql("SELECT COUNT(*) FROM USER_DESTINATION_ACCESS WHERE DESTINATION='"+temporary_folder+"';").strip()=='0'
+        assert request(temp_cleanup,'POST',{},token)[0]==200
+        # Ownership deletion, nested folder boundaries and complete catalog/grant cleanup.
+        assert request(gateway+'/api/v1/portal/files/'+base64.urlsafe_b64encode(unrelated['destinationKey'].encode()).decode().rstrip('='),'DELETE',token=token)[0]==200
+        assert '/it-landing/'+unrelated['destinationKey'] not in S3Fixture.objects
+        S3Fixture.objects['/it-landing/semester2/docs/a.txt']=(b'a','text/plain')
+        S3Fixture.objects['/it-landing/semester2/docs-other/b.txt']=(b'b','text/plain')
+        assert request(gateway+'/api/v1/portal/folders?folder=semester2&path=docs','DELETE',token=admin_token)[0]==200
+        assert '/it-landing/semester2/docs/a.txt' not in S3Fixture.objects and '/it-landing/semester2/docs-other/b.txt' in S3Fixture.objects
+        assert request(gateway+'/api/v1/portal/folders?folder=semester2','DELETE',token=admin_token)[0]==200
+        assert all(not k.startswith('/it-landing/semester2/') for k in S3Fixture.objects)
+        assert 'semester2' not in json.loads(request(gateway+'/api/v1/portal/admin/folders',token=admin_token)[1])
         print('PASS scoped verification cleanup removes S3, metadata, reports and migration audits; preserves unrelated data',flush=True)
         # Every service emits lifecycle + request audit, and broker outage preserves pending events.
         def source_count():

@@ -27,6 +27,7 @@ public class AdminController {
   @GetMapping("/folders") public java.util.List<String> folders(@AuthenticationPrincipal Jwt jwt) { return admins.folders(jwt); }
   @PostMapping("/folders") public java.util.List<String> createFolder(@AuthenticationPrincipal Jwt jwt,@RequestBody Folder request) { return admins.createFolder(jwt,request.name()); }
   public record Folder(String name) {}
+  @DeleteMapping("/folders/{name}") public Object deleteFolder(@AuthenticationPrincipal Jwt jwt,@PathVariable String name){return admins.deleteFolder(jwt,name);}
 
   @GetMapping("/users")
   public AdminService.UserDetails lookup(@AuthenticationPrincipal Jwt jwt, @RequestParam String username) {

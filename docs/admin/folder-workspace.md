@@ -1,6 +1,6 @@
 # Folder workspace
 
-Sign in through the Gateway. Successful login opens `/home.html`; the root URL also opens Home for signed-in users. Home links to Upload, Browse & download, Log dashboard and Administration according to the account's current permissions. All pages are in English and share the same 30-minute HttpOnly login cookie. Administration checks the current Oracle role and does not ask for a second login.
+Sign in through the Gateway. Successful login opens `/home.html`; the root URL also opens Home for signed-in users. Home links to Upload, Browse & download, My activity, and administrator-only Log dashboard and Administration according to the account's current permissions. All pages are in English and share the same 30-minute HttpOnly login cookie. Administration checks the current Oracle role and does not ask for a second login.
 
 ## Administrator workflow
 
@@ -13,9 +13,9 @@ The S3 bucket remains `media-migration-dev-landing` (or the configured `MMIV_BUC
 
 ## User workflow
 
-Upload offers only folders with WRITE permission. Files offers all granted folders and lists their contents, with clickable previews and download links; users do not enter file IDs. Files in a shared folder are readable by every account with READ for that folder, regardless of uploader. Knowing or changing an encoded file ID cannot bypass the folder check. Grant changes apply to subsequent requests, including existing sessions. Accounts without grants see **No access to folder**.
+Upload offers only folders with WRITE permission. Files offers all granted folders and lists their contents, with nested folder navigation, breadcrumbs, separate Preview buttons that open a modal, and download links; users do not enter file IDs. Files in a shared folder are readable by every account with READ for that folder, regardless of uploader. Knowing or changing an encoded file ID cannot bypass the folder check. Grant changes apply to subsequent requests, including existing sessions. Accounts without grants see **No access to folder**.
 
-Metadata assigns `<folder>/migrations/<metadataId>/<relativePath>` inside the fixed bucket. The storage UUID prevents same-name uploads from overwriting one another; browser pages show normal relative filenames and hide bucket/key details. New transfers still require their plan's owner and current WRITE permission. Downloads, metadata reads and reports use current folder READ permission. The Log dashboard shows migration reports/events for permitted folders; only current active administrators may query system-wide service logs.
+Metadata assigns `<folder>/migrations/<metadataId>/<relativePath>` inside the fixed bucket. The storage UUID prevents same-name uploads from overwriting one another; browser pages show normal relative filenames and hide bucket/key details. New transfers still require their plan's owner and current WRITE permission. Downloads, metadata reads and reports use current folder READ permission. The detailed Log dashboard is administrator-only, including its folder-specific API. Ordinary users see My activity: only their own uploads, downloads and deletions, without raw events, internal IDs or other users’ activity. Older events without an actor ID cannot be included safely. Folder uploads show bytes sent as a percentage, followed by a processing phase during storage transfer and integrity verification.
 
 ## APIs and deployment
 
@@ -23,4 +23,16 @@ Browser operations use `/api/v1/portal/**` at Transfer. Cookie mutations require
 
 Redeploy User Access, Discovery/Metadata, Transfer, Reporting and Gateway together. No new dependency or secret is required. Oracle creates the folder catalog idempotently at startup; existing accounts, password hashes, grants and objects are retained. Existing bucket-level grants are not translated into grants for every folder. Older objects outside registered folder prefixes remain in S3 and are not automatically moved.
 
-Verification uses the registered `verification` folder by default (`MMIV_VERIFICATION_DESTINATION` may override it). Managed verification registers it and grants only the generated account access. Supplied test accounts must already have WRITE to the selected folder. Run-tagged objects, plans and migration records are cleaned before account deletion; the reusable folder catalog entry and minimal closed-run markers remain.
+Verification generates a reserved `mmiv-verification-<run UUID>` folder per run and grants only the generated test account access. Reserved folders, including legacy `verification`, are excluded from everyone’s browser folder lists and cannot be created or granted through Administration. Run-tagged S3 versions, metadata, reports and migration records are cleaned before removing the temporary folder marker, catalog entry, grant and finally the generated account. Cleanup refuses to remove the folder if unexpected objects or versions remain. Minimal closed-run markers and Mongo tombstones remain to reject late events; cleanup failure fails verification. Supplied test accounts require explicit `userAccessSmoke.destination` (or `MMIV_VERIFICATION_DESTINATION`) and existing WRITE permission to an ordinary folder; that folder and account are preserved.
+
+## Deletion and phone use
+
+Administrators can delete individual files, uploaded nested folders, or a registered top-level folder. The English confirmation identifies the selection. Deletion permanently removes all matching S3 versions and delete markers; root-folder deletion also removes its metadata assignments, Oracle catalog entry and every grant. Nested deletion keeps the registered root and sibling folders. Retained audit records document deletions. S3 failures stop metadata/catalog cleanup and return an error so the same operation can be retried.
+
+Regular users can delete only files assigned to them by Metadata, while they retain WRITE permission. The backend checks both ownership and the exact assigned object key; a guessed file ID cannot bypass this. Legacy objects with no ownership assignment can be deleted only by an administrator. Grants disappearing during an admitted transfer are rechecked before subsequent work. Folder mutations and uploads are coordinated within the single deployed Transfer instance.
+
+The folder list is compact on desktop and uses rows with touch controls on phones. English file-picker labels and validation messages replace browser-localized page controls. The operating system’s file picker and browser PDF/media controls may still follow the device language.
+
+PWA installation and worker registration are currently commented out at the project owner’s request. The normal website remains responsive on phones. Optional PWA assets are retained for future use; no unregister step is needed because this feature was not deployed.
+
+Invitation copying uses the Clipboard API where available, then a selected-text copy fallback on HTTP. If browser restrictions prevent both, the link stays selected with English Ctrl+C/Cmd+C instructions. Searching for an unknown account or inviting a nonexistent administrator recipient shows an account-creation prompt. Failed login advises using Create an account while retaining a generic credential failure.

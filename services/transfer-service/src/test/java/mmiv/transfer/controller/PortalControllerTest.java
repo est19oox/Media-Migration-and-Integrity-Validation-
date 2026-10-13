@@ -12,7 +12,7 @@ class PortalControllerTest {
   final MetadataClient metadata=mock(MetadataClient.class);
   final PortalClient portal=mock(PortalClient.class);
   final S3Client s3=mock(S3Client.class);
-  final PortalController controller=new PortalController(metadata,portal,s3,"bucket");
+  final PortalController controller=new PortalController(metadata,portal,s3,"bucket",mock(mmiv.transfer.service.FileMutationService.class),new FolderAccessGuard());
   @Test void ordinaryUsersCannotCreateStorageMarkers() {
     doThrow(new ResponseStatusException(HttpStatus.FORBIDDEN)).when(portal).admin();
     assertThrows(ResponseStatusException.class,()->controller.create(new PortalController.Folder("SW001")));
@@ -28,6 +28,7 @@ class PortalControllerTest {
     assertThrows(ResponseStatusException.class,()->controller.files("semester2",null));verifyNoInteractions(s3);
   }
   @Test void listingKeepsExactFolderBoundaryAndHidesMigrationStoragePaths() {
+    when(metadata.profile()).thenReturn(new MetadataClient.Profile("id","admin","ADMIN",java.util.List.of()));
     String key="SW001/migrations/11111111-1111-4111-8111-111111111111/docs/report.pdf";
     when(s3.listObjectsV2(any(ListObjectsV2Request.class))).thenReturn(ListObjectsV2Response.builder()
         .contents(S3Object.builder().key("SW001/").size(0L).build(),S3Object.builder().key(key).size(4L).build()).nextContinuationToken("next-page").build());

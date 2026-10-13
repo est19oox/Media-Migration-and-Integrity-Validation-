@@ -19,9 +19,14 @@ public class MetadataController {
     @PostMapping("/allocations") public MetadataPlan allocate(@AuthenticationPrincipal Jwt jwt,@RequestBody MetadataService.CreatePlan request, @RequestHeader(value="X-MMIV-Verification-Run",required=false) UUID run) {
         return metadata.create(jwt,request,true,run);
     }
+    @GetMapping("/verification/{run}/closed") public Object closed(@AuthenticationPrincipal Jwt jwt,@PathVariable UUID run){return java.util.Map.of("closed",cleanup.closed(jwt,run));}
     @GetMapping("/verification/{run}/plans") public java.util.List<MetadataPlan> verificationPlans(@AuthenticationPrincipal Jwt jwt,@PathVariable UUID run) {return cleanup.plans(jwt,run);}
     @PostMapping("/verification/{run}/cleanup") public Object cleanup(@AuthenticationPrincipal Jwt jwt,@PathVariable UUID run) {return cleanup.clean(jwt,run);}
     @GetMapping("/folders/{folder}/plans") public Object folderPlans(@AuthenticationPrincipal Jwt jwt,@PathVariable String folder,@RequestParam(defaultValue="0") int page) {return metadata.folderPlans(jwt,folder,page);}
+    @GetMapping("/plans/{id}/delete-authorization") public MetadataPlan deleteAuthorization(@AuthenticationPrincipal Jwt jwt,@PathVariable UUID id){return metadata.deleteAuthorization(jwt,id);}
+    @DeleteMapping("/plans/{id}") public Object delete(@AuthenticationPrincipal Jwt jwt,@PathVariable UUID id,@RequestParam String key){return java.util.Map.of("deleted",metadata.deletePlan(jwt,id,key));}
+    @DeleteMapping("/folders/{folder}/plans") public Object deleteFolder(@AuthenticationPrincipal Jwt jwt,@PathVariable String folder,@RequestParam(required=false) String path){return java.util.Map.of("deleted",metadata.deleteFolderPlans(jwt,folder,path));}
+    @PostMapping("/ownership") public Object owned(@AuthenticationPrincipal Jwt jwt,@RequestBody java.util.List<UUID> ids){return metadata.ownedKeys(jwt,ids);}
     @GetMapping("/plans/{id}") public MetadataPlan read(@AuthenticationPrincipal Jwt jwt,@PathVariable UUID id) {
         return metadata.get(jwt,id,"READ");
     }

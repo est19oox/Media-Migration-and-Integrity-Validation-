@@ -126,7 +126,7 @@ public class AdminService {
   public record Invitation(String token, java.time.Instant expiresAt) {}
 
   private void validateDestination(String value) {
-    if (!folders.exists(value))
+    if (mmiv.user_access_service.repository.FolderRepository.verification(value) || !folders.lock(value))
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unknown folder");
   }
 
@@ -136,12 +136,15 @@ public class AdminService {
   public List<String> folders(Jwt jwt) { return authorized(jwt, folders::list); }
   public List<String> createFolder(Jwt jwt, String name) {
     return authorized(jwt, () -> {
-      if (!mmiv.user_access_service.repository.FolderRepository.valid(name) || bucket.equals(name))
+      if (!mmiv.user_access_service.repository.FolderRepository.valid(name) || mmiv.user_access_service.repository.FolderRepository.verification(name) || bucket.equals(name))
         throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Use a folder name of up to 80 letters, numbers, spaces, dots, underscores or hyphens");
       folders.create(name); events.audit("ADMIN_FOLDER_CREATED", Map.of("actorId", jwt.getSubject(), "folder", name));
       return folders.list();
     });
   }
+  @Transactional public List<String> deleteFolder(Jwt jwt,String name){return authorized(jwt,()->{
+    validateDestination(name);folders.delete(name);events.audit("ADMIN_FOLDER_DELETED",Map.of("actorId",jwt.getSubject(),"folder",name));return folders.list();
+  });}
 
   private User target(String userId) {
     return users.findById(userId)

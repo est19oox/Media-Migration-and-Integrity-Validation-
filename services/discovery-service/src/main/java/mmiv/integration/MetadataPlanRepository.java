@@ -58,6 +58,16 @@ public class MetadataPlanRepository implements InitializingBean {
         return jdbc.update("DELETE FROM MMIV_TRANSFER_PLANS WHERE OWNER_ID=? AND JSON_VALUE(PLAN_JSON,'$.verificationRunId')=?",owner,run.toString());
     }
     public Optional<MetadataPlan> find(UUID id, String owner) {return find(id,owner,true);}
+    public int delete(UUID id){return jdbc.update("DELETE FROM MMIV_TRANSFER_PLANS WHERE PLAN_ID=?",id.toString());}
+    public int deleteFolder(String folder,String path){
+        if(path==null)return jdbc.update("DELETE FROM MMIV_TRANSFER_PLANS WHERE JSON_VALUE(PLAN_JSON,'$.destinationId')=?",folder);
+        String prefix=path.replace("\\","\\\\").replace("%","\\%").replace("_","\\_")+"/%";
+        return jdbc.update("DELETE FROM MMIV_TRANSFER_PLANS WHERE JSON_VALUE(PLAN_JSON,'$.destinationId')=? AND JSON_VALUE(PLAN_JSON,'$.objectPath') LIKE ? ESCAPE '\\'",folder,prefix);
+    }
+    public List<String> ownedKeys(String owner,List<UUID> ids){
+        if(ids.isEmpty())return List.of();var args=new ArrayList<Object>();args.add(owner);ids.forEach(id->args.add(id.toString()));
+        return jdbc.query("SELECT PLAN_JSON FROM MMIV_TRANSFER_PLANS WHERE OWNER_ID=? AND PLAN_ID IN ("+String.join(",",Collections.nCopies(ids.size(),"?"))+")",(rs,row)->json.readValue(rs.getString(1),MetadataPlan.class).destinationKey(),args.toArray());
+    }
     public Optional<MetadataPlan> findAny(UUID id) {
         return jdbc.query("SELECT PLAN_JSON FROM MMIV_TRANSFER_PLANS WHERE PLAN_ID=?", (rs,row)->json.readValue(rs.getString(1),MetadataPlan.class),id.toString()).stream().findFirst();
     }

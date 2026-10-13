@@ -9,5 +9,6 @@ import org.springframework.web.bind.annotation.*;
 public class VerificationCleanupController {
     private final VerificationCleanupService cleanup;
     public VerificationCleanupController(VerificationCleanupService cleanup){this.cleanup=cleanup;}
+    @PostMapping("/{run}/finish") public Object finish(@PathVariable UUID run){return cleanup.finish(run);}
     @PostMapping("/{run}/cleanup") public Object cleanup(@PathVariable UUID run){return cleanup.cleanup(run);}
 }
