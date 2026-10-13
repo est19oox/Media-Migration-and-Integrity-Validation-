@@ -2,6 +2,8 @@ name: Changed-file formatting
 
 # Formats only files changed by the pushed commits. Automatic commits are disabled unless the
 # repository variable MMIV_AUTO_FORMAT_COMMIT is exactly 'true'; otherwise the workflow only checks.
+# When enabled: format changed files -> commit as github-actions[bot] -> dispatch validate.yml
+# (Semgrep, Trivy, Checkov, Maven tests, Docker build) on the new commit and wait for the result.
 on:
   push:
     branches:
@@ -59,6 +61,8 @@ jobs:
     timeout-minutes: 60
     permissions:
       contents: write
+    outputs:
+      new_sha: ${{ steps.push.outputs.new_sha }}
     env:
       BRANCH_NAME: ${{ github.ref_name }}
       BEFORE_SHA: ${{ github.event.before }}
@@ -128,6 +132,7 @@ jobs:
           echo 'changed=true' >> "$GITHUB_OUTPUT"
 
       - name: Push without overwriting concurrent updates
+        id: push
         if: steps.commit.outputs.changed == 'true'
         env:
           GITHUB_TOKEN: ${{ github.token }}
@@ -143,3 +148,44 @@ jobs:
             exit 1
           fi
           git -c http.extraheader="$auth" push --no-force "$remote" "HEAD:refs/heads/${BRANCH_NAME}"
+          echo "new_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+  # A GITHUB_TOKEN push does not start push or pull_request workflows, so the bot commit would
+  # otherwise skip validate.yml. workflow_dispatch is the documented exception: dispatching it on
+  # the branch creates a run whose head SHA is the bot commit, so its checks appear on the PR.
+  # validate.yml is unchanged and runs exactly as it does for a developer commit.
+  validate-final-commit:
+    needs: format-and-commit
+    if: needs.format-and-commit.outputs.new_sha != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    permissions:
+      actions: write
+      contents: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      BRANCH_NAME: ${{ github.ref_name }}
+      NEW_SHA: ${{ needs.format-and-commit.outputs.new_sha }}
+    steps:
+      - name: Dispatch full validation for the formatted commit and wait for it
+        run: |
+          set -euo pipefail
+          printf '%s' "$NEW_SHA" | grep -Eq '^[0-9a-f]{40}$' || { echo '::error::Bad SHA.'; exit 1; }
+          printf '%s' "$BRANCH_NAME" | grep -Eq '^(feature|fix|chore)/[A-Za-z0-9._/-]+$' || { echo '::error::Bad branch.'; exit 1; }
+          tip="$(gh api "repos/${GH_REPO}/git/ref/heads/${BRANCH_NAME}" --jq .object.sha)"
+          if [ "$tip" != "$NEW_SHA" ]; then
+            echo '::error::Branch moved after the formatting commit; not dispatching validation for a different SHA.'
+            exit 1
+          fi
+          gh workflow run validate.yml --ref "$BRANCH_NAME"
+          run_id=''
+          for _ in $(seq 1 30); do
+            sleep 10
+            run_id="$(gh run list --workflow validate.yml --branch "$BRANCH_NAME" --event workflow_dispatch \
+              --json databaseId,headSha --jq ".[] | select(.headSha == \"${NEW_SHA}\") | .databaseId" | head -n1)"
+            [ -n "$run_id" ] && break
+          done
+          [ -n "$run_id" ] || { echo '::error::Validation run for the formatted commit did not start.'; exit 1; }
+          echo "Validation run: https://github.com/${GH_REPO}/actions/runs/${run_id}"
+          gh run watch "$run_id" --exit-status
