@@ -182,7 +182,16 @@
         <executions><execution><goals>
           <goal>integration-test</goal><goal>verify</goal>
         </goals></execution></executions>
-        <configuration><failIfNoTests>true</failIfNoTests></configuration>
+        <configuration>
+          <failIfNoTests>true</failIfNoTests>
+          <includes>
+            <include>**/*IT.java</include>
+          </includes>
+          <systemPropertyVariables>
+            <mmiv.events.enabled>false</mmiv.events.enabled>
+            <management.health.rabbit.enabled>false</management.health.rabbit.enabled>
+          </systemPropertyVariables>
+        </configuration>
       </plugin></plugins></build>
     </profile>
   </profiles>
