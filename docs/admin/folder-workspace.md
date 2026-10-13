@@ -36,3 +36,11 @@ The folder list is compact on desktop and uses rows with touch controls on phone
 PWA installation and worker registration are currently commented out at the project owner’s request. The normal website remains responsive on phones. Optional PWA assets are retained for future use; no unregister step is needed because this feature was not deployed.
 
 Invitation copying uses the Clipboard API where available, then a selected-text copy fallback on HTTP. If browser restrictions prevent both, the link stays selected with English Ctrl+C/Cmd+C instructions. Searching for an unknown account or inviting a nonexistent administrator recipient shows an account-creation prompt. Failed login advises using Create an account while retaining a generic credential failure.
+
+## Duplicate filenames and visible feedback
+
+New uploads preserve a unique name within their logical directory: `report.pdf`, `report (2).pdf`, `report (3).pdf`. Suffixes use ASCII parentheses and appear before the extension. The same basename in a different subfolder is permitted. Existing objects are preserved. Transfer supplies an inventory of current S3 paths, including legacy objects; Metadata chooses and reserves the final path under an Oracle folder lock. Concurrent allocations cannot choose the same reserved name. UUID storage keys are still assigned exclusively by Metadata, and Transfer validates allowed renamed assignments before writing bytes.
+
+Name reservations are removed with file/folder/verification cleanup. Confirmed integrity-failure deletion releases the failed upload's reservation without deleting its audit/metadata record. Pending or uncertain uploads retain their reservation. Existing historical duplicates are not renamed retroactively.
+
+System Logs uses stacked rows on phones and expandable, wrapping JSON details. File and folder uploads display a modal with actual network progress, then a processing phase for storage/integrity. **Hide progress** keeps the upload running; completion and failures reopen a result dialog. Login, signup, invitations and administrator actions use prominent English feedback. Account and folder deletion actions are separated in Administration; folder deletion still affects all files and grants for that folder.

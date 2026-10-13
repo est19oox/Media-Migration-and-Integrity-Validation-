@@ -48,7 +48,7 @@ Open /signup.html using the Create an account link on login. POST /user-access/a
 
 New accounts are active with role USER and no global or destination permissions. Clients cannot select roles or privileges. Transfers require current destination WRITE permission, and reads require READ permission; metadata ownership checks apply to transfer execution; users with READ may view shared-folder files, metadata and reports. Administrators grant access through `/admin.html`; see [administrator setup](../admin/administrator-access.md). Accounts persist in Oracle using the existing APP_USERS schema. Unique username constraints and an INSERT-only repository method prevent duplicate requests from overwriting existing credentials. No new migration or signup secret is needed.
 
-Signup does not include email verification or password reset. It returns to login after successful creation.
+Signup does not include email verification. Administrators can issue single-use password-reset links from Administration; see [administrator access](../admin/administrator-access.md). It returns to login after successful creation.
 
 The scanner obtains a fresh JWT after functional checks, so those checks do not consume its 30-minute authentication window. JWTs past their expiration time are rejected by Transfer even within the default validator clock-skew allowance.
 

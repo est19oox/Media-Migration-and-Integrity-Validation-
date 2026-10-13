@@ -48,7 +48,7 @@ input:focus{outline:3px solid #cbe0ff;border-color:#2667c9}.password{position:re
 <p class="note">Already have an account? <a href="/login.html">Sign in</a></p>
 </section>
 </main>
-<script>
+<script src="/feedback.js"></script><script>
 'use strict';
 const form = document.getElementById('signupForm');
 const username = document.getElementById('username');
@@ -60,6 +60,7 @@ const toggle = document.getElementById('toggle');
 function message(text, kind) {
   status.textContent = text;
   status.className = 'status' + (kind ? ' ' + kind : '');
+  if(kind==='error')globalThis.mmivFeedback?.notice('Please check your account details',text,'error');
 }
 toggle.addEventListener('click', () => {
   const show = password.type === 'password';

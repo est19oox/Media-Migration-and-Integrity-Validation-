@@ -13,6 +13,7 @@ import software.amazon.awssdk.services.s3.model.*;
 @RequestMapping("/api/v1/portal")
 public class PortalController {
   private final MetadataClient metadata; private final PortalClient portal; private final S3Client s3; private final String bucket;
+  @Value("${mmiv.auth.cookie-secure:false}") private boolean secureCookie;
   private final mmiv.transfer.service.FileMutationService mutations;private final FolderAccessGuard guard;
   public PortalController(MetadataClient metadata,PortalClient portal,S3Client s3,@Value("${mmiv.s3.bucket}") String bucket,mmiv.transfer.service.FileMutationService mutations,FolderAccessGuard guard) {
     this.metadata=metadata;this.portal=portal;this.s3=s3;this.bucket=bucket;
@@ -34,6 +35,8 @@ public class PortalController {
   }
   @PutMapping("/admin/users/{id}/permissions") public Object grant(@PathVariable UUID id,@RequestBody Grant request) {return portal.access(HttpMethod.PUT,"/api/admin/users/"+id+"/destinations",request);}
   @DeleteMapping("/admin/users/{id}/permissions") public Object revoke(@PathVariable UUID id,@RequestParam String destination) {return portal.access(HttpMethod.DELETE,"/api/admin/users/"+id+"/destinations?destination="+PortalClient.encode(destination),null);}
+  @PostMapping("/admin/users/{id}/password-reset") public Object reset(@PathVariable UUID id){return portal.access(HttpMethod.POST,"/api/admin/users/"+id+"/password-reset",null);}
+  @DeleteMapping("/admin/users/{id}") public void deleteUser(@PathVariable UUID id,jakarta.servlet.http.HttpServletResponse response){boolean self=id.toString().equals(MetadataClient.currentJwt().getSubject());portal.access(HttpMethod.DELETE,"/api/admin/users/"+id,null);if(self)response.addHeader(HttpHeaders.SET_COOKIE,ResponseCookie.from(mmiv.transfer.config.TransferSecurityConfig.AUTH_COOKIE,"").httpOnly(true).secure(secureCookie).sameSite("Strict").path("/").maxAge(0).build().toString());response.setStatus(204);}
   @PostMapping("/admin/invitations") public Object invite(@RequestBody Invite request) {return portal.access(HttpMethod.POST,"/api/admin/invitations",request);}
   @PostMapping("/invitations/accept") public Object accept(@RequestBody Acceptance request) {return portal.access(HttpMethod.POST,"/api/admin/invitations/accept",request);}
   @GetMapping("/files") public Object files(@RequestParam String folder,@RequestParam(required=false) String cursor) {

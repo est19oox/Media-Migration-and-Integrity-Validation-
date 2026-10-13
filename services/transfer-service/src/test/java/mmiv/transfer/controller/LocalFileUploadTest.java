@@ -50,13 +50,13 @@ class LocalFileUploadTest {
         strategy = spy(new S3TransferStrategy(s3, "test-bucket"));
         var service = new TransferService(new mmiv.transfer.service.TransferSourcePreparer(validator, 104857600), new TransferStrategyFactory(strategy), passingIntegrity(), passingCleanup(), mock(mmiv.transfer.logging.FileEventLogger.class));
         var metadata=mock(mmiv.transfer.integration.MetadataClient.class);
-        when(metadata.allocate(anyString(),anyLong(),nullable(String.class))).thenAnswer(call -> {
+        when(metadata.allocate(anyString(),anyLong(),nullable(String.class),nullable(String.class),anySet())).thenAnswer(call -> {
             String name=call.getArgument(0);long size=call.getArgument(1);
             var id=java.util.UUID.randomUUID();
             return new mmiv.transfer.integration.MetadataClient.Plan(id,id,java.util.UUID.randomUUID(),"owner","test-bucket","test-bucket",
                     "migrations/"+id+"/"+name,null,name,validator.uploadContentType(name),size,"UPLOAD",name);
         });
-        mvc = MockMvcBuilders.standaloneSetup(new TransferController(new mmiv.transfer.integration.MetadataTransferFacade(metadata,service,new mmiv.transfer.service.FolderUploadService(service,validator),mock(mmiv.events.EventPublisher.class),validator,new mmiv.transfer.integration.VerificationRunGuard(),new mmiv.transfer.integration.FolderAccessGuard())))
+        mvc = MockMvcBuilders.standaloneSetup(new TransferController(new mmiv.transfer.integration.MetadataTransferFacade(metadata,service,new mmiv.transfer.service.FolderUploadService(service,validator),mock(mmiv.events.EventPublisher.class),validator,new mmiv.transfer.integration.VerificationRunGuard(),new mmiv.transfer.integration.FolderAccessGuard(),mock(mmiv.transfer.service.ExistingFileNames.class))))
                 .setControllerAdvice(new TransferExceptionHandler()).build();
     }
 

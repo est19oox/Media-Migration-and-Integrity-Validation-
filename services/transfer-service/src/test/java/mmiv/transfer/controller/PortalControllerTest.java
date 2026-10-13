@@ -38,4 +38,6 @@ class PortalControllerTest {
     var files=(java.util.List<?>)result.get("files");assertEquals(1,files.size());
     var file=(PortalController.FileEntry)files.getFirst();assertEquals("docs/report.pdf",file.name());assertEquals(key,FileIds.decode(file.fileId()));assertEquals("next-page",result.get("nextCursor"));
   }
+  @Test void deletingSelfClearsTheSharedSessionCookie(){var id=java.util.UUID.randomUUID();var jwt=org.springframework.security.oauth2.jwt.Jwt.withTokenValue("fixture").header("alg","RS256").subject(id.toString()).build();org.springframework.security.core.context.SecurityContextHolder.getContext().setAuthentication(new org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken(jwt));try{var response=mock(jakarta.servlet.http.HttpServletResponse.class);controller.deleteUser(id,response);verify(response).addHeader(eq("Set-Cookie"),argThat(value->value.contains("MMIV_SESSION=")&&value.contains("Max-Age=0")&&value.contains("HttpOnly")));verify(response).setStatus(204);}finally{org.springframework.security.core.context.SecurityContextHolder.clearContext();}}
+
 }

@@ -1,5 +1,17 @@
 # Integration validation — 2026-10-13
 
+## Soft account deletion
+
+Administrator account deletion now deactivates accounts while retaining their Oracle rows and folder permissions. All 125 User Access tests and 12 administration UI tests passed. The seven-service integration test passed with real Oracle, RabbitMQ and MongoDB plus an S3 HTTP fixture, confirming retained inactive users and permissions, denied login and old JWTs, retained but expired reset links, administrator self-deactivation, protection of other administrators, and separate temporary verification-account hard cleanup. The harness waits for service discovery to recover after its intentional broker outage before testing account operations. Live AWS deployment was not verified.
+
+## Account management, duplicate filenames and mobile feedback
+
+All seven services passed 505 executed Java tests; twelve optional Discovery Oracle tests were skipped. Thirty-one Node page tests and seven CI contract checks passed. All service POMs parse successfully. Focused Java tests also cover expired reset links and invalid password input.
+
+The full seven-service test passed against disposable real Oracle, RabbitMQ and MongoDB, with an S3 HTTP fixture. It covers administrator-issued, single-use password reset links, old-session revocation, ordinary-user and self deletion, protection of other administrators, invitation delegation, permission revocation, folder deletion and verification cleanup. Concurrent allocations in a newly created folder and uploads colliding with existing S3 objects produce ASCII suffixes such as `legacy (2).txt` and `legacy (3).txt`; uploaded bytes remain intact through integrity validation. The test waits for Integrity discovery as well as application health before transfers, using shorter discovery cache intervals in its isolated environment.
+
+Chromium verified System Logs without horizontal overflow at 320, 375 and 430 pixels, independent administrator invitation lookup, missing-user prompts, reset-link generation and consumption, account deletion controls, and visible upload progress and result dialogs. Browser UI checks use fixture APIs; the upload progress check uses a real delayed HTTP upload. Every static UI remains English. These checks do not validate a deployed EC2 instance or real AWS S3 operations.
+
 ## Circuit breakers and disabled PWA
 
 All seven services passed 495 executed Java tests (Transfer 143, Discovery 75, Integrity 6, Reporting 145, User Access 120, Registry 1 and Gateway 5). Twelve optional Discovery Oracle tests remain skipped. Twenty-six Node page tests and seven CI contract checks passed. Focused tests cover repeated 5xx failures, blocked calls, half-open recovery, dependency isolation, HTTP header/body timeouts, ignored authorization errors and unchanged integrity failure outcomes. No circuit layer replays mutations.

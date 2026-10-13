@@ -46,6 +46,8 @@ public class AdminController {
     return admins.revoke(jwt, userId, destination);
   }
 
+  @PostMapping("/users/{userId}/password-reset") public Object reset(@AuthenticationPrincipal Jwt jwt,@PathVariable String userId){return admins.createPasswordReset(jwt,userId);}
+  @DeleteMapping("/users/{userId}") public org.springframework.http.ResponseEntity<Void> deleteUser(@AuthenticationPrincipal Jwt jwt,@PathVariable String userId){admins.deleteAccount(jwt,userId);return org.springframework.http.ResponseEntity.noContent().build();}
   @PostMapping("/invitations")
   public AdminService.Invitation invite(@AuthenticationPrincipal Jwt jwt, @Valid @RequestBody Invite request) {
     return admins.createInvitation(jwt, request.username());

@@ -116,7 +116,20 @@ public class AdminService {
     }
   }
 
-  private static String tokenHash(String token) {
+
+  @Transactional public Invitation createPasswordReset(Jwt jwt,String id){return authorized(jwt,()->{
+    User target=target(id);if(!target.isActive())throw new ResponseStatusException(HttpStatus.CONFLICT,"Account is inactive");
+    if("ADMIN".equals(target.getRole())&&!id.equals(jwt.getSubject()))throw new ResponseStatusException(HttpStatus.FORBIDDEN,"You cannot reset another administrator's password");
+    byte[] bytes=new byte[32];new java.security.SecureRandom().nextBytes(bytes);String token=java.util.HexFormat.of().formatHex(bytes);var expires=java.time.Instant.now().plusSeconds(3600);
+    if(!users.createPasswordReset(jwt.getSubject(),id,tokenHash(token),expires))throw new ResponseStatusException(HttpStatus.FORBIDDEN,"Account cannot be managed");
+    audit("ADMIN_PASSWORD_RESET_CREATED",jwt.getSubject(),id,"PASSWORD_RESET");return new Invitation(token,expires);
+  });}
+  @Transactional public void deleteAccount(Jwt jwt,String id){authorized(jwt,()->{
+    User target=target(id);if("ADMIN".equals(target.getRole())&&!id.equals(jwt.getSubject()))throw new ResponseStatusException(HttpStatus.FORBIDDEN,"You cannot delete another administrator");
+    if(!users.deleteAccount(jwt.getSubject(),id))throw new ResponseStatusException(HttpStatus.FORBIDDEN,"Account cannot be deactivated");
+    audit("ADMIN_ACCOUNT_DEACTIVATED",jwt.getSubject(),id,"INACTIVE");return null;
+  });}
+  public static String tokenHash(String token) {
     try {
       return java.util.HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256")
           .digest(token.getBytes(java.nio.charset.StandardCharsets.US_ASCII)));

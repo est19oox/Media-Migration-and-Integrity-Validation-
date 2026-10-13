@@ -55,7 +55,8 @@ public class MetadataService {
         if((request.destinationId()+"/migrations/"+id+"/"+objectPath).getBytes(java.nio.charset.StandardCharsets.UTF_8).length>1024)
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"File path is too long");
         var plan=new MetadataPlan(id,id,file,jwt.getSubject(),request.destinationId(),bucket,request.destinationId()+"/migrations/"+id+"/"+objectPath,source,name,contentType,size,upload?"UPLOAD":"SOURCE",objectPath,verificationRun);
-        plans.save(plan);
+        if(request.occupiedPaths()!=null&&(request.occupiedPaths().size()>100000||request.occupiedPaths().stream().anyMatch(p->p==null||p.length()>900)))throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Invalid folder inventory");
+        var named=plans.saveNamed(plan,request.occupiedPaths());if(named!=null)plan=named;
         events.migration("MIGRATION_STARTED","migration.started",id,null,
                 Map.of("initiatedBy",jwt.getSubject(),"source",Map.of("type","DIRECT_UPLOAD","rootId","media")));
         events.migration("FILE_DISCOVERY_COMPLETED","discovery.file.completed",id,file,
@@ -81,6 +82,7 @@ public class MetadataService {
         var plan=plans.find(id,jwt.getSubject(),false).orElseThrow(()->new ResponseStatusException(HttpStatus.FORBIDDEN,"Only the uploader can delete this file"));
         permissions.requireFolder(jwt.getTokenValue(),plan.destinationId());permissions.require(jwt.getTokenValue(),jwt.getSubject(),plan.destinationId(),"WRITE");return plan;
     }
+    public void releaseName(Jwt jwt,UUID id){var plan=plans.find(id,jwt.getSubject(),false).orElseThrow(()->new ResponseStatusException(HttpStatus.FORBIDDEN,"Assignment owner required"));permissions.require(jwt.getTokenValue(),jwt.getSubject(),plan.destinationId(),"WRITE");plans.releaseName(id,jwt.getSubject());}
     public int deletePlan(Jwt jwt,UUID id,String key) {
         var plan=plans.findAny(id).orElse(null);if(plan==null)return 0;if(!plan.destinationKey().equals(key))throw new ResponseStatusException(HttpStatus.CONFLICT,"File assignment mismatch");
         if(!plan.ownerId().equals(jwt.getSubject()))permissions.requireAdmin(jwt.getTokenValue());
@@ -108,7 +110,8 @@ public class MetadataService {
             case "pptx"->"application/vnd.openxmlformats-officedocument.presentationml.presentation";
             default->throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Unsupported media type"); };
     }
-    public record CreatePlan(String destinationId,String sourcePath,String fileName,Long sizeBytes,String relativePath) {
-        public CreatePlan(String destinationId,String sourcePath,String fileName,long sizeBytes){this(destinationId,sourcePath,fileName,sizeBytes,null);}
+    public record CreatePlan(String destinationId,String sourcePath,String fileName,Long sizeBytes,String relativePath,java.util.List<String> occupiedPaths) {
+        public CreatePlan(String destinationId,String sourcePath,String fileName,Long sizeBytes,String relativePath){this(destinationId,sourcePath,fileName,sizeBytes,relativePath,null);}
+        public CreatePlan(String destinationId,String sourcePath,String fileName,long sizeBytes){this(destinationId,sourcePath,fileName,sizeBytes,null,null);}
     }
 }

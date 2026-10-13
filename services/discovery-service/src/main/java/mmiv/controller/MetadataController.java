@@ -26,6 +26,7 @@ public class MetadataController {
     @GetMapping("/plans/{id}/delete-authorization") public MetadataPlan deleteAuthorization(@AuthenticationPrincipal Jwt jwt,@PathVariable UUID id){return metadata.deleteAuthorization(jwt,id);}
     @DeleteMapping("/plans/{id}") public Object delete(@AuthenticationPrincipal Jwt jwt,@PathVariable UUID id,@RequestParam String key){return java.util.Map.of("deleted",metadata.deletePlan(jwt,id,key));}
     @DeleteMapping("/folders/{folder}/plans") public Object deleteFolder(@AuthenticationPrincipal Jwt jwt,@PathVariable String folder,@RequestParam(required=false) String path){return java.util.Map.of("deleted",metadata.deleteFolderPlans(jwt,folder,path));}
+    @PostMapping("/plans/{id}/release-name") public void releaseName(@AuthenticationPrincipal Jwt jwt,@PathVariable UUID id){metadata.releaseName(jwt,id);}
     @PostMapping("/ownership") public Object owned(@AuthenticationPrincipal Jwt jwt,@RequestBody java.util.List<UUID> ids){return metadata.ownedKeys(jwt,ids);}
     @GetMapping("/plans/{id}") public MetadataPlan read(@AuthenticationPrincipal Jwt jwt,@PathVariable UUID id) {
         return metadata.get(jwt,id,"READ");

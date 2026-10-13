@@ -50,13 +50,13 @@ class FolderUploadTest {
         var transfers = new TransferService(new mmiv.transfer.service.TransferSourcePreparer(validator, 104857600), new TransferStrategyFactory(strategy), passingIntegrity(), passingCleanup(), mock(mmiv.transfer.logging.FileEventLogger.class));
         folders = new FolderUploadService(transfers, validator);
         var metadata=mock(mmiv.transfer.integration.MetadataClient.class);
-        when(metadata.allocate(anyString(),anyLong(),nullable(String.class),anyString())).thenAnswer(call -> {
+        when(metadata.allocate(anyString(),anyLong(),nullable(String.class),anyString(),anySet())).thenAnswer(call -> {
             String name=call.getArgument(0);long size=call.getArgument(1);String path=call.getArgument(3);
             var id=java.util.UUID.randomUUID();
             return new mmiv.transfer.integration.MetadataClient.Plan(id,id,java.util.UUID.randomUUID(),"owner","test-bucket","test-bucket",
                     "migrations/"+id+"/"+path,null,name,validator.uploadContentType(name),size,"UPLOAD",path);
         });
-        mvc = MockMvcBuilders.standaloneSetup(new FolderUploadController(new mmiv.transfer.integration.MetadataTransferFacade(metadata,transfers,folders,mock(mmiv.events.EventPublisher.class),validator,new mmiv.transfer.integration.VerificationRunGuard(),new mmiv.transfer.integration.FolderAccessGuard())))
+        mvc = MockMvcBuilders.standaloneSetup(new FolderUploadController(new mmiv.transfer.integration.MetadataTransferFacade(metadata,transfers,folders,mock(mmiv.events.EventPublisher.class),validator,new mmiv.transfer.integration.VerificationRunGuard(),new mmiv.transfer.integration.FolderAccessGuard(),mock(mmiv.transfer.service.ExistingFileNames.class))))
                 .setControllerAdvice(new TransferExceptionHandler()).build();
     }
     @Test void preservesNestedPathsAndDuplicateBasenamesAndCleansTemporaryFiles() throws Exception {

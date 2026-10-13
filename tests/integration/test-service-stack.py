@@ -86,7 +86,7 @@ class S3Fixture(http.server.BaseHTTPRequestHandler):
                 offset += 2
             body = bytes(decoded)
             assert len(body) == int(self.headers['X-Amz-Decoded-Content-Length'])
-        self.objects[urllib.parse.urlsplit(self.path).path] = (body, self.headers.get('Content-Type', 'application/octet-stream'))
+        self.objects[urllib.parse.unquote(urllib.parse.urlsplit(self.path).path)] = (body, self.headers.get('Content-Type', 'application/octet-stream'))
         self.send_response(200)
         self.send_header('ETag', '"' + hashlib.md5(body).hexdigest() + '"')
         self.send_header('x-amz-checksum-sha256', base64.b64encode(hashlib.sha256(body).digest()).decode())
@@ -118,7 +118,7 @@ class S3Fixture(http.server.BaseHTTPRequestHandler):
     def do_HEAD(self):
         self.read_object(True)
     def read_object(self, head):
-        value = self.objects.get(urllib.parse.urlsplit(self.path).path)
+        value = self.objects.get(urllib.parse.unquote(urllib.parse.urlsplit(self.path).path))
         if value is None:
             self.send_error(404)
             return
@@ -133,13 +133,13 @@ class S3Fixture(http.server.BaseHTTPRequestHandler):
     def do_POST(self):
         import xml.etree.ElementTree as ET
         root=ET.fromstring(self.rfile.read(int(self.headers['Content-Length'])))
-        bucket=urllib.parse.urlsplit(self.path).path.strip('/')
+        bucket=urllib.parse.unquote(urllib.parse.urlsplit(self.path).path).strip('/')
         for item in root.findall('{*}Object'):
-            key=item.findtext('{*}Key');self.objects.pop('/'+bucket+'/'+urllib.parse.quote(key,safe='/'),None)
+            key=item.findtext('{*}Key');self.objects.pop('/'+bucket+'/'+key,None)
         body=b'<DeleteResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/"/>'
         self.send_response(200);self.send_header('Content-Type','application/xml');self.send_header('Content-Length',str(len(body)));self.end_headers();self.wfile.write(body)
     def do_DELETE(self):
-        self.objects.pop(urllib.parse.urlsplit(self.path).path, None)
+        self.objects.pop(urllib.parse.unquote(urllib.parse.urlsplit(self.path).path), None)
         self.send_response(204)
         self.end_headers()
 
@@ -209,6 +209,11 @@ def main():
                     'REPORTING_URL': f'http://127.0.0.1:{ports["reporting-service"]}',
                     'EUREKA_DEFAULT_ZONE': f'http://127.0.0.1:{ports["service-registry"]}/eureka/',
                     'EUREKA_INSTANCE_IP_ADDRESS': '127.0.0.1', 'EUREKA_INSTANCE_PREFER_IP_ADDRESS': 'true',
+                    # Disposable services start together; shorten discovery caches for readiness checks.
+                    'EUREKA_CLIENT_REGISTRY_FETCH_INTERVAL_SECONDS': '2',
+                    'EUREKA_CLIENT_INITIAL_INSTANCE_INFO_REPLICATION_INTERVAL_SECONDS': '1',
+                    'EUREKA_SERVER_RESPONSE_CACHE_UPDATE_INTERVAL_MS': '1000',
+                    'SPRING_CLOUD_LOADBALANCER_CACHE_TTL': '1s',
                     'SPRING_RABBITMQ_HOST': '127.0.0.1', 'SPRING_RABBITMQ_PORT': str(ports['rabbit']),
                     'SPRING_RABBITMQ_USERNAME': 'mmiv', 'SPRING_RABBITMQ_PASSWORD': secret,
                     'MONGODB_URI': f'mongodb://127.0.0.1:{ports["mongo"]}/mmiv_reporting',
@@ -241,6 +246,7 @@ def main():
         wait(lambda: request(gateway + '/user-access/.well-known/jwks.json')[0] == 200, 120)
         wait(lambda: request(gateway + '/api/v1/transfers', 'POST', {})[0] == 401, 120)
         wait(lambda: request(gateway + '/api/reports/00000000-0000-0000-0000-000000000000')[0] == 401, 120)
+        wait(lambda: request(gateway + '/api/integrity/validate', 'POST', {})[0] == 401, 120)
         class NoRedirect(urllib.request.HTTPRedirectHandler):
             def redirect_request(self, req, fp, code, msg, headers, newurl):
                 return None
@@ -346,6 +352,25 @@ def main():
         assert plan['destinationKey'].startswith('SW001/migrations/')
         listed=json.loads(request(gateway+'/api/v1/portal/files?folder=SW001',token=token)[1])
         assert any(f['fileId']==result['fileId'] and f['name']=='test.txt' for f in listed['files'])
+        # Metadata serializes concurrent name reservations and uses ASCII suffixes.
+        from concurrent.futures import ThreadPoolExecutor
+        assert request(gateway+'/api/v1/portal/admin/folders','POST',{'name':'collision-test'},admin_token)[0]==200
+        assert request(admin_api+'/users/'+user_id+'/destinations','PUT',{'destination':'collision-test','permission':'WRITE'},admin_token)[0]==200
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            allocations=list(pool.map(lambda _:request(gateway+'/api/metadata/allocations','POST',{'destinationId':'collision-test','fileName':'duplicate.pdf','sizeBytes':4},token),range(2)))
+        assert all(status==200 for status,_ in allocations),allocations
+        assigned_names={json.loads(body)['fileName'] for _,body in allocations};assert assigned_names=={'duplicate.pdf','duplicate (2).pdf'},assigned_names
+        assert request(gateway+'/api/v1/portal/folders?folder=collision-test','DELETE',token=admin_token)[0]==200
+        # Exercise the actual multipart upload, including existing legacy S3 objects.
+        def upload_fixture(name):
+            boundary='mmiv-'+uuid.uuid4().hex
+            payload=(f'--{boundary}\r\nContent-Disposition: form-data; name="destinationId"\r\n\r\nSW001\r\n--{boundary}\r\nContent-Disposition: form-data; name="file"; filename="{name}"\r\nContent-Type: text/plain\r\n\r\nfixture bytes\r\n--{boundary}--\r\n').encode()
+            req=urllib.request.Request(gateway+'/api/v1/transfers',data=payload,headers={'Authorization':'Bearer '+token,'Content-Type':'multipart/form-data; boundary='+boundary},method='POST')
+            with urllib.request.urlopen(req,timeout=120) as response:return json.loads(response.read())
+        S3Fixture.objects['/it-landing/SW001/legacy.txt']=(b'legacy','text/plain')
+        uploaded=upload_fixture('legacy.txt');assert uploaded['success'] and uploaded['fileName']=='legacy (2).txt',uploaded
+        uploaded_again=upload_fixture('legacy.txt');assert uploaded_again['success'] and uploaded_again['fileName']=='legacy (3).txt',uploaded_again
+        print('PASS concurrent namespace reservations and collision-safe ASCII upload suffixes',flush=True)
         assert request(gateway+'/api/v1/portal/files?folder=semester2',token=token)[0]==403
         profile=json.loads(request(gateway+'/api/v1/portal/me',token=token)[1]);assert [f['destination'] for f in profile['destinations']]==['SW001']
         viewer={'username':'viewer_'+uuid.uuid4().hex[:12],'password':secrets.token_hex(16)}
@@ -451,6 +476,34 @@ def main():
         duplicates = mongo("db.getSiblingDB('mmiv_reporting').service_logs.aggregate([{$group:{_id:'$eventId',n:{$sum:1}}},{$match:{n:{$gt:1}}}]).toArray().length")
         assert duplicates == '0'
         print('PASS all seven service logs and RabbitMQ outage recovery', flush=True)
+        # Broker health can temporarily mark services DOWN in Eureka; wait for routing recovery.
+        wait(lambda: request(gateway+'/api/v1/portal/me',token=admin_token)[0]==200,120)
+        # One-use reset links revoke old JWTs; account deletion preserves protected admins.
+        assert request(gateway+'/reset-password.html')[0]==200
+        reset_url=gateway+'/api/v1/portal/admin/users/'+viewer_id+'/password-reset'
+        status,body=request(reset_url,'POST',{},admin_token);assert status==200,(status,body);reset=json.loads(body)
+        replacement=secrets.token_hex(16)
+        public_reset=gateway+'/user-access/api/auth/password-reset'
+        status,body=request(public_reset,'POST',{'token':reset['token'],'password':replacement});assert status==200,(status,body)
+        assert request(public_reset,'POST',{'token':reset['token'],'password':replacement})[0]==400
+        assert request(native+'/api/access/me',token=viewer_token)[0]==401
+        assert request(native+'/api/auth/login','POST',viewer)[0]==401
+        viewer['password']=replacement;viewer_token=json.loads(request(native+'/api/auth/login','POST',viewer)[1])['accessToken']
+        assert request(gateway+'/api/v1/portal/me',token=viewer_token)[0]==200
+        assert request(gateway+'/api/v1/portal/admin/users/'+external_id,'DELETE',token=admin_token)[0]==403
+        assert request(gateway+'/api/v1/portal/admin/users/'+external_id+'/password-reset','POST',{},admin_token)[0]==403
+        assert request(gateway+'/api/v1/portal/admin/users/'+viewer_id,'DELETE',token=token)[0]==403
+        status,body=request(reset_url,'POST',{},admin_token);assert status==200;pending_reset=json.loads(body)['token']
+        assert request(gateway+'/api/v1/portal/admin/users/'+viewer_id,'DELETE',token=admin_token)[0]==204
+        assert request(native+'/api/auth/login','POST',viewer)[0]==401
+        assert sql("SELECT COUNT(*) FROM USER_DESTINATION_ACCESS WHERE USER_ID='"+viewer_id+"';").strip()!='0'
+        assert sql("SELECT ACTIVE FROM APP_USERS WHERE USER_ID='"+viewer_id+"';").strip()=='0'
+        assert request(native+'/api/access/me',token=viewer_token)[0]==401
+        assert sql("SELECT COUNT(*) FROM PASSWORD_RESETS WHERE USER_ID='"+viewer_id+"' AND EXPIRES_AT<=SYSTIMESTAMP;").strip()=='1'
+        assert request(public_reset,'POST',{'token':pending_reset,'password':replacement})[0]==400
+        assert request(gateway+'/api/v1/portal/admin/users/'+external_id,'DELETE',token=external_token)[0]==204
+        assert request(gateway+'/api/v1/portal/me',token=external_token)[0] in (401,403)
+        print('PASS password-reset links, session revocation, account deletion and other-admin protection',flush=True)
         assert request(native + '/api/auth/verification-account', 'DELETE', token=token)[0] == 204
         assert request(native + '/api/auth/login', 'POST', auth)[0] == 401
         print('PASS generated account deleted after tests', flush=True)
