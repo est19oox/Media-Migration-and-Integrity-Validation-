@@ -27,7 +27,7 @@ class VerificationCleanupServiceTest {
     server.start();
     String url = "http://127.0.0.1:" + server.getAddress().getPort();
     try {
-      var service = new VerificationCleanupService(repository, permissions, "landing", url, url);
+      var service = new VerificationCleanupService(repository, permissions, url, url);
       var jwt = Jwt.withTokenValue("fixture").header("alg", "RS256").subject("owner").build();
       assertThrows(
           org.springframework.web.server.ResponseStatusException.class,
@@ -52,7 +52,7 @@ class VerificationCleanupServiceTest {
         .requireActive("fixture");
     var service =
         new VerificationCleanupService(
-            repository, permissions, "landing", "http://127.0.0.1:1", "http://127.0.0.1:1");
+            repository, permissions, "http://127.0.0.1:1", "http://127.0.0.1:1");
     var jwt = Jwt.withTokenValue("fixture").header("alg", "RS256").subject("owner").build();
     assertThrows(
         org.springframework.web.server.ResponseStatusException.class,

@@ -12,20 +12,16 @@ import org.springframework.web.server.ResponseStatusException;
 public class VerificationCleanupService {
   private final MetadataPlanRepository repository;
   private final PermissionClient permissions;
-  private final String destination;
   private final RestClient transfer;
   private final RestClient reporting;
 
   public VerificationCleanupService(
       MetadataPlanRepository repository,
       PermissionClient permissions,
-      @Value("${mmiv.metadata.destination-id:${mmiv.s3.bucket:media-migration-dev-landing}}")
-          String destination,
       @Value("${mmiv.transfer.url:http://transfer-service:8081}") String transferUrl,
       @Value("${mmiv.reporting.url:http://reporting-service:8084}") String reportingUrl) {
     this.repository = repository;
     this.permissions = permissions;
-    this.destination = destination;
     var factory =
         new org.springframework.http.client.JdkClientHttpRequestFactory(
             java.net.http.HttpClient.newBuilder()
