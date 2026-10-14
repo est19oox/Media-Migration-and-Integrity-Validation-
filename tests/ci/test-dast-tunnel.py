@@ -20,6 +20,9 @@ VERIFY_DEPLOYED_SERVICES = importlib.util.module_from_spec(VERIFY_SPEC)
 VERIFY_SPEC.loader.exec_module(VERIFY_DEPLOYED_SERVICES)
 
 
+RUN_ID = '11111111-1111-4111-8111-111111111111'
+
+
 class TunnelTest(unittest.TestCase):
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()
@@ -99,6 +102,9 @@ sys.exit(2)
         self.tool('session-manager-plugin', '#!/bin/sh\nexit 0\n')
         self.tool('python3', f'''#!{sys.executable}
 import os, sys
+if len(sys.argv) > 1 and sys.argv[1].endswith('login-for-verification.py'):
+    with open(os.environ['TEST_DIRECTORY'] + '/login-calls.jsonl', 'a') as calls:
+        calls.write(__import__('json').dumps({{'base_path': os.environ.get('VERIFICATION_AUTH_BASE_PATH'), 'args': sys.argv[2:]}}) + '\\n')
 if len(sys.argv) > 1 and sys.argv[1] == 'scripts/cd/test-endpoints.py':
     open(os.environ['TEST_DIRECTORY'] + '/functional-args.json', 'w').write(__import__('json').dumps(sys.argv[2:]))
     sys.exit(0 if os.environ.get('TEST_CONTINUE_TO_SCAN') else 23)
@@ -135,15 +141,24 @@ elif operation == 'start-session':
             self.send_response(200)
             self.end_headers()
             self.wfile.write(b'{{"status":"UP"}}')
+        def do_DELETE(self):
+            with open(directory / 'requests.log', 'a') as requests:
+                requests.write('DELETE ' + self.path + ' ' + self.headers.get('Authorization', '') + '\\n')
+            self.send_response(204 if self.path == '/user-access/api/auth/verification-account'
+                               and self.headers.get('Authorization', '').startswith('Bearer ') else 404)
+            self.end_headers()
         def do_POST(self):
             body = json.loads(self.rfile.read(int(self.headers['Content-Length'])))
+            with open(directory / 'requests.log', 'a') as requests:
+                requests.write('POST ' + self.path + '\\n')
             if self.path.startswith('/api/metadata/verification/'):
                 (directory / 'data-cleanup-called').write_text(self.path)
                 self.send_response(503 if os.environ.get('TEST_CLEANUP_FAIL') else 200)
                 self.end_headers()
                 self.wfile.write(b'{{"deletedPlans":0}}')
                 return
-            if self.path != '/user-access/api/auth/login'  or body != {{'username': 'test-user', 'password': 'test-pass'}}:
+            expected = {{'username': os.environ.get('TEST_LOGIN_USER', 'test-user'), 'password': os.environ.get('TEST_LOGIN_PASSWORD', 'test-pass')}}
+            if self.path != '/user-access/api/auth/login' or body != expected:
                 self.send_response(401)
                 self.end_headers()
                 return
@@ -250,6 +265,58 @@ elif operation == 'start-session':
         self.assertEqual(result.returncode, 23, result.stdout + result.stderr)
         self.assertEqual(self.selected_port(), port)
         self.assert_port_closed(port)
+
+    def cleanup_only(self, **settings):
+        account = self.directory / 'account.json'
+        username = 'mmiv_ci_' + 'a' * 32
+        account.write_text(json.dumps({'username': username, 'password': 'generated-pass',
+                                       'userId': 'test-user-id'}))
+        result = self.run_scan(**{'USER_ACCESS_TEST_USERNAME': '', 'USER_ACCESS_TEST_PASSWORD': '',
+                                  'DAST_SERVICE_NAME': 'user-access-service', 'DAST_PORT': '8083',
+                                  'DAST_CLEANUP_ONLY': 'true', 'MMIV_VERIFICATION_ACCOUNT_FILE': str(account),
+                                  'MMIV_VERIFICATION_RUN_ID': RUN_ID, 'TEST_LOGIN_USER': username,
+                                  'TEST_LOGIN_PASSWORD': 'generated-pass', **settings})
+        return result, account
+
+    def requests(self):
+        return (self.directory / 'requests.log').read_text().splitlines()
+
+    def test_account_cleanup_only_uses_gateway_prefixed_routes(self):
+        result, account = self.cleanup_only()
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        calls = [json.loads(line) for line in (self.directory / 'login-calls.jsonl').read_text().splitlines()]
+        self.assertEqual([call['base_path'] for call in calls], ['/user-access'])
+        self.assertIn('--cleanup', calls[0]['args'])
+        requests = self.requests()
+        self.assertEqual(requests[0], 'POST /user-access/api/auth/login')
+        self.assertTrue(requests[1].startswith('DELETE /user-access/api/auth/verification-account Bearer '))
+        self.assertEqual(len(requests), 2)
+        self.assertFalse(account.exists())
+        self.assertFalse((self.directory / 'data-cleanup-called').exists())
+        self.assert_port_closed(self.selected_port())
+
+    def test_account_cleanup_only_still_rejects_non_generated_account(self):
+        account = self.directory / 'account.json'
+        account.write_text(json.dumps({'username': 'someone-else', 'password': 'generated-pass',
+                                       'userId': 'test-user-id'}))
+        result = self.run_scan(USER_ACCESS_TEST_USERNAME='', USER_ACCESS_TEST_PASSWORD='',
+                               DAST_SERVICE_NAME='user-access-service', DAST_PORT='8083',
+                               DAST_CLEANUP_ONLY='true', MMIV_VERIFICATION_ACCOUNT_FILE=str(account))
+        self.assertEqual(result.returncode, 1)
+        self.assertTrue(account.exists())
+        self.assertFalse((self.directory / 'requests.log').exists() and 'DELETE' in ''.join(self.requests()))
+
+    def test_data_cleanup_only_mode_is_unchanged(self):
+        result, account = self.cleanup_only(DAST_DATA_CLEANUP_ONLY='true')
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        calls = [json.loads(line) for line in (self.directory / 'login-calls.jsonl').read_text().splitlines()]
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(calls[0]['base_path'], '/user-access')
+        self.assertNotIn('--cleanup', calls[0]['args'])
+        self.assertEqual((self.directory / 'data-cleanup-called').read_text(),
+                         '/api/metadata/verification/' + RUN_ID + '/cleanup')
+        self.assertFalse((self.directory / 'requests.log').exists() and 'DELETE' in ''.join(self.requests()))
+        self.assertTrue(account.exists())
 
     def test_user_access_scans_through_gateway_path(self):
         result = self.run_scan(DAST_SERVICE_NAME='user-access-service', DAST_PORT='8083',
