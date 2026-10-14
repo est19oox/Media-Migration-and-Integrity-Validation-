@@ -244,7 +244,7 @@ if [[ "${DAST_CLEANUP_ONLY:-false}" == true && "${DAST_DATA_CLEANUP_ONLY:-false}
   exit 0
 fi
 if [[ "${DAST_CLEANUP_ONLY:-false}" == true ]]; then
-  MMIV_VERIFICATION_ACCOUNT_FILE="$ACCOUNT_FILE" VERIFICATION_AUTH_BASE_PATH= \
+  MMIV_VERIFICATION_ACCOUNT_FILE="$ACCOUNT_FILE" VERIFICATION_AUTH_BASE_PATH=/user-access \
     python3 scripts/cd/login-for-verification.py "http://127.0.0.1:$LOCAL_PORT" "$TEMP_DIR/auth.env" --cleanup
   exit 0
 fi
