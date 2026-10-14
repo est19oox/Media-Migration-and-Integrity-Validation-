@@ -1,15 +1,18 @@
-const mouse = { x: 0, y: 0 }; // 遊標位置
-const pos = { x: 0, y: 0 }; // 跟蹤到達位置
+const mouse = { x: 0, y: 0 };
+const pos = { x: 0, y: 0 };
+const desktopPointer = window.matchMedia(
+  '(min-width: 851px) and (hover: hover) and (pointer: fine)',
+);
 
-document.querySelector('body').addEventListener('mousemove', ({ x, y }) => {
-  mouse.x = x;
-  mouse.y = y;
-});
+let animationFrame = null;
+const body = document.querySelector('body');
 
-requestAnimationFrame(function movement() {
-  const easting = 10;
-  pos.x += (mouse.x - pos.x) / easting;
-  pos.y += (mouse.y - pos.y) / easting;
+function calcValue(a, b) {
+  const range = 8;
+  return (a / b) * range - range / 2;
+}
+
+function updateParallax() {
   const xValue = calcValue(pos.x, window.innerWidth);
   const yValue = calcValue(pos.y, window.innerHeight);
 
@@ -28,11 +31,46 @@ requestAnimationFrame(function movement() {
       yValue * 2
     }px, 50px) rotateX(${-yValue}deg) rotateY(${xValue}deg)`;
   }
-
-  requestAnimationFrame(movement);
-});
-
-function calcValue(a, b) {
-  const range = 8;
-  return (a / b) * range - range / 2;
 }
+
+function animate() {
+  if (!desktopPointer.matches) return;
+
+  const easing = 10;
+  pos.x += (mouse.x - pos.x) / easing;
+  pos.y += (mouse.y - pos.y) / easing;
+  updateParallax();
+  animationFrame = requestAnimationFrame(animate);
+}
+
+function setParallaxEnabled() {
+  if (desktopPointer.matches) {
+    body.addEventListener('mousemove', handleMouseMove);
+    if (animationFrame === null) {
+      animationFrame = requestAnimationFrame(animate);
+    }
+    return;
+  }
+
+  if (animationFrame !== null) {
+    cancelAnimationFrame(animationFrame);
+    animationFrame = null;
+  }
+  body.removeEventListener('mousemove', handleMouseMove);
+  body
+    .querySelectorAll(
+      '#media-layer-view, #media-layer-front, #login-form, #signupForm, .reset-card',
+    )
+    .forEach((element) => {
+      element.style.transform = '';
+    });
+}
+
+function handleMouseMove({ x, y }) {
+  mouse.x = x;
+  mouse.y = y;
+}
+
+body.addEventListener('mousemove', handleMouseMove);
+desktopPointer.addEventListener('change', setParallaxEnabled);
+setParallaxEnabled();

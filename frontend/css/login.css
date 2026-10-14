@@ -487,3 +487,150 @@ body {
     width: 100%;
   }
 }
+
+@media (max-width: 600px) {
+  html,
+  body.auth-page,
+  body.reset-page {
+    width: 100%;
+    height: auto;
+    min-height: 100%;
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+
+  body.auth-page,
+  body.reset-page {
+    min-height: 100dvh;
+    background:
+      radial-gradient(ellipse at 90% 0%, rgba(224, 232, 255, 0.65), transparent 42%), #f5f7fa;
+  }
+
+  .auth-page *,
+  .reset-page * {
+    box-sizing: border-box;
+  }
+
+  .auth-page #section-media {
+    display: none;
+  }
+
+  .auth-page .login-wrap,
+  .reset-page .login-wrap {
+    position: relative;
+    inset: auto;
+    width: 100%;
+    min-height: 100dvh;
+    align-items: center;
+    justify-content: center;
+    padding: 76px 16px 24px;
+    overflow: visible;
+  }
+
+  .auth-page .fx-beam,
+  .auth-page .fx-bokeh,
+  .auth-page .fx-fore,
+  .reset-page .fx-beam,
+  .reset-page .fx-bokeh,
+  .reset-page .fx-fore {
+    display: none;
+  }
+
+  .auth-page .login-card,
+  .reset-page .reset-card {
+    width: min(100%, 420px);
+    max-width: 420px;
+    max-height: none;
+    margin: 0;
+    padding: 30px 24px;
+    border: 1px solid #e3e8ee;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.96);
+    box-shadow: 0 12px 36px rgba(33, 54, 78, 0.09);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+
+  .auth-page .mmiv-header,
+  .reset-page .mmiv-header {
+    top: 18px;
+    right: 20px;
+    color: #203149;
+    font-size: 25px;
+    text-shadow: none;
+  }
+
+  .auth-page .login-card h1,
+  .reset-page .reset-card h1 {
+    font-size: 25px;
+    letter-spacing: 2px;
+  }
+
+  .auth-page .login-card .sub,
+  .reset-page .reset-card .sub {
+    margin-bottom: 24px;
+    font-size: 11px;
+    letter-spacing: 1.4px;
+    line-height: 1.6;
+  }
+
+  .auth-page .field,
+  .reset-page .field {
+    margin-bottom: 16px;
+  }
+
+  .auth-page .field input,
+  .reset-page .field input {
+    min-height: 46px;
+    font-size: 16px;
+  }
+
+  .auth-page .row {
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+
+  .auth-page .login-card button,
+  .reset-page .login-card button {
+    min-height: 46px;
+    letter-spacing: 2px;
+  }
+
+  .reset-page .reset-description {
+    margin: 10px 0 22px;
+  }
+}
+
+@media (max-width: 360px) {
+  .auth-page .login-wrap,
+  .reset-page .login-wrap {
+    padding-right: 12px;
+    padding-left: 12px;
+  }
+
+  .auth-page .login-card,
+  .reset-page .reset-card {
+    padding: 26px 18px;
+  }
+
+  .auth-page .row {
+    align-items: flex-start;
+  }
+}
+
+@media (max-height: 600px) and (max-width: 850px) {
+  .auth-page,
+  .reset-page {
+    height: auto;
+    min-height: 100%;
+    overflow-y: auto;
+  }
+
+  .auth-page .login-wrap,
+  .reset-page .login-wrap {
+    min-height: 100dvh;
+    align-items: flex-start;
+    padding-top: 68px;
+  }
+}
