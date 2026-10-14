@@ -251,6 +251,20 @@ elif operation == 'start-session':
         self.assertEqual(self.selected_port(), port)
         self.assert_port_closed(port)
 
+    def test_user_access_scans_through_gateway_path(self):
+        result = self.run_scan(DAST_SERVICE_NAME='user-access-service', DAST_PORT='8083',
+                               DAST_PATH='/user-access/actuator/health',
+                               DAST_READY_PATH='/user-access/actuator/health',
+                               DAST_ENDPOINT_BASE_PATH='/user-access',
+                               TEST_CONTINUE_TO_SCAN='1')
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(json.loads((self.directory / 'parameters.json').read_text())['portNumber'], ['8080'])
+        args = json.loads((self.directory / 'functional-args.json').read_text())
+        self.assertIn(f'http://127.0.0.1:{self.selected_port()}/user-access', args)
+        create = next(call for call in self.docker_calls() if call[0] == 'create')
+        self.assertEqual(create[create.index('-t') + 1],
+                         f'http://127.0.0.1:{self.selected_port()}/user-access/actuator/health')
+
     def test_stubborn_plugin_child_is_killed_and_releases_its_listener(self):
         result = self.run_scan(TEST_STUBBORN_CHILD='1')
         self.assertEqual(result.returncode, 23, result.stdout + result.stderr)
