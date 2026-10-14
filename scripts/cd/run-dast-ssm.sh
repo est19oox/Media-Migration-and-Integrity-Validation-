@@ -12,8 +12,12 @@ READY_PATH="${DAST_READY_PATH:-/actuator/health}"
 SCAN_MODE="${DAST_SCAN_MODE:-baseline}"
 SERVICE_NAME="${DAST_SERVICE_NAME:?DAST_SERVICE_NAME is required}"
 OPENAPI_FILE="${DAST_OPENAPI_FILE:-tests/api/${SERVICE_NAME%-service}-openapi.json}"
-# Transfer functional checks and scans use the Gateway so login shares the tunnel.
-if [[ "$SERVICE_NAME" == transfer-service || "$SERVICE_NAME" == discovery-service || "$SERVICE_NAME" == reporting-service || "$SERVICE_NAME" == integrity-service ]]; then PORT=8080; fi
+# Backend functional checks and scans use the Gateway so login shares the tunnel.
+if [[ "$SERVICE_NAME" == transfer-service || "$SERVICE_NAME" == user-access-service || "$SERVICE_NAME" == discovery-service || "$SERVICE_NAME" == reporting-service || "$SERVICE_NAME" == integrity-service ]]; then PORT=8080; fi
+ENDPOINT_BASE_PATH="${DAST_ENDPOINT_BASE_PATH:-}"
+[[ -z "$ENDPOINT_BASE_PATH" || "$ENDPOINT_BASE_PATH" == /* ]] || {
+  echo '::error::DAST_ENDPOINT_BASE_PATH must be empty or start with /.'; exit 1;
+}
 [[ "$SCAN_MODE" == baseline || "$SCAN_MODE" == api ]] || {
   echo '::error::DAST_SCAN_MODE must be baseline or api.'; exit 1;
 }
@@ -276,7 +280,7 @@ ENDPOINT_TOKEN="${API_TEST_TOKEN:-}"
 if [[ "$SERVICE_NAME" == user-access-service ]]; then ENDPOINT_TOKEN=; fi
 API_TEST_TOKEN="$ENDPOINT_TOKEN" python3 scripts/cd/test-endpoints.py \
   --service "${DAST_SERVICE_NAME:?DAST_SERVICE_NAME is required}" \
-  --base-url "http://127.0.0.1:$LOCAL_PORT" \
+  --base-url "http://127.0.0.1:$LOCAL_PORT$ENDPOINT_BASE_PATH" \
   --report "$REPORT_DIR/endpoint-tests.json"
 
 # Do not spend the scanner's token lifetime on earlier functional tests.

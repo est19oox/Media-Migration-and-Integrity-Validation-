@@ -618,8 +618,11 @@ class RunnerAndBarrierTest(unittest.TestCase):
 
     def test_failed_scan_continues_other_scans_and_gateway_is_last(self):
         names = []
+        environments = {}
         def launch(*args, **kwargs):
-            names.append(kwargs['env']['DAST_SERVICE_NAME'])
+            service = kwargs['env']['DAST_SERVICE_NAME']
+            names.append(service)
+            environments[service] = kwargs['env']
             return SimpleNamespace(stdout=['scanner output\n'], wait=lambda: int(len(names) == 1))
         with tempfile.TemporaryDirectory() as directory, \
                 patch.object(verification.subprocess, 'Popen', side_effect=launch), \
@@ -627,6 +630,10 @@ class RunnerAndBarrierTest(unittest.TestCase):
             self.assertEqual(verification.verify(self.state(), Path(directory)), 1)
             self.assertEqual(names[-1], 'api-gateway')
             self.assertEqual(set(names), ssm.expected_services())
+            user_access = environments['user-access-service']
+            self.assertEqual(user_access['DAST_PATH'], '/user-access/actuator/health')
+            self.assertEqual(user_access['DAST_READY_PATH'], '/user-access/actuator/health')
+            self.assertEqual(user_access['DAST_ENDPOINT_BASE_PATH'], '/user-access')
             restore.assert_not_called()
 
     def test_generated_account_cleanup_runs_after_success_and_failure(self):
