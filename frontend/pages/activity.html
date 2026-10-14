@@ -1,331 +1,302 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#eaf3fc" />
+    <meta name="description" content="MMIV Workspace Activity" />
 
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="theme-color" content="#eaf3fc">
-  <meta name="description" content="MMIV Workspace Activity">
+    <title>Activity · MMIV</title>
 
-  <title>Activity · MMIV</title>
+    <link rel="stylesheet" href="../css/home.css" />
+    <link rel="stylesheet" href="../css/activity.css" />
+  </head>
 
-  <link rel="stylesheet" href="../css/home.css">
-  <link rel="stylesheet" href="../css/activity.css">
-</head>
+  <body class="home-page activity-page">
+    <!-- Background -->
+    <div id="particles-js" aria-hidden="true"></div>
 
-<body class="home-page activity-page">
+    <div class="fx fx-glow" aria-hidden="true"></div>
+    <div class="fx fx-beam beam-one" aria-hidden="true"></div>
+    <div class="fx fx-beam beam-two" aria-hidden="true"></div>
+    <div class="fx fx-beam beam-three" aria-hidden="true"></div>
 
-  <!-- Background -->
-  <div id="particles-js" aria-hidden="true"></div>
+    <div class="fx fx-bokeh bokeh-one" aria-hidden="true"></div>
+    <div class="fx fx-bokeh bokeh-two" aria-hidden="true"></div>
+    <div class="fx fx-bokeh bokeh-three" aria-hidden="true"></div>
 
-  <div class="fx fx-glow" aria-hidden="true"></div>
-  <div class="fx fx-beam beam-one" aria-hidden="true"></div>
-  <div class="fx fx-beam beam-two" aria-hidden="true"></div>
-  <div class="fx fx-beam beam-three" aria-hidden="true"></div>
+    <div class="home-shell">
+      <!-- Shared header -->
+      <header class="home-header glass-panel">
+        <nav class="home-nav" aria-label="Main navigation">
+          <a href="home.html">Home</a>
 
-  <div class="fx fx-bokeh bokeh-one" aria-hidden="true"></div>
-  <div class="fx fx-bokeh bokeh-two" aria-hidden="true"></div>
-  <div class="fx fx-bokeh bokeh-three" aria-hidden="true"></div>
+          <a href="file-manager.html"> File Manager </a>
 
-  <div class="home-shell">
+          <a href="activity.html" class="active" aria-current="page"> Activity </a>
 
-    <!-- Shared header -->
-    <header class="home-header glass-panel">
+          <a href="admin.html" data-admin hidden> Administration </a>
+        </nav>
 
-      <nav class="home-nav" aria-label="Main navigation">
+        <div class="header-right">
+          <div class="home-account">
+            <div class="account-avatar" aria-hidden="true">MM</div>
 
-        <a href="home.html">Home</a>
+            <div class="account-copy">
+              <strong id="account">MMIV account</strong>
+              <span>Workspace member</span>
+            </div>
 
-        <a href="file-manager.html">
-          File Manager
-        </a>
-
-        <a href="activity.html" class="active" aria-current="page">
-          Activity
-        </a>
-
-
-        <a href="admin.html" data-admin hidden>
-          Administration
-        </a>
-
-      </nav>
-
-      <div class="header-right">
-
-        <div class="home-account">
-          <div class="account-avatar" aria-hidden="true">MM</div>
-
-          <div class="account-copy">
-            <strong id="account">MMIV account</strong>
-            <span>Workspace member</span>
+            <button id="logout" class="sign-out-btn" type="button">Sign out</button>
           </div>
 
-          <button id="logout" class="sign-out-btn" type="button">
-            Sign out
-          </button>
+          <a href="home.html" class="mmiv-header" aria-label="MMIV Home"> MMIV<span>.</span> </a>
         </div>
+      </header>
 
-        <a href="home.html" class="mmiv-header" aria-label="MMIV Home">
-          MMIV<span>.</span>
-        </a>
+      <!-- Main -->
+      <main class="home-main activity-main">
+        <p id="status" class="system-status" role="status" aria-live="polite"></p>
 
-      </div>
-    </header>
+        <section class="activity-workspace glass-panel" aria-labelledby="activity-title">
+          <!-- Toolbar -->
+          <div class="activity-toolbar">
+            <h1 id="activity-title">Activity</h1>
 
-    <!-- Main -->
-    <main class="home-main activity-main">
-
-      <p id="status" class="system-status" role="status" aria-live="polite"></p>
-
-      <section class="activity-workspace glass-panel" aria-labelledby="activity-title">
-
-        <!-- Toolbar -->
-        <div class="activity-toolbar">
-
-          <h1 id="activity-title">Activity</h1>
-
-          <button id="refreshActivity" class="activity-refresh" type="button" title="Refresh activity"
-            aria-label="Refresh activity">
-
-            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
-              stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-
-              <path d="M20 7v5h-5"></path>
-              <path d="M4 17v-5h5"></path>
-              <path d="M5.5 9A7 7 0 0 1 18 7l2 5"></path>
-              <path d="M18.5 15A7 7 0 0 1 6 17l-2-5"></path>
-
-            </svg>
-          </button>
-
-        </div>
-
-        <!-- Filters -->
-        <div class="activity-controls">
-
-          <div class="activity-search">
-
-            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
-              stroke-linecap="round" aria-hidden="true">
-
-              <circle cx="11" cy="11" r="7"></circle>
-              <path d="m20 20-4-4"></path>
-            </svg>
-
-            <input id="activitySearch" type="search" placeholder="Search activity..." aria-label="Search activity">
+            <button
+              id="refreshActivity"
+              class="activity-refresh"
+              type="button"
+              title="Refresh activity"
+              aria-label="Refresh activity"
+            >
+              <svg
+                width="17"
+                height="17"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.6"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M20 7v5h-5"></path>
+                <path d="M4 17v-5h5"></path>
+                <path d="M5.5 9A7 7 0 0 1 18 7l2 5"></path>
+                <path d="M18.5 15A7 7 0 0 1 6 17l-2-5"></path>
+              </svg>
+            </button>
           </div>
 
-          <select id="activityFilter" aria-label="Filter activity type">
-            <option value="all">All activity</option>
-            <option value="upload">Uploads</option>
-            <option value="download">Downloads</option>
-            <option value="verification">Verification</option>
-          </select>
+          <!-- Filters -->
+          <div class="activity-controls">
+            <div class="activity-search">
+              <svg
+                width="17"
+                height="17"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.6"
+                stroke-linecap="round"
+                aria-hidden="true"
+              >
+                <circle cx="11" cy="11" r="7"></circle>
+                <path d="m20 20-4-4"></path>
+              </svg>
 
-        </div>
+              <input
+                id="activitySearch"
+                type="search"
+                placeholder="Search activity..."
+                aria-label="Search activity"
+              />
+            </div>
 
-        <!-- Activity table -->
-        <div id="activityScroll" class="activity-table-scroll" tabindex="0" aria-label="Scrollable activity records">
+            <select id="activityFilter" aria-label="Filter activity type">
+              <option value="all">All activity</option>
+              <option value="upload">Uploads</option>
+              <option value="download">Downloads</option>
+              <option value="verification">Verification</option>
+            </select>
+          </div>
 
-          <table class="activity-table">
+          <!-- Activity table -->
+          <div
+            id="activityScroll"
+            class="activity-table-scroll"
+            tabindex="0"
+            aria-label="Scrollable activity records"
+          >
+            <table class="activity-table">
+              <caption class="activity-visually-hidden">
+                Recent workspace activity records
+              </caption>
 
-            <caption class="activity-visually-hidden">
-              Recent workspace activity records
-            </caption>
+              <thead>
+                <tr>
+                  <th scope="col">Activity</th>
+                  <th scope="col">File / Folder</th>
+                  <th scope="col">Location</th>
+                  <th scope="col">Date</th>
+                  <th scope="col">Status</th>
+                </tr>
+              </thead>
 
-            <thead>
-              <tr>
-                <th scope="col">Activity</th>
-                <th scope="col">File / Folder</th>
-                <th scope="col">Location</th>
-                <th scope="col">Date</th>
-                <th scope="col">Status</th>
-              </tr>
-            </thead>
+              <tbody id="activityRows"></tbody>
+            </table>
 
-            <tbody id="activityRows"></tbody>
+            <div id="activitySentinel" aria-hidden="true"></div>
+          </div>
 
-          </table>
+          <!-- Footer -->
+          <div class="activity-bottom">
+            <span id="activityCount" class="activity-count"> 0 activities </span>
 
-          <div id="activitySentinel" aria-hidden="true"></div>
+            <span
+              id="activityListStatus"
+              class="activity-visually-hidden"
+              role="status"
+              aria-live="polite"
+            >
+              Showing example activity
+            </span>
 
-        </div>
+            <span class="activity-demo-label"> Demo data </span>
+          </div>
+        </section>
+      </main>
 
-        <!-- Footer -->
-        <div class="activity-bottom">
+      <footer class="home-footer">
+        <span> MMIV · Media Migration and Integrity Validation </span>
+        <span>Activity</span>
+      </footer>
+    </div>
 
-          <span id="activityCount" class="activity-count">
-            0 activities
-          </span>
+    <!-- Background scripts -->
+    <script src="../js/particles.min.js"></script>
+    <script src="../js/particles-effect.js"></script>
 
-          <span id="activityListStatus" class="activity-visually-hidden" role="status" aria-live="polite">
-            Showing example activity
-          </span>
+    <!-- UI mock only -->
+    <script>
+      'use strict';
 
-          <span class="activity-demo-label">
-            Demo data
-          </span>
+      const mockActivities = [
+        {
+          type: 'upload',
+          title: 'File uploaded',
+          file: 'Campaign-assets.zip',
+          folder: 'Marketing Assets',
+          date: 'Today, 10:42 AM',
+          status: 'Completed',
+        },
+        {
+          type: 'verification',
+          title: 'Integrity verified',
+          file: 'Migration-plan.pdf',
+          folder: 'Project Atlas',
+          date: 'Today, 9:18 AM',
+          status: 'Verified',
+        },
+        {
+          type: 'download',
+          title: 'File downloaded',
+          file: 'Product-preview.mp4',
+          folder: 'Shared Media',
+          date: 'Yesterday',
+          status: 'Completed',
+        },
+        {
+          type: 'upload',
+          title: 'Folder uploaded',
+          file: 'Research Documents',
+          folder: 'Project Atlas',
+          date: 'Oct 12, 2026',
+          status: 'Completed',
+        },
+        {
+          type: 'verification',
+          title: 'Integrity check failed',
+          file: 'Archive-2026.zip',
+          folder: 'Archive 2026',
+          date: 'Oct 11, 2026',
+          status: 'Failed',
+        },
+        {
+          type: 'download',
+          title: 'File downloaded',
+          file: 'Media-report.pdf',
+          folder: 'Shared Media',
+          date: 'Oct 10, 2026',
+          status: 'Completed',
+        },
+      ];
 
-        </div>
+      const rows = document.getElementById('activityRows');
+      const search = document.getElementById('activitySearch');
+      const filter = document.getElementById('activityFilter');
+      const count = document.getElementById('activityCount');
+      const listStatus = document.getElementById('activityListStatus');
 
-      </section>
+      function renderActivities() {
+        const query = search.value.trim().toLowerCase();
+        const selectedType = filter.value;
 
-    </main>
+        const filtered = mockActivities.filter((item) => {
+          const matchesType = selectedType === 'all' || item.type === selectedType;
 
-    <footer class="home-footer">
-      <span>
-        MMIV · Media Migration and Integrity Validation
-      </span>
-      <span>Activity</span>
-    </footer>
+          const searchable = [item.title, item.file, item.folder, item.date, item.status]
+            .join(' ')
+            .toLowerCase();
 
-  </div>
-
-  <!-- Background scripts -->
-  <script src="../js/particles.min.js"></script>
-  <script src="../js/particles-effect.js"></script>
-
-  <!-- UI mock only -->
-  <script>
-    'use strict';
-
-    const mockActivities = [
-      {
-        type: 'upload',
-        title: 'File uploaded',
-        file: 'Campaign-assets.zip',
-        folder: 'Marketing Assets',
-        date: 'Today, 10:42 AM',
-        status: 'Completed'
-      },
-      {
-        type: 'verification',
-        title: 'Integrity verified',
-        file: 'Migration-plan.pdf',
-        folder: 'Project Atlas',
-        date: 'Today, 9:18 AM',
-        status: 'Verified'
-      },
-      {
-        type: 'download',
-        title: 'File downloaded',
-        file: 'Product-preview.mp4',
-        folder: 'Shared Media',
-        date: 'Yesterday',
-        status: 'Completed'
-      },
-      {
-        type: 'upload',
-        title: 'Folder uploaded',
-        file: 'Research Documents',
-        folder: 'Project Atlas',
-        date: 'Oct 12, 2026',
-        status: 'Completed'
-      },
-      {
-        type: 'verification',
-        title: 'Integrity check failed',
-        file: 'Archive-2026.zip',
-        folder: 'Archive 2026',
-        date: 'Oct 11, 2026',
-        status: 'Failed'
-      },
-      {
-        type: 'download',
-        title: 'File downloaded',
-        file: 'Media-report.pdf',
-        folder: 'Shared Media',
-        date: 'Oct 10, 2026',
-        status: 'Completed'
-      }
-    ];
-
-    const rows = document.getElementById('activityRows');
-    const search = document.getElementById('activitySearch');
-    const filter = document.getElementById('activityFilter');
-    const count = document.getElementById('activityCount');
-    const listStatus = document.getElementById('activityListStatus');
-
-    function renderActivities() {
-      const query = search.value.trim().toLowerCase();
-      const selectedType = filter.value;
-
-      const filtered = mockActivities.filter((item) => {
-        const matchesType =
-          selectedType === 'all' ||
-          item.type === selectedType;
-
-        const searchable = [
-          item.title,
-          item.file,
-          item.folder,
-          item.date,
-          item.status
-        ].join(' ').toLowerCase();
-
-        return matchesType && searchable.includes(query);
-      });
-
-      rows.replaceChildren();
-
-      filtered.forEach((item) => {
-        const tr = document.createElement('tr');
-
-        const values = [
-          item.title,
-          item.file,
-          item.folder,
-          item.date,
-          item.status
-        ];
-
-        values.forEach((value, index) => {
-          const td = document.createElement('td');
-
-          if (index === 0) {
-            const label = document.createElement('span');
-            label.className = 'activity-name';
-            label.textContent = value;
-            td.append(label);
-          } else if (index === 4) {
-            const badge = document.createElement('span');
-            badge.className =
-              'activity-status status-' +
-              item.status.toLowerCase();
-            badge.textContent = value;
-            td.append(badge);
-          } else {
-            td.textContent = value;
-          }
-
-          tr.append(td);
+          return matchesType && searchable.includes(query);
         });
 
-        rows.append(tr);
-      });
+        rows.replaceChildren();
 
-      count.textContent =
-        filtered.length +
-        (filtered.length === 1
-          ? ' activity'
-          : ' activities');
+        filtered.forEach((item) => {
+          const tr = document.createElement('tr');
 
-      listStatus.textContent =
-        filtered.length === 0
-          ? 'No matching activity found.'
-          : 'Showing ' + filtered.length + ' example activities';
-    }
+          const values = [item.title, item.file, item.folder, item.date, item.status];
 
-    search.addEventListener('input', renderActivities);
-    filter.addEventListener('change', renderActivities);
+          values.forEach((value, index) => {
+            const td = document.createElement('td');
 
-    document.getElementById('refreshActivity')
-      .addEventListener('click', renderActivities);
+            if (index === 0) {
+              const label = document.createElement('span');
+              label.className = 'activity-name';
+              label.textContent = value;
+              td.append(label);
+            } else if (index === 4) {
+              const badge = document.createElement('span');
+              badge.className = 'activity-status status-' + item.status.toLowerCase();
+              badge.textContent = value;
+              td.append(badge);
+            } else {
+              td.textContent = value;
+            }
 
-    renderActivities();
-  </script>
+            tr.append(td);
+          });
 
-</body>
+          rows.append(tr);
+        });
 
+        count.textContent = filtered.length + (filtered.length === 1 ? ' activity' : ' activities');
+
+        listStatus.textContent =
+          filtered.length === 0
+            ? 'No matching activity found.'
+            : 'Showing ' + filtered.length + ' example activities';
+      }
+
+      search.addEventListener('input', renderActivities);
+      filter.addEventListener('change', renderActivities);
+
+      document.getElementById('refreshActivity').addEventListener('click', renderActivities);
+
+      renderActivities();
+    </script>
+  </body>
 </html>

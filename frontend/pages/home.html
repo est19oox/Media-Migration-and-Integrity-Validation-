@@ -1,346 +1,256 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#f3f7fc" />
+    <meta name="description" content="MMIV Media Migration and Integrity Validation Workspace" />
 
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="theme-color" content="#f3f7fc">
-  <meta name="description" content="MMIV Media Migration and Integrity Validation Workspace">
+    <title>Home · MMIV</title>
 
-  <title>Home · MMIV</title>
+    <link rel="stylesheet" href="../css/home.css" />
+  </head>
 
-  <link rel="stylesheet" href="../css/home.css">
-</head>
+  <body class="home-page">
+    <!-- Background particles -->
+    <div id="particles-js" aria-hidden="true"></div>
 
-<body class="home-page">
+    <!-- Background lighting -->
+    <div class="fx fx-glow" aria-hidden="true"></div>
 
-  <!-- Background particles -->
-  <div id="particles-js" aria-hidden="true"></div>
+    <div class="fx fx-beam beam-one" aria-hidden="true"></div>
+    <div class="fx fx-beam beam-two" aria-hidden="true"></div>
+    <div class="fx fx-beam beam-three" aria-hidden="true"></div>
 
-  <!-- Background lighting -->
-  <div class="fx fx-glow" aria-hidden="true"></div>
+    <div class="fx fx-bokeh bokeh-one" aria-hidden="true"></div>
+    <div class="fx fx-bokeh bokeh-two" aria-hidden="true"></div>
+    <div class="fx fx-bokeh bokeh-three" aria-hidden="true"></div>
 
-  <div class="fx fx-beam beam-one" aria-hidden="true"></div>
-  <div class="fx fx-beam beam-two" aria-hidden="true"></div>
-  <div class="fx fx-beam beam-three" aria-hidden="true"></div>
+    <!-- Main container -->
+    <div class="home-shell">
+      <!-- Header -->
+      <header class="home-header glass-panel">
+        <!-- Navigation -->
+        <!-- Navigation -->
+        <nav class="home-nav" aria-label="Main navigation">
+          <a href="home.html" class="active" aria-current="page"> Home </a>
 
-  <div class="fx fx-bokeh bokeh-one" aria-hidden="true"></div>
-  <div class="fx fx-bokeh bokeh-two" aria-hidden="true"></div>
-  <div class="fx fx-bokeh bokeh-three" aria-hidden="true"></div>
+          <a href="file-manager.html"> File Manager </a>
 
+          <a href="activity.html"> Activity </a>
 
-  <!-- Main container -->
-  <div class="home-shell">
+          <!-- Administration - Admin only -->
+          <a href="admin.html" data-admin hidden> Administration </a>
+        </nav>
 
-    <!-- Header -->
-    <header class="home-header glass-panel">
+        <!-- Right side -->
+        <div class="header-right">
+          <!-- Account -->
+          <div class="home-account">
+            <div class="account-avatar" aria-hidden="true">MM</div>
 
-      <!-- Navigation -->
-      <!-- Navigation -->
-      <nav class="home-nav" aria-label="Main navigation">
-      
-        <a href="home.html" class="active" aria-current="page">
-          Home
-        </a>
-      
-        <a href="file-manager.html">
-          File Manager
-        </a>
-      
-        <a href="activity.html">
-          Activity
-        </a>
-      
-        <!-- Administration - Admin only -->
-        <a href="admin.html" data-admin hidden>
-          Administration
-        </a>
-      
-      </nav>
+            <div class="account-copy">
+              <strong id="account"> MMIV account </strong>
 
+              <span>Workspace member</span>
+            </div>
 
-
-      <!-- Right side -->
-      <div class="header-right">
-
-        <!-- Account -->
-        <div class="home-account">
-
-          <div class="account-avatar" aria-hidden="true">
-            MM
+            <button id="logout" class="sign-out-btn" type="button">Sign out</button>
           </div>
 
-          <div class="account-copy">
-
-            <strong id="account">
-              MMIV account
-            </strong>
-
-            <span>Workspace member</span>
-
-          </div>
-
-          <button id="logout" class="sign-out-btn" type="button">
-            Sign out
-          </button>
-
+          <!-- MMIV Brand -->
+          <a class="mmiv-header" href="home.html" aria-label="MMIV Home"> MMIV<span>.</span> </a>
         </div>
+      </header>
 
-        <!-- MMIV Brand -->
-        <a class="mmiv-header" href="home.html" aria-label="MMIV Home">
-          MMIV<span>.</span>
-        </a>
+      <!-- Main -->
+      <main class="home-main">
+        <!-- Status -->
+        <p id="status" class="system-status" role="status" aria-live="polite"></p>
 
-      </div>
+        <!-- Accessible folders -->
+        <!-- Centered workspace panels -->
+        <div class="workspace-panels">
+          <!-- Your folders -->
+          <section class="folders-card glass-panel" aria-labelledby="folders-title">
+            <div class="section-heading">
+              <div>
+                <h1 id="folders-title">Your folders</h1>
+                <p class="folders-description">Folders you have permission to access.</p>
+              </div>
 
-    </header>
-
-
-    <!-- Main -->
-    <main class="home-main">
-
-      <!-- Status -->
-      <p id="status" class="system-status" role="status" aria-live="polite"></p>
-
-
-      <!-- Accessible folders -->
-      <!-- Centered workspace panels -->
-      <div class="workspace-panels">
-      
-        <!-- Your folders -->
-        <section class="folders-card glass-panel" aria-labelledby="folders-title">
-      
-          <div class="section-heading">
-            <div>
-              <h1 id="folders-title">Your folders</h1>
-              <p class="folders-description">
-                Folders you have permission to access.
-              </p>
+              <span class="folder-count" id="folderCount"> 0 folders </span>
             </div>
-      
-            <span class="folder-count" id="folderCount">
-              0 folders
-            </span>
-          </div>
-      
-          <ul id="folders" class="folder-list" aria-label="Accessible folders">
-          </ul>
-      
-          <p id="noAccess" class="empty-state" hidden>
-            No accessible folders found.
-          </p>
-      
-        </section>
-      
-        <!-- Activity -->
-        <section class="activity-card glass-panel" aria-labelledby="activity-title">
-      
-          <div class="section-heading">
-            <div>
-              <h2 id="activity-title">Activity</h2>
-              <p class="folders-description">
-                Your recent workspace activity.
-              </p>
+
+            <ul id="folders" class="folder-list" aria-label="Accessible folders"></ul>
+
+            <p id="noAccess" class="empty-state" hidden>No accessible folders found.</p>
+          </section>
+
+          <!-- Activity -->
+          <section class="activity-card glass-panel" aria-labelledby="activity-title">
+            <div class="section-heading">
+              <div>
+                <h2 id="activity-title">Activity</h2>
+                <p class="folders-description">Your recent workspace activity.</p>
+              </div>
             </div>
-          </div>
-      
-          <ul class="activity-list">
-      
-            <li class="activity-item">
-              <span class="activity-icon upload-icon" aria-hidden="true">↑</span>
-              <div class="activity-details">
-                <strong>File uploaded</strong>
-                <span>Campaign-assets.zip</span>
-                <small>Today, 10:42 AM</small>
-              </div>
-            </li>
-      
-            <li class="activity-item">
-              <span class="activity-icon verified-icon" aria-hidden="true">✓</span>
-              <div class="activity-details">
-                <strong>Integrity verified</strong>
-                <span>Project Atlas</span>
-                <small>Today, 9:18 AM</small>
-              </div>
-            </li>
-      
-            <li class="activity-item">
-              <span class="activity-icon download-icon" aria-hidden="true">↓</span>
-              <div class="activity-details">
-                <strong>File downloaded</strong>
-                <span>Migration-plan.pdf</span>
-                <small>Yesterday</small>
-              </div>
-            </li>
-      
-          </ul>
-      
-          <a href="activity.html" class="activity-link">
-            View all activity →
-          </a>
-      
-          <p class="activity-demo-note">
-            Example activity for UI preview.
-          </p>
-      
-        </section>
-      
-      </div>
 
+            <ul class="activity-list">
+              <li class="activity-item">
+                <span class="activity-icon upload-icon" aria-hidden="true">↑</span>
+                <div class="activity-details">
+                  <strong>File uploaded</strong>
+                  <span>Campaign-assets.zip</span>
+                  <small>Today, 10:42 AM</small>
+                </div>
+              </li>
 
-    </main>
+              <li class="activity-item">
+                <span class="activity-icon verified-icon" aria-hidden="true">✓</span>
+                <div class="activity-details">
+                  <strong>Integrity verified</strong>
+                  <span>Project Atlas</span>
+                  <small>Today, 9:18 AM</small>
+                </div>
+              </li>
 
+              <li class="activity-item">
+                <span class="activity-icon download-icon" aria-hidden="true">↓</span>
+                <div class="activity-details">
+                  <strong>File downloaded</strong>
+                  <span>Migration-plan.pdf</span>
+                  <small>Yesterday</small>
+                </div>
+              </li>
+            </ul>
 
-    <!-- Footer -->
-    <footer class="home-footer">
+            <a href="activity.html" class="activity-link"> View all activity → </a>
 
-      <span>
-        MMIV · Media Migration and Integrity Validation
-      </span>
+            <p class="activity-demo-note">Example activity for UI preview.</p>
+          </section>
+        </div>
+      </main>
 
-      <span>
-        Workspace
-      </span>
+      <!-- Footer -->
+      <footer class="home-footer">
+        <span> MMIV · Media Migration and Integrity Validation </span>
 
-    </footer>
+        <span> Workspace </span>
+      </footer>
+    </div>
 
-  </div>
+    <!-- Particle animation -->
+    <script src="../js/particles.min.js"></script>
+    <script src="../js/particles-effect.js"></script>
 
+    <!-- Mock data: UI development only -->
+    <script>
+      'use strict';
 
-  <!-- Particle animation -->
-  <script src="../js/particles.min.js"></script>
-  <script src="../js/particles-effect.js"></script>
+      const mockUser = {
+        username: 'Alex Morgan',
+        role: 'USER',
 
+        destinations: [
+          {
+            destination: 'Project Atlas',
+            permission: 'WRITE',
+          },
+          {
+            destination: 'Shared Media',
+            permission: 'READ',
+          },
+          {
+            destination: 'Marketing Assets',
+            permission: 'WRITE',
+          },
+          {
+            destination: 'Archive 2026',
+            permission: 'READ',
+          },
+          {
+            destination: 'Research Documents',
+            permission: 'READ',
+          },
+          {
+            destination: 'Team Resources',
+            permission: 'WRITE',
+          },
+        ],
+      };
 
-  <!-- Mock data: UI development only -->
-  <script>
-    'use strict';
+      function loadMockFolders() {
+        const folderList = document.getElementById('folders');
 
-    const mockUser = {
-      username: 'Alex Morgan',
-      role: 'USER',
+        const noAccess = document.getElementById('noAccess');
 
-      destinations: [
-        {
-          destination: 'Project Atlas',
-          permission: 'WRITE'
-        },
-        {
-          destination: 'Shared Media',
-          permission: 'READ'
-        },
-        {
-          destination: 'Marketing Assets',
-          permission: 'WRITE'
-        },
-        {
-          destination: 'Archive 2026',
-          permission: 'READ'
-        },
-        {
-          destination: 'Research Documents',
-          permission: 'READ'
-        },
-        {
-          destination: 'Team Resources',
-          permission: 'WRITE'
-        }
-      ]
-    };
+        const account = document.getElementById('account');
 
-    function loadMockFolders() {
-      const folderList =
-        document.getElementById('folders');
+        const status = document.getElementById('status');
 
-      const noAccess =
-        document.getElementById('noAccess');
+        const folderCount = document.getElementById('folderCount');
 
-      const account =
-        document.getElementById('account');
+        status.textContent = 'Loading folders...';
 
-      const status =
-        document.getElementById('status');
+        folderList.replaceChildren();
+        noAccess.hidden = true;
 
-      const folderCount =
-        document.getElementById('folderCount');
+        setTimeout(() => {
+          account.textContent = mockUser.username;
 
-      status.textContent = 'Loading folders...';
+          status.textContent = '';
 
-      folderList.replaceChildren();
-      noAccess.hidden = true;
+          const destinations = mockUser.destinations;
 
-      setTimeout(() => {
-        account.textContent = mockUser.username;
+          folderCount.textContent =
+            destinations.length + (destinations.length === 1 ? ' folder' : ' folders');
 
-        status.textContent = '';
+          if (destinations.length === 0) {
+            noAccess.hidden = false;
+            return;
+          }
 
-        const destinations = mockUser.destinations;
+          destinations.forEach((folder) => {
+            const item = document.createElement('li');
 
-        folderCount.textContent =
-          destinations.length +
-          (destinations.length === 1
-            ? ' folder'
-            : ' folders');
+            const link = document.createElement('a');
 
-        if (destinations.length === 0) {
-          noAccess.hidden = false;
-          return;
-        }
+            const icon = document.createElement('span');
 
-        destinations.forEach((folder) => {
-          const item =
-            document.createElement('li');
+            const details = document.createElement('span');
 
-          const link =
-            document.createElement('a');
+            const name = document.createElement('strong');
 
-          const icon =
-            document.createElement('span');
+            const permission = document.createElement('small');
 
-          const details =
-            document.createElement('span');
+            icon.className = 'folder-icon';
+            icon.setAttribute('aria-hidden', 'true');
+            icon.textContent = '▣';
 
-          const name =
-            document.createElement('strong');
+            details.className = 'folder-details';
 
-          const permission =
-            document.createElement('small');
+            name.textContent = folder.destination;
 
-          icon.className = 'folder-icon';
-          icon.setAttribute('aria-hidden', 'true');
-          icon.textContent = '▣';
+            permission.className = 'folder-permission';
 
-          details.className = 'folder-details';
+            permission.textContent =
+              folder.permission === 'WRITE' ? 'Upload and download' : 'View and download';
 
-          name.textContent = folder.destination;
+            link.href =
+              'file-manager.html?folder=' +
+              encodeURIComponent(folder.destination) +
+              '#browse-files';
 
-          permission.className = 'folder-permission';
+            details.append(name, permission);
+            link.append(icon, details);
+            item.append(link);
+            folderList.append(item);
+          });
+        }, 600);
+      }
 
-          permission.textContent =
-            folder.permission === 'WRITE'
-              ? 'Upload and download'
-              : 'View and download';
-
-          link.href =
-            'file-manager.html?folder=' +
-            encodeURIComponent(folder.destination) +
-            '#browse-files';
-
-          details.append(name, permission);
-          link.append(icon, details);
-          item.append(link);
-          folderList.append(item);
-        });
-
-      }, 600);
-    }
-
-    document.addEventListener(
-      'DOMContentLoaded',
-      loadMockFolders
-    );
-  </script>
-
-</body>
-
+      document.addEventListener('DOMContentLoaded', loadMockFolders);
+    </script>
+  </body>
 </html>

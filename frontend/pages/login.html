@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
@@ -6,28 +6,79 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="stylesheet" href="../css/style.css" />
     <title>Login</title>
-    <link rel="stylesheet" href="../css/login.css">
+    <link rel="stylesheet" href="../css/login.css" />
   </head>
   <body>
-    <div class="mmiv-header">
-      MMIV<span>.</span>
-    </div>
+    <div class="mmiv-header">MMIV<span>.</span></div>
     <div id="particles-js"></div>
     <div class="fx fx-glow"></div>
     <div class="fx fx-beam" style="top: 22%; transform: rotate(-4deg)"></div>
-    <div class="fx fx-beam" style="top: 58%; height: 3px; opacity: 0.7; transform: rotate(-4deg)"></div>
-    <div class="fx fx-beam" style="top: 84%; height: 10px; opacity: 0.5; transform: rotate(-4deg)"></div>
-    <div class="fx fx-bokeh" style="left: 38%; top: 12%; width: 260px; height: 260px; background: rgba(0, 120, 212, 0.22)"></div>
-    <div class="fx fx-bokeh" style="left: 62%; top: 48%; width: 340px; height: 340px; background: rgba(120, 90, 255, 0.16)"></div>
-    <div class="fx fx-bokeh" style="left: 8%; top: 70%; width: 220px; height: 220px; background: rgba(0, 200, 200, 0.16)"></div>
-    <div class="fx fx-fore" style="left: -90px; bottom: -80px; width: 320px; height: 320px; background: rgba(0, 120, 212, 0.35)"></div>
-    <div class="fx fx-fore" style="right: -70px; top: -60px; width: 260px; height: 260px; background: rgba(120, 90, 255, 0.3)"></div>
-    <div class="fx fx-fore" style="left: 46%; bottom: -120px; width: 380px; height: 200px; background: rgba(255, 255, 255, 0.9)"></div>
+    <div
+      class="fx fx-beam"
+      style="top: 58%; height: 3px; opacity: 0.7; transform: rotate(-4deg)"
+    ></div>
+    <div
+      class="fx fx-beam"
+      style="top: 84%; height: 10px; opacity: 0.5; transform: rotate(-4deg)"
+    ></div>
+    <div
+      class="fx fx-bokeh"
+      style="left: 38%; top: 12%; width: 260px; height: 260px; background: rgba(0, 120, 212, 0.22)"
+    ></div>
+    <div
+      class="fx fx-bokeh"
+      style="left: 62%; top: 48%; width: 340px; height: 340px; background: rgba(120, 90, 255, 0.16)"
+    ></div>
+    <div
+      class="fx fx-bokeh"
+      style="left: 8%; top: 70%; width: 220px; height: 220px; background: rgba(0, 200, 200, 0.16)"
+    ></div>
+    <div
+      class="fx fx-fore"
+      style="
+        left: -90px;
+        bottom: -80px;
+        width: 320px;
+        height: 320px;
+        background: rgba(0, 120, 212, 0.35);
+      "
+    ></div>
+    <div
+      class="fx fx-fore"
+      style="
+        right: -70px;
+        top: -60px;
+        width: 260px;
+        height: 260px;
+        background: rgba(120, 90, 255, 0.3);
+      "
+    ></div>
+    <div
+      class="fx fx-fore"
+      style="
+        left: 46%;
+        bottom: -120px;
+        width: 380px;
+        height: 200px;
+        background: rgba(255, 255, 255, 0.9);
+      "
+    ></div>
     <section id="section-media">
       <!-- #region 左側箭咀 -->
       <div id="arrow-btn-prev" class="arrowBtn media-nav-btn prev" data-cursor="pointer">
-        <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 103 103">
-          <circle class="dot" r="4.5" cx="36" cy="51.5" transform-origin="34% 50%" transform="scale(0, 0)"></circle>
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          xmlns:xlink="http://www.w3.org/1999/xlink"
+          viewBox="0 0 103 103"
+        >
+          <circle
+            class="dot"
+            r="4.5"
+            cx="36"
+            cy="51.5"
+            transform-origin="34% 50%"
+            transform="scale(0, 0)"
+          ></circle>
           <g transform="translate(35, 15)">
             <use class="top" xlink:href="#arrow-btn-tr" transform-origin="16.1% 15.9%">
               <path
@@ -77,8 +128,19 @@
 
       <!-- #region 右側箭咀 -->
       <div id="arrow-btn-next" class="arrowBtn media-nav-btn next" data-cursor="pointer">
-        <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 103 103">
-          <circle class="dot" r="4.5" cx="67" cy="51.5" transform-origin="66% 50%" transform="scale(0, 0)"></circle>
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          xmlns:xlink="http://www.w3.org/1999/xlink"
+          viewBox="0 0 103 103"
+        >
+          <circle
+            class="dot"
+            r="4.5"
+            cx="67"
+            cy="51.5"
+            transform-origin="66% 50%"
+            transform="scale(0, 0)"
+          ></circle>
           <g transform="translate(35, 15)">
             <use class="top" xlink:href="#arrow-btn-tl" transform-origin="16.1% 15.9%">
               <path
@@ -111,7 +173,13 @@
         </div>
         <div class="field">
           <label for="password">Password</label>
-          <input type="password" id="password" name="password" autocomplete="current-password" required />
+          <input
+            type="password"
+            id="password"
+            name="password"
+            autocomplete="current-password"
+            required
+          />
         </div>
         <div class="row">
           <label><input type="checkbox" id="remember" /> Remember me</label>
@@ -119,9 +187,7 @@
         </div>
         <button type="submit">Sign in</button>
         <div class="msg" id="msg"></div>
-        <div class="signup-entry">
-          Don't have an account? <a href="signup.html">Sign up</a>
-        </div>
+        <div class="signup-entry">Don't have an account? <a href="signup.html">Sign up</a></div>
       </form>
     </div>
     <!-- #endregion -->

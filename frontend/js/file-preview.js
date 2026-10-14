@@ -46,7 +46,8 @@
     if (file.type === 'application/pdf' || extension === 'pdf') return 'pdf';
     if (file.type.startsWith('video/')) return 'video';
     if (file.type.startsWith('audio/')) return 'audio';
-    if (file.type.startsWith('text/') || ['txt', 'csv', 'md', 'json', 'log'].includes(extension)) return 'text';
+    if (file.type.startsWith('text/') || ['txt', 'csv', 'md', 'json', 'log'].includes(extension))
+      return 'text';
     return 'unsupported';
   }
 
@@ -70,9 +71,17 @@
       const image = document.createElement('img');
       image.alt = file.name;
       image.src = previewUrl;
-      image.addEventListener('error', () => {
-        showMessage(getBadgeText(file.name), 'Could not display this image', 'Try downloading the file to open it in another application.');
-      }, { once: true });
+      image.addEventListener(
+        'error',
+        () => {
+          showMessage(
+            getBadgeText(file.name),
+            'Could not display this image',
+            'Try downloading the file to open it in another application.',
+          );
+        },
+        { once: true },
+      );
       content.replaceChildren(image);
     } else if (kind === 'pdf') {
       const frame = document.createElement('iframe');
@@ -96,18 +105,30 @@
       text.textContent = 'Loading text preview…';
       content.replaceChildren(text);
 
-      file.slice(0, 256 * 1024).text().then((value) => {
-        if (version !== renderVersion) return;
-        text.textContent = value || 'This file is empty.';
-        if (file.size > 256 * 1024) {
-          text.textContent += '\n\n[Preview limited to the first 256 KB.]';
-        }
-      }).catch(() => {
-        if (version !== renderVersion) return;
-        showMessage(getBadgeText(file.name), 'Could not read this file', 'Try downloading the file to open it in another application.');
-      });
+      file
+        .slice(0, 256 * 1024)
+        .text()
+        .then((value) => {
+          if (version !== renderVersion) return;
+          text.textContent = value || 'This file is empty.';
+          if (file.size > 256 * 1024) {
+            text.textContent += '\n\n[Preview limited to the first 256 KB.]';
+          }
+        })
+        .catch(() => {
+          if (version !== renderVersion) return;
+          showMessage(
+            getBadgeText(file.name),
+            'Could not read this file',
+            'Try downloading the file to open it in another application.',
+          );
+        });
     } else {
-      showMessage(getBadgeText(file.name), 'Preview is not available for this file type', 'You can download the file and open it with a compatible application.');
+      showMessage(
+        getBadgeText(file.name),
+        'Preview is not available for this file type',
+        'You can download the file and open it with a compatible application.',
+      );
     }
 
     if (!dialog.open) dialog.showModal();
@@ -134,7 +155,11 @@
     downloadLink.removeAttribute('href');
     downloadLink.removeAttribute('download');
     downloadLink.hidden = true;
-    showMessage(getBadgeText(fileName), 'Preview is unavailable for this demo file', 'This sample listing does not include the underlying file. Select a local file in the upload form to preview its actual contents.');
+    showMessage(
+      getBadgeText(fileName),
+      'Preview is unavailable for this demo file',
+      'This sample listing does not include the underlying file. Select a local file in the upload form to preview its actual contents.',
+    );
 
     if (!dialog.open) dialog.showModal();
   }
@@ -157,7 +182,11 @@
     downloadLink.removeAttribute('href');
     downloadLink.removeAttribute('download');
     downloadLink.hidden = true;
-    showMessage('FILE', 'Select a file to preview', 'Choose a file in the upload form first. Supported types include images, PDF, video, audio and text.');
+    showMessage(
+      'FILE',
+      'Select a file to preview',
+      'Choose a file in the upload form first. Supported types include images, PDF, video, audio and text.',
+    );
     if (!dialog.open) dialog.showModal();
   });
 

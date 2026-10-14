@@ -3,10 +3,10 @@
    ========================================== */
 
 .activity-page {
-    --activity-primary: #0878ce;
-    --activity-text: #203149;
-    --activity-muted: #738399;
-    --activity-line: rgba(110, 155, 200, 0.16);
+  --activity-primary: #0878ce;
+  --activity-text: #203149;
+  --activity-muted: #738399;
+  --activity-line: rgba(110, 155, 200, 0.16);
 }
 
 /* ==========================================
@@ -14,17 +14,17 @@
    ========================================== */
 
 .activity-page .activity-main {
-    width: 100%;
-    flex: 1;
-    min-height: 0;
+  width: 100%;
+  flex: 1;
+  min-height: 0;
 
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
 
-    padding: 12px 0;
-    overflow: hidden;
+  padding: 12px 0;
+  overflow: hidden;
 }
 
 /* ==========================================
@@ -32,19 +32,19 @@
    ========================================== */
 
 .activity-workspace {
-    width: 100%;
-    max-width: 1180px;
+  width: 100%;
+  max-width: 1180px;
 
-    flex: 1;
-    min-height: 0;
+  flex: 1;
+  min-height: 0;
 
-    display: flex;
-    flex-direction: column;
+  display: flex;
+  flex-direction: column;
 
-    padding: 22px 26px;
-    border-radius: 8px;
+  padding: 22px 26px;
+  border-radius: 8px;
 
-    overflow: hidden;
+  overflow: hidden;
 }
 
 /* ==========================================
@@ -52,54 +52,54 @@
    ========================================== */
 
 .activity-toolbar {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
 
-    gap: 16px;
-    margin-bottom: 20px;
+  gap: 16px;
+  margin-bottom: 20px;
 }
 
 .activity-toolbar h1 {
-    margin: 0;
+  margin: 0;
 
-    color: var(--activity-text);
+  color: var(--activity-text);
 
-    font-size: 25px;
-    font-weight: 600;
-    letter-spacing: -0.5px;
-    line-height: 1.2;
+  font-size: 25px;
+  font-weight: 600;
+  letter-spacing: -0.5px;
+  line-height: 1.2;
 }
 
 /* Minimal refresh button */
 
 .activity-refresh {
-    width: 38px;
-    height: 38px;
+  width: 38px;
+  height: 38px;
 
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 
-    padding: 0;
+  padding: 0;
 
-    border: 1px solid rgba(0, 120, 212, 0.16);
-    border-radius: 6px;
+  border: 1px solid rgba(0, 120, 212, 0.16);
+  border-radius: 6px;
 
-    color: #52677f;
-    background: transparent;
+  color: #52677f;
+  background: transparent;
 
-    cursor: pointer;
-    transition: background 0.15s ease;
+  cursor: pointer;
+  transition: background 0.15s ease;
 }
 
 .activity-refresh svg {
-    display: block;
-    flex-shrink: 0;
+  display: block;
+  flex-shrink: 0;
 }
 
 .activity-refresh:hover {
-    background: rgba(0, 120, 212, 0.05);
+  background: rgba(0, 120, 212, 0.05);
 }
 
 /* ==========================================
@@ -107,84 +107,83 @@
    ========================================== */
 
 .activity-controls {
-    display: grid;
+  display: grid;
 
-    grid-template-columns:
-        minmax(200px, 350px) minmax(150px, 190px);
+  grid-template-columns: minmax(200px, 350px) minmax(150px, 190px);
 
-    align-items: center;
-    gap: 14px;
+  align-items: center;
+  gap: 14px;
 
-    margin-bottom: 16px;
+  margin-bottom: 16px;
 }
 
 /* Search */
 
 .activity-search {
-    height: 43px;
+  height: 43px;
 
-    display: flex;
-    align-items: center;
+  display: flex;
+  align-items: center;
 
-    gap: 10px;
-    padding: 0 13px;
+  gap: 10px;
+  padding: 0 13px;
 
-    border: 1px solid var(--activity-line);
-    border-radius: 6px;
+  border: 1px solid var(--activity-line);
+  border-radius: 6px;
 
-    background: rgba(255, 255, 255, 0.65);
+  background: rgba(255, 255, 255, 0.65);
 }
 
 .activity-search svg {
-    display: block;
-    flex-shrink: 0;
-    color: #8b9aac;
+  display: block;
+  flex-shrink: 0;
+  color: #8b9aac;
 }
 
 .activity-search input {
-    width: 100%;
-    height: 100%;
-    min-width: 0;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
 
-    padding: 0;
+  padding: 0;
 
-    border: none;
-    outline: none;
+  border: none;
+  outline: none;
 
-    color: var(--activity-text);
-    background: transparent;
+  color: var(--activity-text);
+  background: transparent;
 
-    font-size: 12px;
+  font-size: 12px;
 }
 
 .activity-search input::placeholder {
-    color: #9aa7b7;
+  color: #9aa7b7;
 }
 
 /* Filter */
 
 .activity-controls select {
-    width: 100%;
-    height: 43px;
+  width: 100%;
+  height: 43px;
 
-    padding: 0 12px;
+  padding: 0 12px;
 
-    border: 1px solid var(--activity-line);
-    border-radius: 6px;
+  border: 1px solid var(--activity-line);
+  border-radius: 6px;
 
-    color: var(--activity-text);
-    background: rgba(255, 255, 255, 0.72);
+  color: var(--activity-text);
+  background: rgba(255, 255, 255, 0.72);
 
-    font-size: 12px;
-    cursor: pointer;
+  font-size: 12px;
+  cursor: pointer;
 }
 
 /* Count */
 
 .activity-count {
-    color: #8a99aa;
-    font-size: 11px;
-    white-space: nowrap;
+  color: #8a99aa;
+  font-size: 11px;
+  white-space: nowrap;
 }
 
 /* ==========================================
@@ -192,60 +191,60 @@
    ========================================== */
 
 .activity-table-scroll {
-    width: 100%;
-    flex: 1;
-    min-height: 0;
+  width: 100%;
+  flex: 1;
+  min-height: 0;
 
-    overflow: auto;
+  overflow: auto;
 
-    border: 1px solid var(--activity-line);
-    border-radius: 8px;
+  border: 1px solid var(--activity-line);
+  border-radius: 8px;
 
-    scrollbar-width: thin;
+  scrollbar-width: thin;
 }
 
 .activity-table {
-    width: 100%;
-    border-collapse: collapse;
-    text-align: left;
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
 }
 
 .activity-table th {
-    position: sticky;
-    top: 0;
-    z-index: 1;
+  position: sticky;
+  top: 0;
+  z-index: 1;
 
-    padding: 14px 16px;
+  padding: 14px 16px;
 
-    color: #718198;
-    background: #eef5fc;
+  color: #718198;
+  background: #eef5fc;
 
-    font-size: 11px;
-    font-weight: 600;
+  font-size: 11px;
+  font-weight: 600;
 
-    text-align: left;
-    white-space: nowrap;
+  text-align: left;
+  white-space: nowrap;
 }
 
 .activity-table td {
-    padding: 15px 16px;
+  padding: 15px 16px;
 
-    border-top: 1px solid var(--activity-line);
+  border-top: 1px solid var(--activity-line);
 
-    color: #6b7c92;
-    font-size: 12px;
+  color: #6b7c92;
+  font-size: 12px;
 
-    line-height: 1.5;
-    vertical-align: middle;
+  line-height: 1.5;
+  vertical-align: middle;
 }
 
 .activity-table tbody tr:hover {
-    background: rgba(235, 244, 253, 0.38);
+  background: rgba(235, 244, 253, 0.38);
 }
 
 .activity-name {
-    color: #263951;
-    font-weight: 600;
+  color: #263951;
+  font-weight: 600;
 }
 
 /* ==========================================
@@ -253,35 +252,35 @@
    ========================================== */
 
 .activity-status {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 
-    min-width: 76px;
-    min-height: 26px;
+  min-width: 76px;
+  min-height: 26px;
 
-    padding: 5px 10px;
+  padding: 5px 10px;
 
-    border-radius: 6px;
+  border-radius: 6px;
 
-    font-size: 11px;
-    font-weight: 500;
-    white-space: nowrap;
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
 }
 
 .status-completed {
-    color: #2878b7;
-    background: #e6f2ff;
+  color: #2878b7;
+  background: #e6f2ff;
 }
 
 .status-verified {
-    color: #18835f;
-    background: #e7f7ef;
+  color: #18835f;
+  background: #e7f7ef;
 }
 
 .status-failed {
-    color: #c54a4a;
-    background: #fff0ef;
+  color: #c54a4a;
+  background: #fff0ef;
 }
 
 /* ==========================================
@@ -289,28 +288,28 @@
    ========================================== */
 
 .activity-bottom {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
 
-    gap: 12px;
-    margin-top: 12px;
-    padding-top: 10px;
+  gap: 12px;
+  margin-top: 12px;
+  padding-top: 10px;
 
-    color: #8a99aa;
-    font-size: 11px;
+  color: #8a99aa;
+  font-size: 11px;
 }
 
 .activity-demo-label {
-    color: #9aa5b1;
+  color: #9aa5b1;
 }
 
 /* Infinite-scroll placeholder */
 
 #activitySentinel {
-    width: 100%;
-    height: 1px;
-    pointer-events: none;
+  width: 100%;
+  height: 1px;
+  pointer-events: none;
 }
 
 /* ==========================================
@@ -318,19 +317,19 @@
    ========================================== */
 
 .activity-visually-hidden {
-    position: absolute !important;
+  position: absolute !important;
 
-    width: 1px;
-    height: 1px;
+  width: 1px;
+  height: 1px;
 
-    padding: 0;
-    margin: -1px;
+  padding: 0;
+  margin: -1px;
 
-    overflow: hidden;
-    clip: rect(0, 0, 0, 0);
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
 
-    white-space: nowrap;
-    border: 0;
+  white-space: nowrap;
+  border: 0;
 }
 
 /* ==========================================
@@ -338,72 +337,68 @@
    ========================================== */
 
 @media (max-width: 900px) {
+  .activity-workspace {
+    padding: 20px;
+  }
 
-    .activity-workspace {
-        padding: 20px;
-    }
+  .activity-controls {
+    grid-template-columns: minmax(180px, 1fr) minmax(150px, 190px);
+  }
 
-    .activity-controls {
-        grid-template-columns:
-            minmax(180px, 1fr) minmax(150px, 190px);
-    }
-
-    .activity-table {
-        min-width: 760px;
-    }
+  .activity-table {
+    min-width: 760px;
+  }
 }
 
 @media (max-width: 600px) {
+  .activity-page .activity-main {
+    padding: 10px 0;
+    flex: 0 0 auto;
+    overflow: visible;
+  }
 
-    .activity-page .activity-main {
-        padding: 10px 0;
-        flex: 0 0 auto;
-        overflow: visible;
-    }
+  .activity-workspace {
+    padding: 16px 12px;
+    flex: 0 0 auto;
+    min-height: 440px;
+  }
 
-    .activity-workspace {
-        padding: 16px 12px;
-        flex: 0 0 auto;
-        min-height: 440px;
-    }
+  .activity-toolbar {
+    margin-bottom: 16px;
+  }
 
-    .activity-toolbar {
-        margin-bottom: 16px;
-    }
+  .activity-toolbar h1 {
+    font-size: 22px;
+  }
 
-    .activity-toolbar h1 {
-        font-size: 22px;
-    }
+  .activity-controls {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
 
-    .activity-controls {
-        grid-template-columns: 1fr;
-        gap: 10px;
-    }
+  .activity-table {
+    min-width: 700px;
+  }
 
-    .activity-table {
-        min-width: 700px;
-    }
-
-    .activity-bottom {
-        font-size: 10px;
-    }
+  .activity-bottom {
+    font-size: 10px;
+  }
 }
 
 @media (max-height: 600px) and (min-width: 601px) {
-    .activity-page .activity-main {
-        flex: 0 0 auto;
-        overflow: visible;
-    }
+  .activity-page .activity-main {
+    flex: 0 0 auto;
+    overflow: visible;
+  }
 
-    .activity-workspace {
-        flex: 0 0 auto;
-        min-height: 440px;
-    }
+  .activity-workspace {
+    flex: 0 0 auto;
+    min-height: 440px;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
-
-    .activity-refresh {
-        transition: none;
-    }
+  .activity-refresh {
+    transition: none;
+  }
 }

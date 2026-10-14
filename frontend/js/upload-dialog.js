@@ -1,7 +1,11 @@
 (() => {
   const filePickers = [
     { inputId: 'file', statusId: 'fileSelectionStatus', emptyLabel: 'No file selected' },
-    { inputId: 'folderPicker', statusId: 'folderSelectionStatus', emptyLabel: 'No folder selected' },
+    {
+      inputId: 'folderPicker',
+      statusId: 'folderSelectionStatus',
+      emptyLabel: 'No folder selected',
+    },
   ];
 
   filePickers.forEach(({ inputId, statusId, emptyLabel }) => {
