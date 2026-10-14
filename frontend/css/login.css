@@ -1,0 +1,479 @@
+
+
+/* 轮播图靠左上角 */
+#section-media {
+    align-items: flex-start;
+    justify-content: flex-start;
+    padding-top: 2.5rem;
+}
+
+#section-media .media-nav-btn {
+    margin-top: 10rem;
+}
+
+#section-media .media-nav-btn.prev {
+    margin-left: 1rem;
+}
+
+#section-media .media-nav-btn.next {
+    margin-right: 0;
+}
+
+#section-media .media-container-box {
+    margin-top: 1rem;
+}
+
+/* MMIV 右上角品牌标题 */
+.mmiv-header {
+    position: fixed;
+    top: 30px;
+    right: 48px;
+    z-index: 100;
+
+    font-family: 'Bender', sans-serif;
+    font-size: 32px;
+    font-weight: bold;
+    letter-spacing: 4px;
+
+    color: #ffffff;
+    text-shadow: 0 2px 12px rgba(0, 0, 0, 0.5);
+    user-select: none;
+    pointer-events: none;
+}
+
+/* 标题后面的蓝色圆点 */
+.mmiv-header span {
+    color: #87bbff;
+}
+
+/* 手机端适配 */
+@media (max-width: 600px) {
+    .mmiv-header {
+        top: 18px;
+        right: 20px;
+        font-size: 24px;
+    }
+}
+@font-face {
+    font-family: 'Bender';
+    src: url('../font/Bender.woff') format('woff');
+    font-display: swap;
+}
+
+
+
+
+.login-wrap {
+    position: fixed;
+    inset: 0;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    padding: 1rem 3rem 1rem 0;
+    pointer-events: none;
+}
+
+.login-card {
+    pointer-events: auto;
+    width: 360px;
+    max-width: 90vw;
+    padding: 40px 32px;
+    color: #1b1f27;
+    user-select: auto;
+    background: rgba(255, 255, 255, 0.62);
+    border: 1px solid rgba(255, 255, 255, 0.9);
+    border-radius: 8px;
+    -webkit-backdrop-filter: blur(24px) saturate(1.4);
+    backdrop-filter: blur(24px) saturate(1.4);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04), 0 16px 40px rgba(40, 70, 120, 0.18);
+}
+
+.login-card * {
+    box-sizing: border-box;
+}
+
+.login-card h1 {
+    font-size: 28px;
+    letter-spacing: 4px;
+    margin: 0 0 6px;
+    font-weight: 600;
+}
+
+.login-card .sub {
+    font-size: 12px;
+    color: #6b7686;
+    letter-spacing: 2px;
+    margin-bottom: 28px;
+}
+
+.field {
+    margin-bottom: 18px;
+}
+
+.field label {
+    display: block;
+    font-size: 12px;
+    color: #6b7686;
+    margin-bottom: 6px;
+}
+
+.field input {
+    width: 100%;
+    padding: 11px 12px;
+    background: rgba(255, 255, 255, 0.7);
+    border: 1px solid rgba(0, 0, 0, 0.12);
+    border-bottom: 2px solid rgba(0, 0, 0, 0.35);
+    border-radius: 4px;
+    color: #1b1f27;
+    font-size: 15px;
+    outline: none;
+    transition: border-color 0.2s, background 0.2s;
+}
+
+.field input:focus {
+    border-bottom-color: #0078d4;
+    background: #fff;
+}
+
+.row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 13px;
+    color: #6b7686;
+    margin-bottom: 22px;
+}
+
+.row a {
+    color: #0078d4;
+    text-decoration: none;
+}
+
+.row a:hover {
+    text-decoration: underline;
+}
+
+.login-card button {
+    width: 100%;
+    padding: 12px;
+    background: #0078d4;
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    font-size: 16px;
+    font-weight: 600;
+    letter-spacing: 4px;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.login-card button:hover {
+    background: #106ebe;
+}
+
+.msg {
+    min-height: 18px;
+    margin-top: 14px;
+    font-size: 13px;
+    color: #d13438;
+    text-align: center;
+}
+
+.msg.ok {
+    color: #107c10;
+}
+
+.signup-entry {
+    margin-top: 12px;
+    font-size: 13px;
+    color: #6b7686;
+    text-align: center;
+}
+
+.signup-entry a {
+    color: #0078d4;
+    text-decoration: none;
+}
+
+.signup-entry a:hover {
+    text-decoration: underline;
+}
+
+.signup-wrap {
+    align-items: center;
+    padding: 1rem 3rem 1rem 0;
+}
+
+.signup-card {
+    width: 420px;
+    max-height: calc(100vh - 2rem);
+    overflow-y: auto;
+}
+
+.signup-card h1 {
+    letter-spacing: 2px;
+}
+
+.signup-password {
+    position: relative;
+}
+
+.signup-password input {
+    padding-right: 68px;
+}
+
+.signup-card .password-toggle {
+    position: absolute;
+    top: 50%;
+    right: 6px;
+    width: auto;
+    padding: 6px 8px;
+    transform: translateY(-50%);
+    background: transparent;
+    color: #0078d4;
+    font-size: 12px;
+    font-weight: 500;
+    letter-spacing: 0;
+}
+
+.signup-card .password-toggle:hover {
+    background: transparent;
+    color: #106ebe;
+}
+
+.signup-card .signup-rules {
+    margin: 0 0 18px;
+    color: #6b7686;
+    font-size: 11px;
+    line-height: 1.5;
+}
+
+.signup-card #submit {
+    letter-spacing: 1px;
+}
+
+.signup-card button:disabled {
+    opacity: 0.65;
+    cursor: wait;
+}
+
+.signup-card .msg {
+    overflow-wrap: anywhere;
+}
+
+@media (max-width: 600px) {
+    .signup-wrap {
+        justify-content: center;
+        padding: 1rem;
+    }
+}
+
+@media (max-height: 600px) {
+    .signup-wrap {
+        align-items: flex-start;
+        overflow-y: auto;
+    }
+
+    .signup-card {
+        max-height: none;
+        margin: 1rem 0;
+    }
+}
+
+/* ===== 白色底面 + Fluent 扁平风 ===== */
+html,
+body {
+    background: #fff;
+}
+
+body {
+    background-image: none;
+    color: #1b1f27;
+}
+
+/* 粒子反色成淡灰色浮尘 */
+#particles-js {
+    filter: invert(1);
+    opacity: 0.22;
+    z-index: 0;
+}
+
+#section-media {
+    color: #1b1f27;
+    z-index: 2;
+}
+
+.arrowBtn svg {
+    fill: #9aa4b2;
+}
+
+.arrowBtn:hover.prev svg,
+.arrowBtn.clicked.prev svg,
+.arrowBtn:hover.next svg,
+.arrowBtn.clicked.next svg {
+    fill: #0078d4;
+}
+
+#section-media .media-main-view .media-main-pic .media-img {
+    background-color: #e9eef5;
+    border-radius: 6px;
+    box-shadow: 0 20px 50px rgba(40, 70, 120, 0.22);
+}
+
+#section-media .media-user-interactive .media-current-info .media-info-wrapper .media-info-title {
+    background-color: rgba(255, 255, 255, 0.55);
+    color: #1b1f27;
+    border: 1px solid rgba(255, 255, 255, 0.8);
+}
+
+#section-media .media-user-interactive .media-current-info .media-info-wrapper .media-info-serial {
+    color: #0078d4;
+    text-shadow: 0 2px 20px rgba(255, 255, 255, 0.9);
+}
+
+#section-media .media-user-interactive .media-current-info .media-info-wrapper .media-info-detail {
+    color: #4a5565;
+}
+
+#section-media .media-nav-wrapper .media-nav-item::after {
+    background-color: #b8c1cf;
+}
+
+#section-media .media-nav-wrapper .media-nav-item:hover::after,
+#section-media .media-nav-wrapper .media-nav-item[active='true']::after {
+    background-color: #0078d4 !important;
+}
+
+#section-media .media-list-wrapper .media-list-item .media-list-item-img {
+    border-radius: 4px;
+    box-shadow: 0 6px 18px rgba(40, 70, 120, 0.2);
+}
+
+/* ===== 光线 / 失焦 / 景深层 ===== */
+.fx {
+    position: fixed;
+    pointer-events: none;
+    border-radius: 50%;
+}
+
+/* 亮度溢出的背景中心 */
+.fx-glow {
+    z-index: 0;
+    left: 50%;
+    top: 45%;
+    width: 90vmax;
+    height: 90vmax;
+    transform: translate(-50%, -50%);
+    background: radial-gradient(circle, rgba(120, 190, 255, 0.35) 0%, rgba(190, 220, 255, 0.18) 30%, rgba(255, 255, 255, 0) 62%);
+}
+
+/* 多束散射的横光 */
+.fx-beam {
+    z-index: 0;
+    left: -10vw;
+    width: 120vw;
+    height: 6px;
+    border-radius: 0;
+    background: linear-gradient(90deg, transparent, rgba(0, 120, 212, 0.35), rgba(255, 255, 255, 0.9), transparent);
+    filter: blur(3px);
+}
+
+/* 失焦的背景光斑 */
+.fx-bokeh {
+    z-index: 0;
+    filter: blur(40px);
+}
+
+/* 边缘失焦的前景 */
+.fx-fore {
+    z-index: 20;
+    filter: blur(28px);
+}
+
+/* Reset password layout */
+/* Reset Password 页面：卡片正中央 */
+.reset-page .login-wrap {
+    position: fixed;
+    inset: 0;
+    z-index: 10;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    padding: 20px;
+    box-sizing: border-box;
+    pointer-events: none;
+}
+
+/* Reset Password 卡片 */
+.reset-page .reset-card {
+    position: relative;
+    width: 360px;
+    max-width: 100%;
+    margin: 0;
+    pointer-events: auto;
+    z-index: 11;
+}
+
+/* 小屏幕适配 */
+@media (max-width: 600px) {
+    .reset-page .login-wrap {
+        padding: 16px;
+    }
+
+    .reset-page .reset-card {
+        width: 100%;
+        max-width: 360px;
+    }
+}
+.reset-page .reset-card {
+    width: 360px;
+    max-width: 100%;
+    pointer-events: auto;
+}
+
+/* Description */
+.reset-description {
+    font-size: 13px;
+    line-height: 1.7;
+    color: #68778d;
+    margin: 12px 0 24px;
+}
+
+/* Status message */
+.reset-card #status {
+    margin-top: 16px;
+    font-size: 13px;
+    line-height: 1.6;
+    overflow-wrap: anywhere;
+}
+
+/* Back to login */
+.reset-back {
+    margin-top: 20px;
+    text-align: center;
+}
+
+.reset-back a {
+    color: #0078d4;
+    font-size: 13px;
+    text-decoration: none;
+}
+
+.reset-back a:hover {
+    text-decoration: underline;
+}
+
+/* Mobile layout */
+@media (max-width: 600px) {
+    .reset-page .login-wrap {
+        justify-content: center;
+        padding: 20px;
+    }
+
+    .reset-page .reset-card {
+        width: 100%;
+    }
+}

@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#2a1a40"/><stop offset="1" stop-color="#6a2f8a"/></linearGradient>
+  </defs>
+  <rect width="1600" height="900" fill="url(#bg)"/>
+  <g stroke="#ffffff" stroke-opacity=".06"><path d="M0 150H1600M0 300H1600M0 450H1600M0 600H1600M0 750H1600M200 0V900M400 0V900M600 0V900M800 0V900M1000 0V900M1200 0V900M1400 0V900"/></g>
+  <!-- chained blocks -->
+  <g stroke="#f0d6ff" stroke-width="5" fill="#3b2459">
+    <rect x="110" y="340" width="280" height="220" rx="14"/><rect x="460" y="340" width="280" height="220" rx="14"/>
+    <rect x="810" y="340" width="280" height="220" rx="14"/><rect x="1160" y="340" width="280" height="220" rx="14"/>
+  </g>
+  <g stroke="#e29bff" stroke-width="10"><path d="M390 450H460M740 450H810M1090 450H1160"/></g>
+  <g fill="#f0d6ff" font-family="Consolas,monospace" font-size="26">
+    <text x="140" y="400">HASH a3f9…</text><text x="490" y="400">HASH 7c21…</text><text x="840" y="400">HASH e04b…</text><text x="1190" y="400">HASH 5d88…</text>
+    <text x="140" y="520">DATA</text><text x="490" y="520">DATA</text><text x="840" y="520">DATA</text><text x="1190" y="520">DATA</text>
+  </g>
+  <!-- checkmarks -->
+  <g fill="none" stroke="#7dffb0" stroke-width="12" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M300 600 l22 24 l44 -52"/><path d="M650 600 l22 24 l44 -52"/><path d="M1000 600 l22 24 l44 -52"/><path d="M1350 600 l22 24 l44 -52"/>
+  </g>
+  <text x="800" y="740" fill="#f0d6ff" font-size="34" text-anchor="middle" font-family="Segoe UI,Arial">VERIFIED · CONSISTENT · TAMPER-PROOF</text>
+  <text x="800" y="150" fill="#ffffff" font-size="88" font-weight="700" text-anchor="middle" font-family="Segoe UI,Arial" letter-spacing="10">INTEGRITY</text>
+</svg>

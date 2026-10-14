@@ -1,0 +1,1631 @@
+/* ==========================================
+   MMIV ADMINISTRATION V2
+   Horizontal Tabs + Minimal Layout
+   ========================================== */
+
+.admin-page {
+    --admin-primary: #0878ce;
+    --admin-text: #203149;
+    --admin-muted: #738399;
+    --admin-line: rgba(110, 155, 200, 0.16);
+}
+
+/* ==========================================
+   MAIN
+   ========================================== */
+
+.admin-page .admin-main {
+    width: 100%;
+    flex: 1;
+    min-height: 0;
+
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+
+    padding: 12px 0;
+    overflow: hidden;
+}
+
+/* ==========================================
+   WORKSPACE PANEL
+   ========================================== */
+
+.admin-workspace {
+    position: relative;
+
+    width: 100%;
+    max-width: 1180px;
+
+    flex: 1;
+    min-height: 0;
+
+    display: flex;
+    flex-direction: column;
+
+    padding: 22px 26px;
+    border-radius: 8px;
+
+    overflow: hidden;
+}
+
+/* ==========================================
+   HEADING
+   ========================================== */
+
+.admin-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+
+    gap: 16px;
+    margin-bottom: 18px;
+}
+
+.admin-heading h1 {
+    margin: 0;
+
+    color: var(--admin-text);
+
+    font-size: 25px;
+    font-weight: 600;
+    letter-spacing: -0.5px;
+    line-height: 1.2;
+}
+
+.admin-environment {
+    color: #8a99aa;
+    font-size: 11px;
+}
+
+/* ==========================================
+   CSS-ONLY TABS
+   ========================================== */
+
+.admin-tab-input {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    opacity: 0;
+    pointer-events: none;
+}
+
+.admin-tabs {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+
+    gap: 6px;
+
+    padding-bottom: 12px;
+    margin-bottom: 20px;
+
+    border-bottom: 1px solid var(--admin-line);
+}
+
+.admin-tab {
+    position: relative;
+
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+
+    min-height: 38px;
+    padding: 0 17px;
+
+    border-radius: 6px;
+
+    color: #72849b;
+
+    font-size: 12px;
+    font-weight: 500;
+
+    cursor: pointer;
+    white-space: nowrap;
+
+    transition:
+        background 0.2s,
+        color 0.2s;
+}
+
+.admin-tab:hover {
+    color: var(--admin-primary);
+    background: rgba(235, 244, 253, 0.65);
+}
+
+/* Active tab */
+
+.admin-workspace:has(#tab-folders:checked) .admin-tab[for="tab-folders"],
+
+.admin-workspace:has(#tab-users:checked) .admin-tab[for="tab-users"],
+
+.admin-workspace:has(#tab-invitations:checked) .admin-tab[for="tab-invitations"],
+
+.admin-workspace:has(#tab-logs:checked) .admin-tab[for="tab-logs"] {
+    color: var(--admin-primary);
+    background: #e6f2ff;
+    font-weight: 600;
+}
+
+/* Keyboard focus */
+
+.admin-workspace:has(#tab-folders:focus-visible) .admin-tab[for="tab-folders"],
+
+.admin-workspace:has(#tab-users:focus-visible) .admin-tab[for="tab-users"],
+
+.admin-workspace:has(#tab-invitations:focus-visible) .admin-tab[for="tab-invitations"],
+
+.admin-workspace:has(#tab-logs:focus-visible) .admin-tab[for="tab-logs"] {
+    outline: 3px solid #70b5f0;
+    outline-offset: 2px;
+}
+
+/* ==========================================
+   CONTENT
+   ========================================== */
+
+.admin-content {
+    flex: 1;
+    min-height: 0;
+    min-width: 0;
+
+    display: flex;
+    flex-direction: column;
+
+    overflow: hidden;
+}
+
+.admin-section {
+    width: 100%;
+    flex: 1;
+    min-height: 0;
+
+    display: none;
+    flex-direction: column;
+
+    overflow: hidden;
+}
+
+/* Show selected section */
+
+.admin-workspace:has(#tab-folders:checked) #admin-folders,
+
+.admin-workspace:has(#tab-users:checked) #admin-users,
+
+.admin-workspace:has(#tab-invitations:checked) #admin-invitations,
+
+.admin-workspace:has(#tab-logs:checked) #admin-logs {
+    display: flex;
+}
+
+/* ==========================================
+   SECTION HEADING
+   ========================================== */
+
+.admin-section-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+
+    gap: 14px;
+    margin-bottom: 18px;
+}
+
+.admin-section-heading h2 {
+    margin: 0;
+
+    color: var(--admin-text);
+
+    font-size: 20px;
+    font-weight: 600;
+    letter-spacing: -0.4px;
+}
+
+.admin-section-footer {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex: 0 0 36px;
+    box-sizing: border-box;
+    min-width: 0;
+    margin-top: 14px;
+    overflow: hidden;
+}
+
+.admin-section-meta {
+    flex-shrink: 0;
+    color: #8a99aa;
+    font-size: 11px;
+    white-space: nowrap;
+}
+
+.admin-section-footer > span:not(.admin-section-meta) {
+    min-width: 0;
+    margin-left: auto;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: #8a99aa;
+    font-size: 11px;
+    font-weight: 400;
+    line-height: 1.7;
+    text-align: right;
+    white-space: nowrap;
+}
+
+/* ==========================================
+   INTERNAL SCROLL
+   ========================================== */
+
+.admin-section-scroll {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+
+    overflow-y: auto;
+    overflow-x: hidden;
+
+    padding-right: 6px;
+
+    scrollbar-width: thin;
+}
+
+.admin-section-scroll > .admin-table-scroll {
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+}
+
+/* ==========================================
+   CONTENT GROUPS
+   ========================================== */
+
+.admin-group {
+    padding: 4px 0 8px;
+}
+
+.admin-group h3 {
+    margin: 0 0 14px;
+
+    color: var(--admin-text);
+
+    font-size: 15px;
+    font-weight: 600;
+}
+
+.admin-group-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+
+    gap: 14px;
+}
+
+.admin-description {
+    margin: -4px 0 20px;
+
+    color: var(--admin-muted);
+
+    font-size: 12px;
+    line-height: 1.7;
+}
+
+.admin-muted {
+    color: #8a99aa;
+    font-size: 11px;
+}
+
+/* Section divider */
+
+.admin-divider {
+    width: 100%;
+    height: 1px;
+
+    margin: 22px 0;
+
+    background: var(--admin-line);
+}
+
+/* ==========================================
+   FORM FIELDS
+   ========================================== */
+
+.admin-field {
+    display: flex;
+    flex-direction: column;
+
+    gap: 8px;
+    margin-bottom: 16px;
+}
+
+.admin-field label {
+    color: #52677f;
+
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.admin-field input,
+.admin-field select {
+    width: 100%;
+    min-height: 43px;
+
+    padding: 10px 13px;
+
+    border: 1px solid rgba(100, 145, 190, 0.23);
+    border-radius: 6px;
+
+    color: var(--admin-text);
+    background: rgba(255, 255, 255, 0.72);
+
+    font-size: 12px;
+    outline: none;
+}
+
+.admin-field input::placeholder {
+    color: #9aa7b7;
+}
+
+.admin-field input:focus,
+.admin-field select:focus {
+    border-color: var(--admin-primary);
+
+    box-shadow:
+        0 0 0 3px rgba(0, 120, 212, 0.08);
+}
+
+.admin-field-medium {
+    max-width: 520px;
+}
+
+/* ==========================================
+   INLINE FORM
+   ========================================== */
+
+.admin-inline-form {
+    display: flex;
+    align-items: flex-end;
+
+    gap: 12px;
+    max-width: 900px;
+}
+
+.admin-inline-form .admin-field {
+    flex: 1;
+    min-width: 0;
+    margin-bottom: 0;
+}
+
+.admin-inline-form>button {
+    flex-shrink: 0;
+    margin-bottom: 2px;
+}
+
+/* ==========================================
+   BUTTONS
+   ========================================== */
+
+.admin-primary-button,
+.admin-secondary-button,
+.admin-danger-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+
+    min-height: 39px;
+    padding: 9px 16px;
+
+    border-radius: 6px;
+
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1.2;
+
+    text-align: center;
+    white-space: nowrap;
+    cursor: pointer;
+
+    transition:
+        background 0.2s,
+        border-color 0.2s;
+}
+
+.admin-primary-button {
+    border: 1px solid var(--admin-primary);
+
+    color: white;
+    background: var(--admin-primary);
+}
+
+.admin-primary-button:hover {
+    background: #075ca8;
+}
+
+.admin-secondary-button {
+    border: 1px solid rgba(0, 120, 212, 0.18);
+
+    color: var(--admin-primary);
+    background: rgba(255, 255, 255, 0.75);
+}
+
+.admin-secondary-button:hover {
+    background: #e8f4ff;
+}
+
+.admin-danger-button {
+    border: 1px solid rgba(197, 74, 74, 0.25);
+
+    color: #c54a4a;
+    background: rgba(255, 240, 239, 0.75);
+}
+
+.admin-danger-button:hover {
+    background: #ffe4e2;
+}
+
+/* ==========================================
+   ACTIONS
+   ========================================== */
+
+.admin-actions {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+
+    gap: 10px;
+    margin-top: 18px;
+}
+
+.admin-help {
+    margin: 14px 0 0;
+
+    color: #8a99aa;
+
+    font-size: 11px;
+    line-height: 1.7;
+}
+
+/* ==========================================
+   PERMISSION OPTIONS
+   ========================================== */
+
+.admin-permission-options {
+    display: flex;
+    flex-direction: column;
+
+    gap: 12px;
+
+    max-width: 650px;
+
+    margin: 20px 0;
+    padding: 16px 18px;
+
+    border: 1px solid var(--admin-line);
+    border-radius: 8px;
+
+    background: rgba(235, 244, 253, 0.45);
+}
+
+.admin-permission-options legend {
+    padding: 0 6px;
+
+    color: #52677f;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.admin-permission-options label {
+    display: flex;
+    align-items: center;
+
+    gap: 10px;
+
+    color: var(--admin-text);
+    font-size: 12px;
+
+    cursor: pointer;
+}
+
+.admin-permission-options input {
+    width: 15px;
+    height: 15px;
+
+    accent-color: var(--admin-primary);
+}
+
+/* ==========================================
+   TABLE
+   ========================================== */
+
+.admin-table-scroll {
+    width: 100%;
+    overflow-x: auto;
+
+    border: 1px solid var(--admin-line);
+    border-radius: 8px;
+}
+
+.admin-table {
+    width: 100%;
+    border-collapse: collapse;
+
+    text-align: left;
+}
+
+.admin-table th {
+    padding: 14px 16px;
+
+    background: rgba(235, 244, 253, 0.55);
+
+    color: #718198;
+
+    font-size: 11px;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.admin-table td {
+    padding: 14px 16px;
+
+    border-top: 1px solid var(--admin-line);
+
+    color: #6b7c92;
+
+    font-size: 12px;
+    line-height: 1.5;
+
+    vertical-align: middle;
+}
+
+.admin-table tbody tr:hover {
+    background: rgba(235, 244, 253, 0.38);
+}
+
+/* ==========================================
+   BADGES
+   ========================================== */
+
+.admin-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+
+    min-width: 65px;
+    min-height: 25px;
+
+    padding: 4px 9px;
+
+    border-radius: 6px;
+
+    font-size: 10px;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.badge-active,
+.badge-accepted {
+    color: #18835f;
+    background: #e7f7ef;
+}
+
+.badge-pending,
+.badge-warning {
+    color: #9b741b;
+    background: #fff5d9;
+}
+
+.badge-info {
+    color: #2878b7;
+    background: #e6f2ff;
+}
+
+.badge-error {
+    color: #c54a4a;
+    background: #fff0ef;
+}
+
+/* ==========================================
+   LOG CONTROLS
+   ========================================== */
+
+.admin-log-controls {
+    display: grid;
+
+    grid-template-columns:
+        minmax(200px, 1fr) minmax(150px, 190px) auto;
+
+    align-items: end;
+    gap: 12px;
+
+    margin-bottom: 14px;
+}
+
+.admin-log-controls .admin-field {
+    margin-bottom: 0;
+}
+
+/* ==========================================
+   RESPONSIVE
+   ========================================== */
+
+@media (max-width: 900px) {
+
+    .admin-workspace {
+        padding: 20px;
+    }
+
+    .admin-tab {
+        padding: 0 13px;
+    }
+}
+
+@media (max-width: 600px) {
+
+    .admin-page .admin-main {
+        padding: 10px 0;
+        flex: 0 0 auto;
+        overflow: visible;
+    }
+
+    .admin-workspace {
+        padding: 16px 12px;
+        flex: 0 0 auto;
+        min-height: 540px;
+    }
+
+    .admin-heading h1 {
+        font-size: 22px;
+    }
+
+    .admin-tabs {
+        flex-wrap: nowrap;
+        overflow-x: auto;
+
+        gap: 4px;
+        padding-bottom: 10px;
+    }
+
+    .admin-tab {
+        flex-shrink: 0;
+
+        min-height: 36px;
+        padding: 0 12px;
+
+        font-size: 11px;
+    }
+
+    .admin-section-heading h2 {
+        font-size: 18px;
+    }
+
+    .admin-inline-form {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .admin-inline-form .admin-field {
+        width: 100%;
+    }
+
+    .admin-inline-form>button {
+        align-self: flex-start;
+    }
+
+    .admin-log-controls {
+        grid-template-columns: 1fr;
+    }
+
+    .admin-table {
+        min-width: 550px;
+    }
+}
+
+@media (max-height: 600px) and (min-width: 601px) {
+    .admin-page .admin-main {
+        flex: 0 0 auto;
+        overflow: visible;
+    }
+
+    .admin-workspace {
+        flex: 0 0 auto;
+        min-height: 540px;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+
+    .admin-tab,
+    .admin-primary-button,
+    .admin-secondary-button,
+    .admin-danger-button {
+        transition: none;
+    }
+}
+
+/* ==========================================
+   ADMIN FOLDER EXPLORER
+   ========================================== */
+
+.admin-folder-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+
+    gap: 16px;
+    margin-bottom: 14px;
+}
+
+.admin-folder-toolbar input {
+    flex: 0 1 350px;
+    min-width: 0;
+    max-width: 100%;
+    height: 43px;
+
+    padding: 0 13px;
+
+    border: 1px solid var(--admin-line);
+    border-radius: 6px;
+
+    color: var(--admin-text);
+    background: rgba(255, 255, 255, 0.72);
+
+    font-family: inherit;
+    font-size: 12px;
+    outline: none;
+}
+
+.admin-folder-toolbar input:focus {
+    border-color: var(--admin-primary);
+}
+
+/* Scrollable folder table */
+
+.admin-folder-table-scroll {
+    flex: 1;
+    min-height: 0;
+
+    overflow: auto;
+
+    border: 1px solid var(--admin-line);
+    border-radius: 8px;
+
+    scrollbar-width: thin;
+}
+
+.admin-folder-table {
+    width: 100%;
+}
+
+.admin-folder-table th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+
+    background: #eef5fc;
+}
+
+.admin-folder-name {
+    display: inline-flex;
+    align-items: center;
+    gap: 12px;
+
+    color: #263951;
+    font-weight: 500;
+}
+
+.admin-folder-icon {
+    width: 34px;
+    height: 34px;
+
+    display: grid;
+    place-items: center;
+
+    flex-shrink: 0;
+
+    border-radius: 6px;
+
+    color: #0878ce;
+    background: #e6f2ff;
+
+    font-size: 20px;
+}
+
+.admin-row-delete {
+    padding: 7px 12px;
+
+    border: 1px solid rgba(197, 74, 74, 0.2);
+    border-radius: 6px;
+
+    color: #c54a4a;
+    background: rgba(255, 255, 255, 0.65);
+
+    font-family: inherit;
+    font-size: 11px;
+
+    cursor: pointer;
+}
+
+.admin-row-delete:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+}
+
+.admin-folder-footer {
+    justify-content: space-between;
+    color: #8a99aa;
+    font-size: 11px;
+}
+
+/* ==========================================
+   CREATE FOLDER DIALOG
+   ========================================== */
+
+.admin-dialog {
+    width: min(440px, calc(100vw - 32px));
+    max-height: calc(100dvh - 32px);
+
+    padding: 0;
+
+    border: 1px solid rgba(255, 255, 255, 0.85);
+    border-radius: 8px;
+
+    background: rgba(255, 255, 255, 0.94);
+
+    box-shadow:
+        0 20px 60px rgba(30, 55, 90, 0.2);
+
+    -webkit-backdrop-filter: blur(24px);
+    backdrop-filter: blur(24px);
+
+    color: #203149;
+}
+
+.admin-dialog::backdrop {
+    background: rgba(24, 43, 70, 0.28);
+    backdrop-filter: blur(4px);
+}
+
+.admin-dialog-content {
+    padding: 26px;
+}
+
+.admin-dialog-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+
+    margin-bottom: 24px;
+}
+
+.admin-dialog-heading h2 {
+    margin: 0;
+
+    font-size: 20px;
+    font-weight: 600;
+}
+
+.admin-dialog-close {
+    width: 30px;
+    height: 30px;
+
+    border: none;
+    border-radius: 6px;
+
+    background: transparent;
+    color: #738399;
+
+    font-size: 23px;
+    cursor: pointer;
+}
+
+.admin-dialog-close:hover {
+    background: #edf4fc;
+}
+
+.admin-dialog-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+
+    gap: 10px;
+    margin-top: 24px;
+}
+
+/* Responsive */
+
+@media (max-width: 600px) {
+    .admin-folder-toolbar {
+        flex-wrap: wrap;
+        gap: 10px;
+    }
+
+    .admin-folder-toolbar input {
+        flex: 1 1 100px;
+    }
+
+    .admin-folder-table {
+        min-width: 620px;
+    }
+
+    .admin-dialog-content {
+        padding: 20px;
+    }
+}
+
+/* ==========================================
+   ADMIN USERS - EXPLORER LAYOUT
+   ========================================== */
+
+.admin-user-toolbar {
+    display: flex;
+    align-items: center;
+
+    gap: 12px;
+    margin-bottom: 14px;
+}
+
+.admin-user-search {
+    width: 350px;
+    max-width: 100%;
+}
+
+.admin-user-search input {
+    width: 100%;
+    height: 43px;
+
+    padding: 0 13px;
+
+    border: 1px solid var(--admin-line);
+    border-radius: 6px;
+
+    background: rgba(255, 255, 255, 0.72);
+    color: var(--admin-text);
+
+    font-family: inherit;
+    font-size: 12px;
+    outline: none;
+}
+
+.admin-user-search input:focus {
+    border-color: var(--admin-primary);
+}
+
+.admin-user-table-scroll {
+    flex: 1;
+    min-height: 0;
+
+    overflow: auto;
+
+    border: 1px solid var(--admin-line);
+    border-radius: 8px;
+
+    scrollbar-width: thin;
+}
+
+.admin-user-table th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+
+    background: #eef5fc;
+}
+
+.admin-user-name {
+    color: #263951;
+    font-weight: 500;
+}
+
+/* Manage action */
+
+.admin-user-manage {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+
+    min-height: 30px;
+    padding: 6px 12px;
+
+    border: 1px solid rgba(0, 120, 212, 0.16);
+    border-radius: 6px;
+
+    background: rgba(255, 255, 255, 0.7);
+    color: #0878ce;
+
+    font-family: inherit;
+    font-size: 11px;
+    font-weight: 500;
+
+    text-decoration: none;
+    cursor: pointer;
+}
+
+.admin-user-manage:hover {
+    background: #e8f4ff;
+}
+
+.admin-user-manage:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* ==========================================
+   USER MANAGEMENT DETAILS
+   ========================================== */
+
+.admin-user-management {
+    flex-shrink: 0;
+
+    margin-top: 16px;
+
+    border: 1px solid var(--admin-line);
+    border-radius: 8px;
+
+    background: rgba(255, 255, 255, 0.42);
+}
+
+.admin-user-management>summary {
+    padding: 14px 18px;
+
+    color: #203149;
+    font-size: 13px;
+    font-weight: 600;
+
+    cursor: pointer;
+}
+
+.admin-user-management[open] {
+    max-height: 55%;
+    overflow-y: auto;
+    scrollbar-width: thin;
+}
+
+.admin-user-management-content {
+    padding: 18px;
+    border-top: 1px solid var(--admin-line);
+}
+
+.admin-user-management-content h3 {
+    margin: 0 0 16px;
+
+    color: #203149;
+    font-size: 15px;
+    font-weight: 600;
+}
+
+.admin-user-management-content .admin-field {
+    max-width: 600px;
+}
+
+/* Status badges */
+
+.badge-admin {
+    color: #725bd2;
+    background: #f0ebff;
+}
+
+.badge-user {
+    color: #2878b7;
+    background: #e6f2ff;
+}
+
+.badge-disabled {
+    color: #c54a4a;
+    background: #fff0ef;
+}
+
+/* Responsive */
+
+@media (max-width: 600px) {
+    .admin-user-toolbar {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .admin-user-search {
+        width: 100%;
+    }
+
+    .admin-user-table {
+        min-width: 550px;
+    }
+
+    .admin-user-management-content {
+        padding: 14px;
+    }
+}
+
+/* ==========================================
+   ADMIN USERS - FULL TABLE LAYOUT
+   ========================================== */
+
+.admin-user-table-scroll {
+    flex: 1;
+    min-height: 0;
+    max-height: none;
+
+    overflow: auto;
+}
+
+/* Remove old management panel */
+.admin-user-management {
+    display: none;
+}
+
+/* ==========================================
+   USER MANAGEMENT DIALOG
+   ========================================== */
+
+.admin-management-dialog {
+    position: fixed;
+
+    width: min(560px, calc(100vw - 32px));
+    max-height: min(760px, calc(100dvh - 40px));
+
+    padding: 0;
+    margin: auto;
+
+    border: 1px solid rgba(255, 255, 255, 0.85);
+    border-radius: 8px;
+
+    color: #203149;
+    background: rgba(255, 255, 255, 0.96);
+
+    box-shadow:
+        0 20px 60px rgba(30, 55, 90, 0.2);
+
+    -webkit-backdrop-filter: blur(24px);
+    backdrop-filter: blur(24px);
+
+    overflow: hidden;
+}
+
+.admin-management-dialog:not([open]) {
+    display: none;
+}
+
+.admin-management-dialog::backdrop {
+    background: rgba(24, 43, 70, 0.3);
+    backdrop-filter: blur(4px);
+}
+
+.admin-management-dialog-inner {
+    display: flex;
+    flex-direction: column;
+
+    max-height: min(760px, calc(100dvh - 40px));
+}
+
+/* Dialog header */
+
+.admin-management-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+
+    flex-shrink: 0;
+
+    padding: 20px 24px;
+
+    border-bottom: 1px solid var(--admin-line);
+}
+
+.admin-management-header h2 {
+    margin: 0;
+
+    color: #203149;
+    font-size: 20px;
+    font-weight: 600;
+}
+
+.admin-dialog-close {
+    width: 30px;
+    height: 30px;
+
+    border: none;
+    border-radius: 6px;
+
+    background: transparent;
+    color: #738399;
+
+    font-size: 22px;
+    cursor: pointer;
+}
+
+.admin-dialog-close:hover {
+    background: #edf4fc;
+}
+
+/* Scrollable dialog body */
+
+.admin-management-body {
+    flex: 1;
+    min-height: 0;
+
+    padding: 24px;
+
+    overflow-y: auto;
+    scrollbar-width: thin;
+}
+
+.admin-management-body h3 {
+    margin: 0 0 16px;
+
+    color: #203149;
+    font-size: 15px;
+    font-weight: 600;
+}
+
+.admin-management-body .admin-field {
+    max-width: 100%;
+}
+
+.admin-management-body .admin-divider {
+    margin: 24px 0;
+}
+
+/* Responsive */
+
+@media (max-width: 600px) {
+    .admin-management-dialog {
+        width: calc(100vw - 20px);
+        max-height: calc(100dvh - 20px);
+    }
+
+    .admin-management-dialog-inner {
+        max-height: calc(100dvh - 20px);
+    }
+
+    .admin-management-header {
+        padding: 16px;
+    }
+
+    .admin-management-body {
+        padding: 18px 16px;
+    }
+}
+
+/* ==========================================
+   MMIV USER MANAGEMENT DIALOG
+   WIDER + COMPACT CONTENT
+   ========================================== */
+
+/* 1. Larger dialog */
+
+.admin-page .admin-management-dialog {
+    width: min(760px, calc(100vw - 40px));
+    max-width: 760px;
+
+    max-height: 85vh;
+    max-height: 85dvh;
+
+    padding: 0;
+    margin: auto;
+
+    border-radius: 8px;
+
+    overflow: hidden;
+}
+
+/* 2. Dialog layout */
+
+.admin-page .admin-management-dialog-inner {
+    display: flex;
+    flex-direction: column;
+
+    max-height: 85vh;
+    max-height: 85dvh;
+}
+
+/* 3. Header */
+
+.admin-page .admin-management-header {
+    flex-shrink: 0;
+
+    padding: 18px 26px;
+}
+
+.admin-page .admin-management-header h2 {
+    margin: 0;
+    font-size: 20px;
+    line-height: 1.3;
+}
+
+/* 4. Scrollable content */
+
+.admin-page .admin-management-body {
+    flex: 1;
+    min-height: 0;
+
+    padding: 20px 26px 24px;
+
+    overflow-y: auto;
+    overflow-x: hidden;
+
+    scrollbar-width: thin;
+}
+
+/* 5. Section headings */
+
+.admin-page .admin-management-body h3 {
+    margin: 0 0 12px;
+
+    font-size: 15px;
+    font-weight: 600;
+    line-height: 1.4;
+}
+
+/* 6. Form fields */
+
+.admin-page .admin-management-body .admin-field {
+    max-width: 100%;
+
+    gap: 6px;
+    margin-bottom: 12px;
+}
+
+.admin-page .admin-management-body .admin-field label {
+    margin: 0;
+    line-height: 1.4;
+}
+
+/* Keep input controls comfortable */
+
+.admin-page .admin-management-body .admin-field input,
+.admin-page .admin-management-body .admin-field select {
+    min-height: 42px;
+}
+
+/* 7. Section dividers */
+
+.admin-page .admin-management-body .admin-divider {
+    margin: 18px 0;
+}
+
+/* 8. Permission options */
+
+.admin-page .admin-management-body .admin-permission-options {
+    max-width: 100%;
+
+    gap: 10px;
+    margin: 14px 0;
+
+    padding: 12px 16px;
+}
+
+.admin-page .admin-management-body .admin-permission-options label {
+    min-height: 24px;
+}
+
+/* 9. Description and help text */
+
+.admin-page .admin-management-body .admin-description {
+    margin: 0 0 12px;
+    line-height: 1.6;
+}
+
+.admin-page .admin-management-body .admin-help {
+    margin: 8px 0 12px;
+    line-height: 1.6;
+}
+
+/* 10. Key action buttons
+   Preserve original button size and spacing */
+
+.admin-page .admin-management-body .admin-actions {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+
+    gap: 10px;
+    margin-top: 18px;
+}
+
+.admin-page .admin-management-body .admin-primary-button,
+.admin-page .admin-management-body .admin-secondary-button,
+.admin-page .admin-management-body .admin-danger-button {
+    min-height: 39px;
+    padding: 9px 16px;
+}
+
+/* 11. Mobile */
+
+@media (max-width: 600px) {
+
+    .admin-page .admin-management-dialog {
+        width: calc(100vw - 20px);
+        max-width: none;
+
+        max-height: calc(100dvh - 20px);
+    }
+
+    .admin-page .admin-management-dialog-inner {
+        max-height: calc(100dvh - 20px);
+    }
+
+    .admin-page .admin-management-header {
+        padding: 16px 18px;
+    }
+
+    .admin-page .admin-management-body {
+        padding: 18px;
+    }
+
+    .admin-page .admin-management-body .admin-actions {
+        gap: 10px;
+    }
+}
+
+/* ==========================================
+   ADMIN INVITATIONS - EXPLORER
+   ========================================== */
+
+.admin-invitation-toolbar {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+
+    gap: 12px;
+    margin-bottom: 14px;
+}
+
+.admin-invitation-search-group {
+    display: flex;
+    align-items: center;
+    flex: 1 1 350px;
+    min-width: 0;
+    gap: 12px;
+}
+
+.admin-invitation-toolbar input {
+    flex: 1 1 auto;
+    min-width: 0;
+    width: auto;
+    max-width: 350px;
+    height: 43px;
+
+    padding: 0 13px;
+
+    border: 1px solid var(--admin-line);
+    border-radius: 6px;
+
+    background: rgba(255, 255, 255, 0.72);
+    color: var(--admin-text);
+
+    font-family: inherit;
+    font-size: 12px;
+    outline: none;
+}
+
+.admin-invitation-toolbar select {
+    width: 170px;
+    height: 43px;
+
+    padding: 0 12px;
+
+    border: 1px solid var(--admin-line);
+    border-radius: 6px;
+
+    background: rgba(255, 255, 255, 0.72);
+    color: var(--admin-text);
+
+    font-family: inherit;
+    font-size: 12px;
+}
+
+/* Invitation table */
+
+.admin-invitation-table-scroll {
+    flex: 1;
+    min-height: 0;
+
+    overflow: auto;
+
+    border: 1px solid var(--admin-line);
+    border-radius: 8px;
+
+    scrollbar-width: thin;
+}
+
+.admin-invitation-table th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+
+    background: #eef5fc;
+}
+
+.admin-invitation-action {
+    min-height: 30px;
+    padding: 6px 12px;
+
+    border: 1px solid rgba(0, 120, 212, 0.16);
+    border-radius: 6px;
+
+    background: rgba(255, 255, 255, 0.7);
+    color: #0878ce;
+
+    font-family: inherit;
+    font-size: 11px;
+    cursor: pointer;
+}
+
+.admin-invitation-action:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+}
+
+.admin-invitation-footer {
+    justify-content: space-between;
+    color: #8a99aa;
+    font-size: 11px;
+}
+
+/* Expired status */
+
+.badge-expired {
+    color: #8a99aa;
+    background: #edf1f5;
+}
+
+/* ==========================================
+   CREATE INVITATION DIALOG
+   ========================================== */
+
+.admin-invitation-dialog {
+    width: min(720px, calc(100vw - 40px));
+    max-width: 720px;
+}
+
+.admin-invitation-dialog .admin-management-body {
+    padding: 22px 26px;
+}
+
+.admin-invitation-dialog .admin-inline-form {
+    margin-bottom: 16px;
+}
+
+.admin-invitation-dialog .admin-invitation-select {
+    max-width: 100%;
+}
+
+.admin-invitation-dialog .admin-actions {
+    margin-top: 18px;
+}
+
+/* Responsive */
+
+@media (max-width: 700px) {
+    .admin-invitation-toolbar {
+        flex-wrap: wrap;
+    }
+
+    .admin-invitation-toolbar input {
+        flex: 1 1 auto;
+    }
+
+    .admin-invitation-table {
+        min-width: 650px;
+    }
+}
+
+@media (max-width: 600px) {
+    .admin-invitation-dialog {
+        width: calc(100vw - 20px);
+        max-width: none;
+    }
+
+    .admin-invitation-dialog .admin-management-body {
+        padding: 18px;
+    }
+
+    .admin-invitation-toolbar input,
+    .admin-invitation-toolbar select {
+        max-width: 100%;
+    }
+
+    .admin-invitation-search-group {
+        flex-basis: 100%;
+    }
+}

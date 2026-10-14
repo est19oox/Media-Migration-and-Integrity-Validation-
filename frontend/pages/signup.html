@@ -1,0 +1,247 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Sign Up</title>
+    <link rel="stylesheet" href="../css/style.css" />
+    <link rel="stylesheet" href="../css/login.css" />
+  </head>
+  <body>
+    <div class="mmiv-header">
+      MMIV<span>.</span>
+    </div>
+    <div id="particles-js"></div>
+    <div class="fx fx-glow"></div>
+    <div class="fx fx-beam" style="top: 22%; transform: rotate(-4deg)"></div>
+    <div class="fx fx-beam" style="top: 58%; height: 3px; opacity: 0.7; transform: rotate(-4deg)"></div>
+    <div class="fx fx-beam" style="top: 84%; height: 10px; opacity: 0.5; transform: rotate(-4deg)"></div>
+    <div class="fx fx-bokeh" style="left: 38%; top: 12%; width: 260px; height: 260px; background: rgba(0, 120, 212, 0.22)"></div>
+    <div class="fx fx-bokeh" style="left: 62%; top: 48%; width: 340px; height: 340px; background: rgba(120, 90, 255, 0.16)"></div>
+    <div class="fx fx-bokeh" style="left: 8%; top: 70%; width: 220px; height: 220px; background: rgba(0, 200, 200, 0.16)"></div>
+    <div class="fx fx-fore" style="left: -90px; bottom: -80px; width: 320px; height: 320px; background: rgba(0, 120, 212, 0.35)"></div>
+    <div class="fx fx-fore" style="right: -70px; top: -60px; width: 260px; height: 260px; background: rgba(120, 90, 255, 0.3)"></div>
+    <div class="fx fx-fore" style="left: 46%; bottom: -120px; width: 380px; height: 200px; background: rgba(255, 255, 255, 0.9)"></div>
+    <section id="section-media">
+      <!-- #region 左側箭咀 -->
+      <div id="arrow-btn-prev" class="arrowBtn media-nav-btn prev" data-cursor="pointer">
+        <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 103 103">
+          <circle class="dot" r="4.5" cx="36" cy="51.5" transform-origin="34% 50%" transform="scale(0, 0)"></circle>
+          <g transform="translate(35, 15)">
+            <use class="top" xlink:href="#arrow-btn-tr" transform-origin="16.1% 15.9%">
+              <path id="arrow-btn-tr" transform-origin="16.1% 15.9%"
+                d="M31.274,7.155 L7.392,31.037 C5.870,32.559 3.402,32.559 1.880,31.037 C0.358,29.515 0.358,27.048 1.880,25.526 L25.762,1.644 C27.284,0.122 29.752,0.122 31.274,1.644 C32.795,3.166 32.795,5.633 31.274,7.155 Z">
+              </path>
+            </use>
+            <use class="bot" xlink:href="#arrow-btn-br" transform-origin="16% 55%">
+              <path id="arrow-btn-br" transform-origin="16% 55%"
+                d="M1.880,41.954 C3.402,40.432 5.870,40.432 7.392,41.954 L31.274,65.836 C32.795,67.358 32.795,69.825 31.274,71.347 C29.752,72.869 27.284,72.869 25.762,71.347 L1.880,47.465 C0.358,45.943 0.358,43.476 1.880,41.954 Z">
+              </path>
+            </use>
+          </g>
+        </svg>
+      </div>
+      <!-- #endregion -->
+    
+      <!-- #region 輪播圖 -->
+      <div class="media-container-box" style="perspective: 5000px">
+        <div class="media-main-view" id="media-layer-view">
+          <div class="media-current">
+            <div class="media-main-pic">
+              <a target="_blank" class="media-img"></a>
+            </div>
+    
+            <div class="media-user-interactive" id="media-layer-front">
+              <div class="media-current-info">
+                <div class="media-info-wrapper">
+                  <div class="media-info-serial"></div>
+                  <div class="media-info-title"></div>
+                  <div class="media-info-detail">
+                    <div class="media-detail-desc"></div>
+                  </div>
+                </div>
+    
+                <div class="media-nav-wrapper"></div>
+              </div>
+            </div>
+          </div>
+          <div class="media-list-wrapper" id="media-list"></div>
+        </div>
+      </div>
+      <!-- #endregion -->
+    
+      <!-- #region 右側箭咀 -->
+      <div id="arrow-btn-next" class="arrowBtn media-nav-btn next" data-cursor="pointer">
+        <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 103 103">
+          <circle class="dot" r="4.5" cx="67" cy="51.5" transform-origin="66% 50%" transform="scale(0, 0)"></circle>
+          <g transform="translate(35, 15)">
+            <use class="top" xlink:href="#arrow-btn-tl" transform-origin="16.1% 15.9%">
+              <path id="arrow-btn-tl" transform-origin="16.1% 15.9%"
+                d="M30.833,30.926 C29.311,32.448 26.844,32.448 25.322,30.926 L1.440,7.044 C-0.082,5.523 -0.082,3.055 1.440,1.533 C2.962,0.011 5.429,0.011 6.951,1.533 L30.833,25.415 C32.355,26.937 32.355,29.405 30.833,30.926 Z">
+              </path>
+            </use>
+            <use class="bot" xlink:href="#arrow-btn-bl" transform-origin="16% 55%">
+              <path id="arrow-btn-bl" transform-origin="16% 55%"
+                d="M1.440,65.725 L25.322,41.843 C26.844,40.321 29.311,40.321 30.833,41.843 C32.355,43.365 32.355,45.832 30.833,47.354 L6.951,71.236 C5.429,72.758 2.962,72.758 1.440,71.236 C-0.082,69.714 -0.082,67.247 1.440,65.725 Z">
+              </path>
+            </use>
+          </g>
+        </svg>
+      </div>
+      <!-- #endregion -->
+    </section>
+    <div class="login-wrap signup-wrap">
+      <form class="login-card signup-card" id="signupForm" autocomplete="on" novalidate>
+        <h1>SIGN UP</h1>
+        <div class="sub">CREATE YOUR MMIV ACCOUNT</div>
+        <div class="field">
+          <label for="username">Username</label>
+          <input
+            id="username"
+            name="username"
+            autocomplete="username"
+            placeholder="Enter your username"
+            required
+          />
+        </div>
+        <div class="field">
+          <label for="password">Password</label>
+          <div class="signup-password">
+            <input
+              id="password"
+              name="password"
+              type="password"
+              autocomplete="new-password"
+              placeholder="Enter your password"
+              required
+            />
+            <button
+              id="toggle"
+              class="password-toggle"
+              type="button"
+              aria-controls="password"
+              aria-pressed="false"
+            >
+              Show
+            </button>
+          </div>
+        </div>
+        <div class="field">
+          <label for="confirm">Confirm password</label>
+          <input
+            id="confirm"
+            type="password"
+            autocomplete="new-password"
+            placeholder="Enter your password again"
+            required
+          />
+        </div>
+        <p class="signup-rules">
+          Username: 3–40 letters, numbers, dots, underscores or hyphens. Password: at least 8
+          characters, up to 72 UTF-8 bytes.
+        </p>
+        <button id="submit" type="submit">Create account</button>
+        <div id="status" class="msg" role="status" aria-live="polite" aria-atomic="true"></div>
+        <div class="signup-entry">Already have an account? <a href="login.html">Sign in</a></div>
+      </form>
+    </div>
+    <script src="/feedback.js"></script>
+    <script src="../js/carousel.js"></script>
+    <script src="../js/particles.min.js"></script>
+    <script src="../js/particles-effect.js"></script>
+    <script>
+      'use strict';
+      const form = document.getElementById('signupForm');
+      const username = document.getElementById('username');
+      const password = document.getElementById('password');
+      const confirmPassword = document.getElementById('confirm');
+      const submit = document.getElementById('submit');
+      const status = document.getElementById('status');
+      const toggle = document.getElementById('toggle');
+      function message(text, kind) {
+        status.textContent = text;
+        status.className = 'msg' + (kind === 'success' ? ' ok' : '');
+        if (kind === 'error')
+          globalThis.mmivFeedback?.notice('Please check your account details', text, 'error');
+      }
+      toggle.addEventListener('click', () => {
+        const show = password.type === 'password';
+        password.type = show ? 'text' : 'password';
+        toggle.textContent = show ? 'Hide' : 'Show';
+        toggle.setAttribute('aria-pressed', String(show));
+      });
+      form.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        if (location.protocol === 'file:' || location.port === '8083') {
+          message('Open signup through the Gateway on port 8080.', 'error');
+          return;
+        }
+        const name = username.value.trim();
+        if (!/^[A-Za-z0-9_.-]{3,40}$/.test(name)) {
+          message(
+            'Use 3–40 letters, numbers, dots, underscores or hyphens for your username.',
+            'error',
+          );
+          return;
+        }
+        if (
+          password.value.length < 8 ||
+          !password.value.trim() ||
+          new TextEncoder().encode(password.value).length > 72
+        ) {
+          message(
+            'Choose a nonblank password with at least 8 characters and no more than 72 UTF-8 bytes.',
+            'error',
+          );
+          return;
+        }
+        if (password.value !== confirmPassword.value) {
+          message('The passwords do not match.', 'error');
+          return;
+        }
+        submit.disabled = true;
+        submit.textContent = 'Creating account…';
+        form.setAttribute('aria-busy', 'true');
+        message('Creating your account…');
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 20000);
+        try {
+          const response = await fetch('/user-access/api/auth/signup', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+            body: JSON.stringify({ username: name, password: password.value }),
+            credentials: 'same-origin',
+            cache: 'no-store',
+            signal: controller.signal,
+          });
+          if (response.status === 409)
+            throw new Error('That username is already taken. Choose another one.');
+          if (response.status === 400)
+            throw new Error('Check the username and password requirements.');
+          if (response.status !== 201)
+            throw new Error('Could not create your account. Please try again later.');
+          password.value = '';
+          confirmPassword.value = '';
+          message('Account created. Opening sign in…', 'success');
+          location.assign('/login.html?registered=1');
+        } catch (error) {
+          message(
+            error.name === 'AbortError'
+              ? 'The request timed out. Try signing in first; your account may have been created.'
+              : error instanceof TypeError
+                ? 'Could not reach the signup service. Please try again.'
+                : error.message,
+            'error',
+          );
+        } finally {
+          clearTimeout(timeout);
+          submit.disabled = false;
+          submit.textContent = 'Create account';
+          form.removeAttribute('aria-busy');
+        }
+      });
+    </script>
+    <script src="../js/parallax-move.js"></script>
+    <script src="/english-validation.js"></script>
+  </body>
+</html>

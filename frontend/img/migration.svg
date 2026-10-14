@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#0b1b3a"/><stop offset="1" stop-color="#0e5a8a"/></linearGradient>
+    <marker id="ar" markerWidth="12" markerHeight="12" refX="8" refY="6" orient="auto"><path d="M0,0 L12,6 L0,12 Z" fill="#18d1ff"/></marker>
+  </defs>
+  <rect width="1600" height="900" fill="url(#bg)"/>
+  <g stroke="#ffffff" stroke-opacity=".06"><path d="M0 150H1600M0 300H1600M0 450H1600M0 600H1600M0 750H1600M200 0V900M400 0V900M600 0V900M800 0V900M1000 0V900M1200 0V900M1400 0V900"/></g>
+  <!-- on-prem servers -->
+  <g fill="#1d2b4d" stroke="#8fa7d6" stroke-width="4">
+    <rect x="170" y="260" width="300" height="90" rx="8"/><rect x="170" y="370" width="300" height="90" rx="8"/><rect x="170" y="480" width="300" height="90" rx="8"/>
+  </g>
+  <g fill="#18d1ff"><circle cx="210" cy="305" r="9"/><circle cx="210" cy="415" r="9"/><circle cx="210" cy="525" r="9"/></g>
+  <text x="320" y="660" fill="#c8d6f5" font-size="36" text-anchor="middle" font-family="Segoe UI,Arial">ON-PREMISES</text>
+  <!-- flow -->
+  <g stroke="#18d1ff" stroke-width="8" fill="none" marker-end="url(#ar)" stroke-dasharray="26 16">
+    <path d="M500 330 H1000"/><path d="M500 420 H1000"/><path d="M500 510 H1000"/>
+  </g>
+  <g fill="#18d1ff" fill-opacity=".85"><rect x="640" y="305" width="44" height="44" rx="6"/><rect x="780" y="395" width="44" height="44" rx="6"/><rect x="700" y="485" width="44" height="44" rx="6"/></g>
+  <!-- cloud -->
+  <g fill="#e8f6ff" stroke="#18d1ff" stroke-width="6">
+    <path d="M1100 520 a90 90 0 0 1 20 -178 a130 130 0 0 1 250 -20 a105 105 0 0 1 40 198 Z"/>
+  </g>
+  <text x="1260" y="590" fill="#c8d6f5" font-size="36" text-anchor="middle" font-family="Segoe UI,Arial">CLOUD</text>
+  <text x="800" y="150" fill="#ffffff" font-size="88" font-weight="700" text-anchor="middle" font-family="Segoe UI,Arial" letter-spacing="10">MIGRATION</text>
+</svg>
