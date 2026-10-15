@@ -106,76 +106,13 @@
                     </tr>
                   </thead>
 
-                  <tbody id="foldersTable">
-                    <tr>
-                      <td>
-                        <span class="admin-folder-name">
-                          <span class="admin-folder-icon" aria-hidden="true">▣</span>
-                          Project Atlas
-                        </span>
-                      </td>
-                      <td class="admin-folder-path">
-                        <code>/Project Atlas/</code>
-                      </td>
-                      <td><span class="admin-badge badge-active">Active</span></td>
-                      <td>
-                        <button type="button" class="admin-row-delete" disabled>Delete</button>
-                      </td>
-                    </tr>
-
-                    <tr>
-                      <td>
-                        <span class="admin-folder-name">
-                          <span class="admin-folder-icon" aria-hidden="true">▣</span>
-                          Shared Media
-                        </span>
-                      </td>
-                      <td class="admin-folder-path">
-                        <code>/Shared Media/</code>
-                      </td>
-                      <td><span class="admin-badge badge-active">Active</span></td>
-                      <td>
-                        <button type="button" class="admin-row-delete" disabled>Delete</button>
-                      </td>
-                    </tr>
-
-                    <tr>
-                      <td>
-                        <span class="admin-folder-name">
-                          <span class="admin-folder-icon" aria-hidden="true">▣</span>
-                          Archive 2026
-                        </span>
-                      </td>
-                      <td class="admin-folder-path">
-                        <code>/Archive 2026/</code>
-                      </td>
-                      <td><span class="admin-badge badge-active">Active</span></td>
-                      <td>
-                        <button type="button" class="admin-row-delete" disabled>Delete</button>
-                      </td>
-                    </tr>
-
-                    <tr>
-                      <td>
-                        <span class="admin-folder-name">
-                          <span class="admin-folder-icon" aria-hidden="true">▣</span>
-                          Marketing Assets
-                        </span>
-                      </td>
-                      <td class="admin-folder-path">
-                        <code>/Marketing Assets/</code>
-                      </td>
-                      <td><span class="admin-badge badge-active">Active</span></td>
-                      <td>
-                        <button type="button" class="admin-row-delete" disabled>Delete</button>
-                      </td>
-                    </tr>
-                  </tbody>
+                  <!-- Rows are rendered by ../js/admin.js from the backend. -->
+                  <tbody id="foldersTable"></tbody>
                 </table>
               </div>
 
               <div class="admin-section-footer admin-folder-footer">
-                <span class="admin-section-meta">4 folders · Demo</span>
+                <span class="admin-section-meta" id="foldersMeta">Loading…</span>
                 <span>
                   Folders share the application storage bucket. Existing files are preserved when
                   creating folders.
@@ -216,70 +153,12 @@
                     </tr>
                   </thead>
 
-                  <tbody id="usersTable">
-                    <tr>
-                      <td><span class="admin-user-name">admin</span></td>
-                      <td>
-                        <span class="admin-badge badge-admin"> Administrator </span>
-                      </td>
-                      <td><span class="admin-badge badge-active">Active</span></td>
-                      <td>
-                        <button type="button" class="admin-user-manage" disabled>Manage</button>
-                      </td>
-                    </tr>
-
-                    <tr>
-                      <td><span class="admin-user-name">wsxzikai</span></td>
-                      <td><span class="admin-badge badge-user">User</span></td>
-                      <td><span class="admin-badge badge-active">Active</span></td>
-                      <td>
-                        <button
-                          type="button"
-                          class="admin-user-manage"
-                          data-user="wsxzikai"
-                          onclick="openUserManagement(this.dataset.user)"
-                        >
-                          Manage
-                        </button>
-                      </td>
-                    </tr>
-
-                    <tr>
-                      <td><span class="admin-user-name">alex</span></td>
-                      <td><span class="admin-badge badge-user">User</span></td>
-                      <td><span class="admin-badge badge-active">Active</span></td>
-                      <td>
-                        <button
-                          type="button"
-                          class="admin-user-manage"
-                          data-user="alex"
-                          onclick="openUserManagement(this.dataset.user)"
-                        >
-                          Manage
-                        </button>
-                      </td>
-                    </tr>
-
-                    <tr>
-                      <td><span class="admin-user-name">emily</span></td>
-                      <td><span class="admin-badge badge-user">User</span></td>
-                      <td><span class="admin-badge badge-disabled">Disabled</span></td>
-                      <td>
-                        <button
-                          type="button"
-                          class="admin-user-manage"
-                          data-user="emily"
-                          onclick="openUserManagement(this.dataset.user)"
-                        >
-                          Manage
-                        </button>
-                      </td>
-                    </tr>
-                  </tbody>
+                  <!-- Rows are rendered by ../js/admin.js from the backend. -->
+                  <tbody id="usersTable"></tbody>
                 </table>
               </div>
               <div class="admin-section-footer">
-                <span class="admin-section-meta">4 users · Demo</span>
+                <span class="admin-section-meta" id="usersMeta">Loading…</span>
               </div>
             </section>
 
@@ -339,50 +218,13 @@
                     </tr>
                   </thead>
 
-                  <tbody id="invitationsTable">
-                    <tr>
-                      <td>newadmin</td>
-                      <td>Oct 14, 2026</td>
-                      <td>Oct 15, 2026</td>
-                      <td>
-                        <span class="admin-badge badge-pending"> Pending </span>
-                      </td>
-                      <td>
-                        <button type="button" class="admin-invitation-action" disabled>
-                          Copy link
-                        </button>
-                      </td>
-                    </tr>
-
-                    <tr>
-                      <td>member01</td>
-                      <td>Oct 12, 2026</td>
-                      <td>Oct 13, 2026</td>
-                      <td>
-                        <span class="admin-badge badge-accepted"> Accepted </span>
-                      </td>
-                      <td>
-                        <span class="admin-muted">Redeemed</span>
-                      </td>
-                    </tr>
-
-                    <tr>
-                      <td>guest01</td>
-                      <td>Oct 10, 2026</td>
-                      <td>Oct 11, 2026</td>
-                      <td>
-                        <span class="admin-badge badge-expired"> Expired </span>
-                      </td>
-                      <td>
-                        <span class="admin-muted">Unavailable</span>
-                      </td>
-                    </tr>
-                  </tbody>
+                  <!-- No read endpoint exists; ../js/admin.js reports that. -->
+                  <tbody id="invitationsTable"></tbody>
                 </table>
               </div>
 
               <div class="admin-section-footer admin-invitation-footer">
-                <span class="admin-section-meta">3 invitations · Demo</span>
+                <span class="admin-section-meta" id="invitationsMeta">Unavailable</span>
                 <span>
                   Invitation links are valid for 24 hours and can be redeemed once by the named
                   account.
@@ -438,9 +280,10 @@
                   <div class="admin-field admin-invitation-select">
                     <label for="invitationAccount"> Select an account for invitation </label>
 
+                    <!-- Options are backend accounts; creating an invitation is
+                         part of the administration mutation phase. -->
                     <select id="invitationAccount">
                       <option value="">Select account</option>
-                      <option value="wsxzikai">wsxzikai</option>
                     </select>
                   </div>
 
@@ -513,9 +356,17 @@
                     </select>
                   </div>
 
-                  <button id="refreshLogs" type="button" class="admin-secondary-button">
-                    Refresh
-                  </button>
+                  <!-- The log endpoint pages 100 records, so the toolbar carries
+                       the page controls alongside Refresh. -->
+                  <div>
+                    <button id="logsPrevious" type="button" class="admin-secondary-button">
+                      Previous
+                    </button>
+                    <button id="logsNext" type="button" class="admin-secondary-button">Next</button>
+                    <button id="refreshLogs" type="button" class="admin-secondary-button">
+                      Refresh
+                    </button>
+                  </div>
                 </div>
 
                 <div class="admin-table-scroll">
@@ -529,44 +380,14 @@
                         <th scope="col">Details</th>
                       </tr>
                     </thead>
-                    <tbody id="logsTable">
-                      <tr>
-                        <td>2026-10-14 10:42</td>
-                        <td><span class="admin-badge badge-info">INFO</span></td>
-                        <td>User signed in</td>
-                        <td>admin</td>
-                        <td>Successful authentication</td>
-                      </tr>
-                      <tr>
-                        <td>2026-10-14 09:18</td>
-                        <td><span class="admin-badge badge-info">INFO</span></td>
-                        <td>Permission updated</td>
-                        <td>admin</td>
-                        <td>Folder access changed</td>
-                      </tr>
-                      <tr>
-                        <td>2026-10-13 16:30</td>
-                        <td>
-                          <span class="admin-badge badge-warning"> WARNING </span>
-                        </td>
-                        <td>Failed login attempt</td>
-                        <td>Unknown</td>
-                        <td>Invalid credentials</td>
-                      </tr>
-                      <tr>
-                        <td>2026-10-12 11:05</td>
-                        <td><span class="admin-badge badge-error">ERROR</span></td>
-                        <td>Integrity verification failed</td>
-                        <td>wsxzikai</td>
-                        <td>Archive verification failed</td>
-                      </tr>
-                    </tbody>
+                    <!-- Rows are rendered by ../js/admin.js from the backend. -->
+                    <tbody id="logsTable"></tbody>
                   </table>
                 </div>
               </div>
               <div class="admin-section-footer">
-                <span class="admin-section-meta">4 records · Demo</span>
-                <span>Example log records for UI preview.</span>
+                <span class="admin-section-meta" id="logsMeta">Loading…</span>
+                <span id="logsHint">Newest first, 100 records per page.</span>
               </div>
             </section>
           </div>
@@ -648,11 +469,9 @@
         <div class="admin-management-body">
           <div class="admin-field">
             <label for="selectedUser">Selected user</label>
+            <!-- Options are the real accounts loaded by ../js/admin.js. -->
             <select id="selectedUser">
               <option value="">Select user</option>
-              <option value="wsxzikai">wsxzikai</option>
-              <option value="alex">alex</option>
-              <option value="emily">emily</option>
             </select>
           </div>
 
@@ -662,10 +481,9 @@
 
           <div class="admin-field">
             <label for="permissionFolder">Filter folders</label>
+            <!-- Options are the real folders loaded by ../js/admin.js. -->
             <select id="permissionFolder">
               <option value="">Select folder</option>
-              <option value="asw001">asw001</option>
-              <option value="test">test</option>
             </select>
           </div>
 
@@ -735,9 +553,30 @@
       </div>
     </dialog>
 
+    <!-- ===============================
+       CONFIRMATION DIALOG
+       Shared by the destructive management actions. Reuses the existing
+       dialog classes so the design is unchanged.
+       =============================== -->
+    <dialog id="confirmDialog" class="admin-dialog">
+      <div class="admin-dialog-content">
+        <div class="admin-dialog-heading">
+          <h2 id="confirmTitle">Confirm</h2>
+        </div>
+
+        <p class="admin-description" id="confirmMessage"></p>
+
+        <div class="admin-dialog-actions">
+          <button id="confirmCancel" type="button" class="admin-secondary-button">Cancel</button>
+          <button id="confirmAccept" type="button" class="admin-danger-button">Confirm</button>
+        </div>
+      </div>
+    </dialog>
+
     <!-- Existing background effects -->
     <script src="../js/particles.min.js"></script>
     <script src="../js/particles-effect.js"></script>
+    <script src="../js/mmiv-auth.js"></script>
 
     <!-- UI-only dialog selection -->
     <script>
@@ -749,5 +588,8 @@
         dialog.showModal();
       }
     </script>
+
+    <!-- Admin read operations; loaded last so openUserManagement exists. -->
+    <script src="../js/admin.js"></script>
   </body>
 </html>

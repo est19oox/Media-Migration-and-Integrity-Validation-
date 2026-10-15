@@ -44,6 +44,13 @@ spring:
               uri: lb://transfer-service
               predicates:
                 - Path=/home.html,/upload.html,/files.html,/logs.html,/admin.html,/invite.html,/admin.js,/portal.js,/portal.css,/auth.js,/preview.js,/file-browser.js,/history.html
+            # The new frontend, served in addition to the legacy pages above and
+            # kept off /, /login.html, /home.html, /upload.html and /invite.html
+            # so the legacy site stays the default until the switch is made.
+            - id: transfer-new-frontend
+              uri: lb://transfer-service
+              predicates:
+                - Path=/pages/**,/css/**,/js/**,/img/**,/font/**,/assets/**
             - id: portal-api
               uri: lb://transfer-service
               predicates:

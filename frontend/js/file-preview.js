@@ -198,6 +198,114 @@
     renderVersion += 1;
     clearPreviewUrl();
     downloadLink.removeAttribute('href');
+    downloadLink.hidden = true;
+    // Removing the element also cancels an in-flight streaming preview.
     content.replaceChildren();
   });
+
+  /** Text ceiling for a stored-file preview, matching the deployed preview. */
+  const MAX_REMOTE_TEXT_BYTES = 1048576;
+
+  function previewError(status) {
+    if (status === 403) return 'You do not have access to this file.';
+    if (status === 404) return 'This file is no longer available.';
+    if (status === 503) return 'The file service is unavailable. Please try again later.';
+    return 'Unable to preview this file.';
+  }
+
+  /**
+   * Opens a stored file through the session cookie.
+   *
+   * A HEAD request reads the content type and size without transferring bytes,
+   * and is also what reports a denied or missing file. Images, video, audio and
+   * PDFs are then pointed straight at the content URL, so the browser streams
+   * them with range requests instead of buffering the whole file in memory.
+   * Only text is fetched, and only up to 1 MiB.
+   */
+  async function openRemote(fileId, name) {
+    if (!fileId || !window.mmivAuth) return;
+    const version = ++renderVersion;
+    const url = '/api/v1/files/' + encodeURIComponent(fileId) + '/content';
+    clearPreviewUrl();
+    title.textContent = name || 'File preview';
+    details.textContent = 'Loading preview…';
+    content.replaceChildren();
+    downloadLink.href = '/api/v1/files/' + encodeURIComponent(fileId) + '/download';
+    downloadLink.hidden = false;
+    if (!dialog.open) dialog.showModal();
+    try {
+      const response = await window.mmivAuth.fetch(url, { method: 'HEAD' });
+      if (version !== renderVersion) return;
+      if (!response.ok) throw new Error(previewError(response.status));
+      const type = response.headers.get('Content-Type') || '';
+      const size = Number(response.headers.get('Content-Length'));
+      details.textContent =
+        (type || 'Unknown file type') + (Number.isFinite(size) ? ' · ' + formatFileSize(size) : '');
+
+      if (type.startsWith('text/')) {
+        if (!Number.isFinite(size) || size > MAX_REMOTE_TEXT_BYTES) {
+          showMessage(
+            getBadgeText(name || ''),
+            'Preview is not available for this file',
+            'This file is too large to preview. Download it to view the contents.',
+          );
+          return;
+        }
+        const text = await window.mmivAuth.fetch(url);
+        if (version !== renderVersion) return;
+        if (!text.ok) throw new Error(previewError(text.status));
+        const pre = document.createElement('pre');
+        pre.className = 'file-preview-text';
+        pre.textContent = (await text.text()) || 'This file is empty.';
+        content.replaceChildren(pre);
+        return;
+      }
+
+      let media = null;
+      if (type.startsWith('image/')) {
+        media = document.createElement('img');
+        media.alt = name || 'File preview';
+      } else if (type.startsWith('video/') || type.startsWith('audio/')) {
+        media = document.createElement(type.startsWith('audio/') ? 'audio' : 'video');
+        media.controls = true;
+        media.preload = 'metadata';
+      } else if (type.startsWith('application/pdf')) {
+        media = document.createElement('iframe');
+        media.title = 'Preview of ' + (name || 'file');
+      }
+      if (!media) {
+        showMessage(
+          getBadgeText(name || ''),
+          'Preview is not available for this file type',
+          'You can download the file and open it with a compatible application.',
+        );
+        return;
+      }
+      media.addEventListener(
+        'error',
+        () => {
+          if (version !== renderVersion) return;
+          showMessage(
+            getBadgeText(name || ''),
+            'Could not display this file',
+            'Try downloading the file to open it in another application.',
+          );
+        },
+        { once: true },
+      );
+      media.src = url;
+      content.replaceChildren(media);
+    } catch (error) {
+      if (version === renderVersion)
+        showMessage(getBadgeText(name || ''), 'Preview unavailable', error.message);
+    }
+  }
+
+  // File Manager rows open stored files; the upload dialog keeps its local preview.
+  window.mmivPreview = {
+    open: openRemote,
+    close: () => {
+      if (dialog.open) dialog.close();
+    },
+  };
 })();

@@ -33,6 +33,11 @@ import org.springframework.security.web.csrf.CsrfFilter;
 public class TransferSecurityConfig {
   public static final String AUTH_COOKIE = "MMIV_SESSION";
 
+  /** Where the new frontend's pages live, as opposed to the legacy root pages. */
+  private static final String NEW_FRONTEND_ROOT = "/pages/";
+
+  private static final String NEW_FRONTEND_LOGIN = NEW_FRONTEND_ROOT + "login.html";
+
   @Bean
   public JwtDecoder transferJwtDecoder(
       @Value("${mmiv.auth.jwk-set-uri}") String jwks, @Value("${mmiv.auth.issuer}") String issuer) {
@@ -72,8 +77,10 @@ public class TransferSecurityConfig {
       response.setHeader("Cache-Control", "no-store");
       if (isPage(request)) {
         // Keep the same origin-relative redirect behind the gateway and direct access.
+        // The new frontend signs in through its own page, so a page under /pages/ is
+        // sent there; every legacy page still lands on /login.html as before.
         response.setStatus(302);
-        response.setHeader("Location", "/login.html");
+        response.setHeader("Location", loginPageFor(request));
       } else {
         response.setHeader("WWW-Authenticate", "Bearer");
         response.sendError(401, "Login required");
@@ -84,6 +91,12 @@ public class TransferSecurityConfig {
   private static boolean isPage(HttpServletRequest request) {
     String path = request.getRequestURI().substring(request.getContextPath().length());
     return "/".equals(path) || path.endsWith(".html");
+  }
+
+  /** The login page that belongs to the frontend the requested page came from. */
+  private static String loginPageFor(HttpServletRequest request) {
+    String path = request.getRequestURI().substring(request.getContextPath().length());
+    return path.startsWith(NEW_FRONTEND_ROOT) ? NEW_FRONTEND_LOGIN : "/login.html";
   }
 
   @Bean
@@ -145,6 +158,22 @@ public class TransferSecurityConfig {
                     .requestMatchers(
                         HttpMethod.GET, "/actuator/health", "/actuator/health/**", "/actuator/info")
                     .permitAll()
+                    // The new frontend's sign-in and sign-up pages, and the styles,
+                    // scripts, images and fonts every new page loads, are readable
+                    // without a session. /pages/** is deliberately not opened as a
+                    // whole: the protected new pages are named in the list below, so
+                    // anything else added under /pages/ stays closed until it is
+                    // listed. Nothing here exposes data; the APIs keep their rules.
+                    .requestMatchers(
+                        HttpMethod.GET,
+                        NEW_FRONTEND_LOGIN,
+                        NEW_FRONTEND_ROOT + "signup.html",
+                        "/css/**",
+                        "/js/**",
+                        "/img/**",
+                        "/font/**",
+                        "/assets/**")
+                    .permitAll()
                     .requestMatchers(
                         HttpMethod.GET,
                         "/",
@@ -160,7 +189,14 @@ public class TransferSecurityConfig {
                         "/auth.js",
                         "/preview.js",
                         "/file-browser.js",
-                        "/history.html")
+                        "/history.html",
+                        // The new frontend's signed-in pages. Its login and signup
+                        // pages are permitted above; anything else it ships stays
+                        // closed until it is named here.
+                        NEW_FRONTEND_ROOT + "home.html",
+                        NEW_FRONTEND_ROOT + "file-manager.html",
+                        NEW_FRONTEND_ROOT + "admin.html",
+                        NEW_FRONTEND_ROOT + "activity.html")
                     .authenticated()
                     .requestMatchers(
                         "/api/v1/transfers",
