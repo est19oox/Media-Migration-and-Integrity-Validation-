@@ -128,6 +128,11 @@ management:
       probes:
         enabled: true
 
-# All services publish through the shared durable RabbitMQ outbox.
-mmiv.events.enabled: ${MMIV_EVENTS_ENABLED:true}
-mmiv.events.outbox-directory: ${MMIV_EVENTS_OUTBOX_DIRECTORY:./.mmiv-outbox}
+mmiv:
+  auth:
+    issuer: ${USER_ACCESS_JWT_ISSUER:https://auth.mmiv.example}
+    jwk-set-uri: ${USER_ACCESS_JWK_SET_URI:http://user-access-service:8083/.well-known/jwks.json}
+    cookie-secure: ${JWT_COOKIE_SECURE:false}
+  events:
+    enabled: ${MMIV_EVENTS_ENABLED:true}
+    outbox-directory: ${MMIV_EVENTS_OUTBOX_DIRECTORY:./.mmiv-outbox}
