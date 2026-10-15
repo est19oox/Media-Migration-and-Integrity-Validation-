@@ -160,10 +160,8 @@
               role="status"
               aria-live="polite"
             >
-              Showing example activity
+              Loading activity
             </span>
-
-            <span class="activity-demo-label"> Demo data </span>
           </div>
         </section>
       </main>
@@ -179,125 +177,7 @@
     <script src="../js/particles-effect.js"></script>
     <script src="../js/mmiv-auth.js"></script>
 
-    <!-- UI mock only -->
-    <script>
-      'use strict';
-
-      const mockActivities = [
-        {
-          type: 'upload',
-          title: 'File uploaded',
-          file: 'Campaign-assets.zip',
-          folder: 'Marketing Assets',
-          date: 'Today, 10:42 AM',
-          status: 'Completed',
-        },
-        {
-          type: 'verification',
-          title: 'Integrity verified',
-          file: 'Migration-plan.pdf',
-          folder: 'Project Atlas',
-          date: 'Today, 9:18 AM',
-          status: 'Verified',
-        },
-        {
-          type: 'download',
-          title: 'File downloaded',
-          file: 'Product-preview.mp4',
-          folder: 'Shared Media',
-          date: 'Yesterday',
-          status: 'Completed',
-        },
-        {
-          type: 'upload',
-          title: 'Folder uploaded',
-          file: 'Research Documents',
-          folder: 'Project Atlas',
-          date: 'Oct 12, 2026',
-          status: 'Completed',
-        },
-        {
-          type: 'verification',
-          title: 'Integrity check failed',
-          file: 'Archive-2026.zip',
-          folder: 'Archive 2026',
-          date: 'Oct 11, 2026',
-          status: 'Failed',
-        },
-        {
-          type: 'download',
-          title: 'File downloaded',
-          file: 'Media-report.pdf',
-          folder: 'Shared Media',
-          date: 'Oct 10, 2026',
-          status: 'Completed',
-        },
-      ];
-
-      const rows = document.getElementById('activityRows');
-      const search = document.getElementById('activitySearch');
-      const filter = document.getElementById('activityFilter');
-      const count = document.getElementById('activityCount');
-      const listStatus = document.getElementById('activityListStatus');
-
-      function renderActivities() {
-        const query = search.value.trim().toLowerCase();
-        const selectedType = filter.value;
-
-        const filtered = mockActivities.filter((item) => {
-          const matchesType = selectedType === 'all' || item.type === selectedType;
-
-          const searchable = [item.title, item.file, item.folder, item.date, item.status]
-            .join(' ')
-            .toLowerCase();
-
-          return matchesType && searchable.includes(query);
-        });
-
-        rows.replaceChildren();
-
-        filtered.forEach((item) => {
-          const tr = document.createElement('tr');
-
-          const values = [item.title, item.file, item.folder, item.date, item.status];
-
-          values.forEach((value, index) => {
-            const td = document.createElement('td');
-
-            if (index === 0) {
-              const label = document.createElement('span');
-              label.className = 'activity-name';
-              label.textContent = value;
-              td.append(label);
-            } else if (index === 4) {
-              const badge = document.createElement('span');
-              badge.className = 'activity-status status-' + item.status.toLowerCase();
-              badge.textContent = value;
-              td.append(badge);
-            } else {
-              td.textContent = value;
-            }
-
-            tr.append(td);
-          });
-
-          rows.append(tr);
-        });
-
-        count.textContent = filtered.length + (filtered.length === 1 ? ' activity' : ' activities');
-
-        listStatus.textContent =
-          filtered.length === 0
-            ? 'No matching activity found.'
-            : 'Showing ' + filtered.length + ' example activities';
-      }
-
-      search.addEventListener('input', renderActivities);
-      filter.addEventListener('change', renderActivities);
-
-      document.getElementById('refreshActivity').addEventListener('click', renderActivities);
-
-      renderActivities();
-    </script>
+    <!-- Activity history; replaces the page's mock records -->
+    <script src="../js/activity.js"></script>
   </body>
 </html>
