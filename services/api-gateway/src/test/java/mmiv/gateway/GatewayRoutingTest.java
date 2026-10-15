@@ -173,7 +173,17 @@ class GatewayRoutingTest {
           "/logs.html",
           "/portal.js",
           "/portal.css",
-          "/api/v1/portal/me"
+          "/api/v1/portal/me",
+          // The new frontend is served by the same service, beside the legacy
+          // pages above; it keeps its own prefixes so the two cannot collide.
+          "/pages/login.html",
+          "/pages/home.html",
+          "/pages/file-manager.html",
+          "/css/style.css",
+          "/js/mmiv-auth.js",
+          "/img/bg.jpg",
+          "/font/Bender.woff",
+          "/assets/particles-config.json"
         })
       http.get()
           .uri(path)

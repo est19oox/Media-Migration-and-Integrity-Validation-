@@ -8,6 +8,9 @@ on:
     paths:
       - 'services/**'
       - 'common/**'
+      # The new frontend is packaged into the Transfer Service image, so a change
+      # to it changes that image and has to run the same release.
+      - 'frontend/**'
       - 'infrastructure/bootstrap/**'
       - 'infrastructure/terraform/**'
       - 'infrastructure/ansible/**'

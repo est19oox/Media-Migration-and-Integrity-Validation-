@@ -168,6 +168,61 @@ class TransferSecurityIntegrationTest {
   }
 
   @Test
+  void newFrontendIsServedWithoutChangingTheLegacyPages() throws Exception {
+    // The new frontend's sign-in and sign-up pages need no session, and neither
+    // do the styles, scripts, images, fonts and configuration they load. These
+    // requests also prove the six mapped directories reached the artifact: a
+    // missing file would answer 404 instead of 200.
+    for (String path :
+        new String[] {
+          "/pages/login.html",
+          "/pages/signup.html",
+          "/css/style.css",
+          "/js/mmiv-auth.js",
+          "/img/bg.jpg",
+          "/font/Bender.woff",
+          "/assets/particles-config.json"
+        }) {
+      mvc.perform(get(path)).andExpect(status().isOk());
+    }
+    // A signed-in page of the new frontend sends the visitor to that frontend's
+    // own login page, while every legacy page still reaches /login.html.
+    mvc.perform(get("/pages/home.html"))
+        .andExpect(status().isFound())
+        .andExpect(redirectedUrl("/pages/login.html"))
+        .andExpect(header().string("Cache-Control", "no-store"));
+    for (String page : new String[] {"/", "/upload.html", "/files.html", "/home.html"}) {
+      mvc.perform(get(page))
+          .andExpect(status().isFound())
+          .andExpect(redirectedUrl("/login.html"))
+          .andExpect(header().string("Cache-Control", "no-store"));
+    }
+  }
+
+  @Test
+  void aSessionOpensTheNewPagesThatAreListedAndNothingElse() throws Exception {
+    Cookie auth = new Cookie("MMIV_SESSION", valid());
+    for (String page :
+        new String[] {
+          "/pages/home.html",
+          "/pages/file-manager.html",
+          "/pages/admin.html",
+          "/pages/activity.html"
+        }) {
+      mvc.perform(get(page).cookie(auth)).andExpect(status().isOk());
+    }
+    // A page the new frontend still ships, but which this phase does not serve,
+    // stays closed rather than becoming reachable by adding a file.
+    mvc.perform(get("/pages/reset-password.html").cookie(auth)).andExpect(status().isForbidden());
+    // An unknown path under the new frontend is closed for the same reason.
+    mvc.perform(get("/pages/anything-else.html").cookie(auth)).andExpect(status().isForbidden());
+    // The legacy pages remain reachable alongside the new frontend.
+    mvc.perform(get("/home.html").cookie(auth)).andExpect(status().isOk());
+    mvc.perform(get("/upload.html").cookie(auth)).andExpect(status().isOk());
+    mvc.perform(get("/portal.js").cookie(auth)).andExpect(status().isOk());
+  }
+
+  @Test
   void realSignedBearerEstablishesHttpOnlyCookieAndLoadsPage() throws Exception {
     String jwt = valid();
     var result =
