@@ -10,7 +10,9 @@ import static org.mockito.Mockito.when;
 import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
+import mmiv.reporting.audit.AuditEventDocument;
 import mmiv.reporting.audit.AuditEventRepository;
+import mmiv.reporting.contract.EventType;
 import mmiv.reporting.report.MigrationReportDocument;
 import mmiv.reporting.report.MigrationReportRepository;
 import mmiv.reporting.report.MigrationReportStatus;
@@ -22,6 +24,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
@@ -109,6 +112,24 @@ class UserReportControllerTest {
     assertThrows(ReportNotFoundException.class, () -> controller.report(jwt("bob"), MIGRATION_ID));
     assertThrows(
         ReportNotFoundException.class, () -> controller.files(jwt("bob"), MIGRATION_ID, 0, 20));
+  }
+
+  @Test
+  void ownerCanReadSanitizedTimelineWhileOtherUserReceives404() {
+    when(reports.findById(MIGRATION_ID.toString())).thenReturn(Optional.of(report("alice")));
+    AuditEventDocument event = org.mockito.Mockito.mock(AuditEventDocument.class);
+    when(event.getEventType()).thenReturn(EventType.MIGRATION_STARTED);
+    when(event.getOccurredAt()).thenReturn(Instant.parse("2026-10-11T10:00:00Z"));
+    when(events.findByMigrationIdOrderByOccurredAtAsc(
+            org.mockito.ArgumentMatchers.eq(MIGRATION_ID.toString()), any()))
+        .thenAnswer(
+            invocation -> new PageImpl<>(java.util.List.of(event), invocation.getArgument(1), 1));
+
+    assertEquals(
+        "MIGRATION",
+        controller.timeline(jwt("alice"), MIGRATION_ID, 0, 20).getContent().getFirst().stage());
+    assertThrows(
+        ReportNotFoundException.class, () -> controller.timeline(jwt("bob"), MIGRATION_ID, 0, 20));
   }
 
   @Test

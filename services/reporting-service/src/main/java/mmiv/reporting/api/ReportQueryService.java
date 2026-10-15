@@ -86,6 +86,27 @@ public class ReportQueryService {
         .map(ReportResponse.AuditEvent::from);
   }
 
+  public Page<UserTimelineResponse> ownedTimeline(
+      String subject, UUID migrationId, Pageable requested) {
+    ownedDocument(subject, migrationId);
+    Pageable pageable =
+        page(
+            requested,
+            Sort.by(Sort.Direction.ASC, "occurredAt")
+                .and(Sort.by(Sort.Direction.ASC, "eventType")));
+    Page<mmiv.reporting.audit.AuditEventDocument> result =
+        events.findByMigrationIdOrderByOccurredAtAsc(migrationId.toString(), pageable);
+    List<UserTimelineResponse> timeline =
+        result.getContent().stream()
+            .sorted(
+                Comparator.comparing(mmiv.reporting.audit.AuditEventDocument::getOccurredAt)
+                    .thenComparing(value -> value.getEventType().name())
+                    .thenComparing(value -> Objects.toString(value.getFileId(), "")))
+            .map(UserTimelineResponse::from)
+            .toList();
+    return new PageImpl<>(timeline, pageable, result.getTotalElements());
+  }
+
   private MigrationReportDocument find(UUID migrationId) {
     Objects.requireNonNull(migrationId, "migrationId must not be null");
     return reports

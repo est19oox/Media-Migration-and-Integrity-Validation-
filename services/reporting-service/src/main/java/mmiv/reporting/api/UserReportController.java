@@ -43,4 +43,13 @@ public class UserReportController {
       @RequestParam(defaultValue = "20") int size) {
     return reports.ownedFiles(jwt.getSubject(), migrationId, PageRequest.of(page, size));
   }
+
+  @GetMapping("/{migrationId}/timeline")
+  public Page<UserTimelineResponse> timeline(
+      @AuthenticationPrincipal Jwt jwt,
+      @PathVariable UUID migrationId,
+      @RequestParam(defaultValue = "0") int page,
+      @RequestParam(defaultValue = "20") int size) {
+    return reports.ownedTimeline(jwt.getSubject(), migrationId, PageRequest.of(page, size));
+  }
 }
