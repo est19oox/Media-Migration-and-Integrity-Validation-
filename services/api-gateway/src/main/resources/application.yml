@@ -58,7 +58,7 @@ spring:
             - id: transfer-session
               uri: lb://transfer-service
               predicates:
-                - Path=/api/v1/session,/api/v1/destinations,/api/v1/verification/**
+                - Path=/api/v1/destinations,/api/v1/verification/**
             - id: home
               uri: lb://transfer-service
               predicates:

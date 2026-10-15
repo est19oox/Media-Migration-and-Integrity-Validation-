@@ -266,16 +266,14 @@ class GatewayRoutingTest {
           .expectHeader()
           .valueEquals("X-Test-Path", page);
     }
-    for (String path : new String[] {"/files.html", "/api/v1/session"}) {
-      authenticated()
-          .get()
-          .uri(path)
-          .exchange()
-          .expectStatus()
-          .isOk()
-          .expectHeader()
-          .valueEquals("X-Test-Path", path);
-    }
+    authenticated()
+        .get()
+        .uri("/files.html")
+        .exchange()
+        .expectStatus()
+        .isOk()
+        .expectHeader()
+        .valueEquals("X-Test-Path", "/files.html");
     http.get()
         .uri("/auth.js")
         .exchange()

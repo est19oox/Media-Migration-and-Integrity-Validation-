@@ -20,6 +20,12 @@ import org.springframework.security.oauth2.jwt.ReactiveJwtDecoder;
 import org.springframework.security.web.server.SecurityWebFilterChain;
 import org.springframework.security.web.server.ServerAuthenticationEntryPoint;
 import org.springframework.security.web.server.authentication.ServerAuthenticationConverter;
+import org.springframework.security.web.server.authorization.ServerAccessDeniedHandler;
+import org.springframework.security.web.server.csrf.CookieServerCsrfTokenRepository;
+import org.springframework.security.web.server.csrf.CsrfWebFilter;
+import org.springframework.security.web.server.csrf.ServerCsrfTokenRepository;
+import org.springframework.security.web.server.csrf.ServerCsrfTokenRequestAttributeHandler;
+import org.springframework.security.web.server.util.matcher.ServerWebExchangeMatcher;
 import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
 
@@ -68,12 +74,64 @@ public class GatewaySecurityConfiguration {
   }
 
   @Bean
+  ServerCsrfTokenRepository gatewayCsrfTokenRepository(
+      @Value("${mmiv.auth.cookie-secure:false}") boolean secureCookie) {
+    CookieServerCsrfTokenRepository repository =
+        CookieServerCsrfTokenRepository.withHttpOnlyFalse();
+    repository.setCookiePath("/");
+    repository.setCookieCustomizer(cookie -> cookie.secure(secureCookie).sameSite("Strict"));
+    return repository;
+  }
+
+  @Bean
+  ServerAccessDeniedHandler gatewayAccessDeniedHandler() {
+    return (exchange, exception) -> {
+      byte[] body = "{\"error\":\"CSRF_INVALID\"}".getBytes(StandardCharsets.UTF_8);
+      exchange.getResponse().setStatusCode(HttpStatus.FORBIDDEN);
+      exchange.getResponse().getHeaders().set(HttpHeaders.CACHE_CONTROL, "no-store");
+      exchange.getResponse().getHeaders().setContentType(MediaType.APPLICATION_JSON);
+      return exchange
+          .getResponse()
+          .writeWith(Mono.just(exchange.getResponse().bufferFactory().wrap(body)));
+    };
+  }
+
+  @Bean
   SecurityWebFilterChain gatewaySecurityWebFilterChain(
       ServerHttpSecurity http,
       ReactiveJwtDecoder decoder,
       ServerAuthenticationConverter converter,
-      ServerAuthenticationEntryPoint entryPoint) {
-    return http.csrf(ServerHttpSecurity.CsrfSpec::disable)
+      ServerAuthenticationEntryPoint entryPoint,
+      ServerCsrfTokenRepository csrfRepository,
+      ServerAccessDeniedHandler accessDeniedHandler) {
+    ServerCsrfTokenRequestAttributeHandler csrfHandler =
+        new ServerCsrfTokenRequestAttributeHandler();
+    ServerWebExchangeMatcher cookieMutation =
+        exchange ->
+            CsrfWebFilter.DEFAULT_CSRF_MATCHER
+                .matches(exchange)
+                .flatMap(
+                    methodRequiresCsrf -> {
+                      if (!methodRequiresCsrf.isMatch()) {
+                        return ServerWebExchangeMatcher.MatchResult.notMatch();
+                      }
+                      boolean cookiePresent =
+                          exchange.getRequest().getCookies().getFirst("MMIV_SESSION") != null;
+                      boolean explicitBearer =
+                          exchange
+                              .getRequest()
+                              .getHeaders()
+                              .containsHeader(HttpHeaders.AUTHORIZATION);
+                      return cookiePresent && !explicitBearer
+                          ? ServerWebExchangeMatcher.MatchResult.match()
+                          : ServerWebExchangeMatcher.MatchResult.notMatch();
+                    });
+    return http.csrf(
+            csrf ->
+                csrf.csrfTokenRepository(csrfRepository)
+                    .csrfTokenRequestHandler(csrfHandler)
+                    .requireCsrfProtectionMatcher(cookieMutation)
+                    .accessDeniedHandler(accessDeniedHandler))
         .authorizeExchange(
             exchanges ->
                 exchanges
@@ -103,7 +161,11 @@ public class GatewaySecurityConfiguration {
                     .permitAll()
                     .anyExchange()
                     .authenticated())
-        .exceptionHandling(errors -> errors.authenticationEntryPoint(entryPoint))
+        .exceptionHandling(
+            errors ->
+                errors
+                    .authenticationEntryPoint(entryPoint)
+                    .accessDeniedHandler(accessDeniedHandler))
         .oauth2ResourceServer(
             resource ->
                 resource
