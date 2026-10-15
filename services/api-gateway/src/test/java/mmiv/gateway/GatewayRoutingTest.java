@@ -186,7 +186,7 @@ class GatewayRoutingTest {
   }
 
   @Test
-  void routesEveryEnabledServiceAndPages() {
+  void routesEveryEnabledService() {
     for (String prefix : new String[] {"integrity", "user-access", "reporting", "discovery"}) {
       authenticated()
           .get()
@@ -205,85 +205,16 @@ class GatewayRoutingTest {
         .isOk()
         .expectHeader()
         .valueEquals("X-Test-Path", "/api/access/example");
-    for (String path :
-        new String[] {
-          "/home.html",
-          "/upload.html",
-          "/files.html",
-          "/admin.html",
-          "/admin.js",
-          "/logs.html",
-          "/portal.js",
-          "/portal.css",
-          "/api/v1/portal/me",
-          "/pages/home.html",
-          "/pages/file-manager.html"
-        })
-      authenticated()
-          .get()
-          .uri(path)
-          .exchange()
-          .expectStatus()
-          .isOk()
-          .expectHeader()
-          .valueMatches("X-Test-Backend", "[AB]")
-          .expectHeader()
-          .valueEquals("X-Test-Path", path);
-    // Login and frontend assets intentionally remain public.
-    for (String path :
-        new String[] {
-          "/pages/login.html",
-          "/css/style.css",
-          "/js/mmiv-auth.js",
-          "/img/bg.jpg",
-          "/font/Bender.woff",
-          "/assets/particles-config.json"
-        })
-      http.get()
-          .uri(path)
-          .exchange()
-          .expectStatus()
-          .isOk()
-          .expectHeader()
-          .valueMatches("X-Test-Backend", "[AB]")
-          .expectHeader()
-          .valueEquals("X-Test-Path", path);
     authenticated()
         .get()
-        .uri("/")
+        .uri("/api/v1/portal/me")
         .exchange()
         .expectStatus()
         .isOk()
         .expectHeader()
         .valueMatches("X-Test-Backend", "[AB]")
         .expectHeader()
-        .valueEquals("X-Test-Path", "/home.html");
-    for (String page : new String[] {"/login.html", "/signup.html"}) {
-      http.get()
-          .uri(page)
-          .exchange()
-          .expectStatus()
-          .isOk()
-          .expectHeader()
-          .valueEquals("X-Test-Backend", "A")
-          .expectHeader()
-          .valueEquals("X-Test-Path", page);
-    }
-    authenticated()
-        .get()
-        .uri("/files.html")
-        .exchange()
-        .expectStatus()
-        .isOk()
-        .expectHeader()
-        .valueEquals("X-Test-Path", "/files.html");
-    http.get()
-        .uri("/auth.js")
-        .exchange()
-        .expectStatus()
-        .isOk()
-        .expectHeader()
-        .valueEquals("X-Test-Path", "/auth.js");
+        .valueEquals("X-Test-Path", "/api/v1/portal/me");
     for (String action : new String[] {"login", "signup"}) {
       http.post()
           .uri("/user-access/api/auth/" + action)

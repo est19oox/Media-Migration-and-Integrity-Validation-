@@ -24,10 +24,6 @@ spring:
             connect-timeout: 3000
             response-timeout: ${GATEWAY_RESPONSE_TIMEOUT:300s}
           routes:
-            - id: user-access-login-page
-              uri: lb://user-access-service
-              predicates:
-                - Path=/login.html,/signup.html,/english-validation.js,/feedback.js,/reset-password.html
             - id: transfer-api
               uri: lb://transfer-service
               predicates:
@@ -40,17 +36,6 @@ spring:
               uri: lb://transfer-service
               predicates:
                 - Path=/api/v1/files,/api/v1/files/**
-            - id: transfer-pages
-              uri: lb://transfer-service
-              predicates:
-                - Path=/home.html,/upload.html,/files.html,/logs.html,/admin.html,/invite.html,/admin.js,/portal.js,/portal.css,/auth.js,/preview.js,/file-browser.js,/history.html
-            # The new frontend, served in addition to the legacy pages above and
-            # kept off /, /login.html, /home.html, /upload.html and /invite.html
-            # so the legacy site stays the default until the switch is made.
-            - id: transfer-new-frontend
-              uri: lb://transfer-service
-              predicates:
-                - Path=/pages/**,/css/**,/js/**,/img/**,/font/**,/assets/**
             - id: portal-api
               uri: lb://transfer-service
               predicates:
@@ -60,11 +45,33 @@ spring:
               predicates:
                 - Path=/api/v1/destinations,/api/v1/verification/**
             - id: home
-              uri: lb://transfer-service
+              uri: forward:///pages/home.html
               predicates:
                 - Path=/
+            - id: legacy-login-redirect
+              uri: no://op
+              predicates:
+                - Path=/login.html
               filters:
-                - SetPath=/home.html
+                - RedirectTo=302,/pages/login.html
+            - id: legacy-signup-redirect
+              uri: no://op
+              predicates:
+                - Path=/signup.html
+              filters:
+                - RedirectTo=302,/pages/signup.html
+            - id: legacy-password-reset-redirect
+              uri: no://op
+              predicates:
+                - Path=/reset-password.html
+              filters:
+                - RedirectTo=302,/pages/reset-password.html
+            - id: legacy-invite-redirect
+              uri: no://op
+              predicates:
+                - Path=/invite.html
+              filters:
+                - RedirectTo=302,/pages/invite.html
             - id: integrity-native-api
               uri: lb://integrity-service
               predicates:

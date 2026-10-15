@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#f3f7fc" />
+    <title>Administrator invitation · MMIV</title>
+    <link rel="stylesheet" href="../css/style.css" />
+    <link rel="stylesheet" href="../css/login.css" />
+  </head>
+  <body class="auth-page login-page">
+    <div class="mmiv-header">MMIV<span>.</span></div>
+    <div id="particles-js" aria-hidden="true"></div>
+    <main class="login-wrap">
+      <section class="login-card" aria-labelledby="invite-title">
+        <h1 id="invite-title">Administrator invitation</h1>
+        <p class="sub">Confirm access for your signed-in account.</p>
+        <p id="status" class="msg" role="status" aria-live="polite">
+          Checking your invitation…
+        </p>
+        <button id="accept" type="button" disabled>Accept invitation</button>
+        <button id="logout" type="button">Sign out</button>
+      </section>
+    </main>
+    <script src="../js/particles.min.js"></script>
+    <script src="../js/particles-effect.js"></script>
+    <script src="../js/mmiv-auth.js"></script>
+    <script src="../js/invite.js"></script>
+  </body>
+</html>

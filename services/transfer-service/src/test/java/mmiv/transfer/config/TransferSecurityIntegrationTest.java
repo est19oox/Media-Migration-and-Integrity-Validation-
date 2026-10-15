@@ -168,11 +168,9 @@ class TransferSecurityIntegrationTest {
   }
 
   @Test
-  void newFrontendIsServedWithoutChangingTheLegacyPages() throws Exception {
-    // The new frontend's sign-in and sign-up pages need no session, and neither
-    // do the styles, scripts, images, fonts and configuration they load. These
-    // requests also prove the six mapped directories reached the artifact: a
-    // missing file would answer 404 instead of 200.
+  void newFrontendIsNoLongerPackagedByTransferWithoutChangingTheLegacyPages() throws Exception {
+    // Gateway owns the root frontend. Transfer must not silently retain a second
+    // packaged copy of its public pages or assets.
     for (String path :
         new String[] {
           "/pages/login.html",
@@ -183,10 +181,10 @@ class TransferSecurityIntegrationTest {
           "/font/Bender.woff",
           "/assets/particles-config.json"
         }) {
-      mvc.perform(get(path)).andExpect(status().isOk());
+      mvc.perform(get(path)).andExpect(status().isNotFound());
     }
-    // A signed-in page of the new frontend sends the visitor to that frontend's
-    // own login page, while every legacy page still reaches /login.html.
+    // Security still protects an unauthenticated new-page URL even though the
+    // resource itself now lives only in Gateway. Legacy behavior stays intact.
     mvc.perform(get("/pages/home.html"))
         .andExpect(status().isFound())
         .andExpect(redirectedUrl("/pages/login.html"))
@@ -200,7 +198,7 @@ class TransferSecurityIntegrationTest {
   }
 
   @Test
-  void aSessionOpensTheNewPagesThatAreListedAndNothingElse() throws Exception {
+  void aSessionCannotOpenGatewayOwnedPagesFromTransfer() throws Exception {
     Cookie auth = new Cookie("MMIV_SESSION", valid());
     for (String page :
         new String[] {
@@ -209,14 +207,14 @@ class TransferSecurityIntegrationTest {
           "/pages/admin.html",
           "/pages/activity.html"
         }) {
-      mvc.perform(get(page).cookie(auth)).andExpect(status().isOk());
+      mvc.perform(get(page).cookie(auth)).andExpect(status().isNotFound());
     }
     // A page the new frontend still ships, but which this phase does not serve,
     // stays closed rather than becoming reachable by adding a file.
     mvc.perform(get("/pages/reset-password.html").cookie(auth)).andExpect(status().isForbidden());
     // An unknown path under the new frontend is closed for the same reason.
     mvc.perform(get("/pages/anything-else.html").cookie(auth)).andExpect(status().isForbidden());
-    // The legacy pages remain reachable alongside the new frontend.
+    // Transfer keeps only its legacy pages during the compatibility period.
     mvc.perform(get("/home.html").cookie(auth)).andExpect(status().isOk());
     mvc.perform(get("/upload.html").cookie(auth)).andExpect(status().isOk());
     mvc.perform(get("/portal.js").cookie(auth)).andExpect(status().isOk());

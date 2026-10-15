@@ -146,7 +146,6 @@ public class GatewaySecurityConfiguration {
                         "/pages/login.html",
                         "/pages/signup.html",
                         "/pages/reset-password.html",
-                        "/auth.js",
                         "/css/**",
                         "/js/**",
                         "/img/**",
