@@ -96,38 +96,9 @@
               </div>
             </div>
 
-            <ul class="activity-list">
-              <li class="activity-item">
-                <span class="activity-icon upload-icon" aria-hidden="true">↑</span>
-                <div class="activity-details">
-                  <strong>File uploaded</strong>
-                  <span>Campaign-assets.zip</span>
-                  <small>Today, 10:42 AM</small>
-                </div>
-              </li>
-
-              <li class="activity-item">
-                <span class="activity-icon verified-icon" aria-hidden="true">✓</span>
-                <div class="activity-details">
-                  <strong>Integrity verified</strong>
-                  <span>Project Atlas</span>
-                  <small>Today, 9:18 AM</small>
-                </div>
-              </li>
-
-              <li class="activity-item">
-                <span class="activity-icon download-icon" aria-hidden="true">↓</span>
-                <div class="activity-details">
-                  <strong>File downloaded</strong>
-                  <span>Migration-plan.pdf</span>
-                  <small>Yesterday</small>
-                </div>
-              </li>
-            </ul>
+            <ul class="activity-list"></ul>
 
             <a href="activity.html" class="activity-link"> View all activity → </a>
-
-            <p class="activity-demo-note">Example activity for UI preview.</p>
           </section>
         </div>
       </main>
@@ -143,114 +114,8 @@
     <!-- Particle animation -->
     <script src="../js/particles.min.js"></script>
     <script src="../js/particles-effect.js"></script>
+    <script src="../js/mmiv-auth.js"></script>
 
-    <!-- Mock data: UI development only -->
-    <script>
-      'use strict';
-
-      const mockUser = {
-        username: 'Alex Morgan',
-        role: 'USER',
-
-        destinations: [
-          {
-            destination: 'Project Atlas',
-            permission: 'WRITE',
-          },
-          {
-            destination: 'Shared Media',
-            permission: 'READ',
-          },
-          {
-            destination: 'Marketing Assets',
-            permission: 'WRITE',
-          },
-          {
-            destination: 'Archive 2026',
-            permission: 'READ',
-          },
-          {
-            destination: 'Research Documents',
-            permission: 'READ',
-          },
-          {
-            destination: 'Team Resources',
-            permission: 'WRITE',
-          },
-        ],
-      };
-
-      function loadMockFolders() {
-        const folderList = document.getElementById('folders');
-
-        const noAccess = document.getElementById('noAccess');
-
-        const account = document.getElementById('account');
-
-        const status = document.getElementById('status');
-
-        const folderCount = document.getElementById('folderCount');
-
-        status.textContent = 'Loading folders...';
-
-        folderList.replaceChildren();
-        noAccess.hidden = true;
-
-        setTimeout(() => {
-          account.textContent = mockUser.username;
-
-          status.textContent = '';
-
-          const destinations = mockUser.destinations;
-
-          folderCount.textContent =
-            destinations.length + (destinations.length === 1 ? ' folder' : ' folders');
-
-          if (destinations.length === 0) {
-            noAccess.hidden = false;
-            return;
-          }
-
-          destinations.forEach((folder) => {
-            const item = document.createElement('li');
-
-            const link = document.createElement('a');
-
-            const icon = document.createElement('span');
-
-            const details = document.createElement('span');
-
-            const name = document.createElement('strong');
-
-            const permission = document.createElement('small');
-
-            icon.className = 'folder-icon';
-            icon.setAttribute('aria-hidden', 'true');
-            icon.textContent = '▣';
-
-            details.className = 'folder-details';
-
-            name.textContent = folder.destination;
-
-            permission.className = 'folder-permission';
-
-            permission.textContent =
-              folder.permission === 'WRITE' ? 'Upload and download' : 'View and download';
-
-            link.href =
-              'file-manager.html?folder=' +
-              encodeURIComponent(folder.destination) +
-              '#browse-files';
-
-            details.append(name, permission);
-            link.append(icon, details);
-            item.append(link);
-            folderList.append(item);
-          });
-        }, 600);
-      }
-
-      document.addEventListener('DOMContentLoaded', loadMockFolders);
-    </script>
+    <script src="../js/home.js"></script>
   </body>
 </html>

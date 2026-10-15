@@ -127,18 +127,12 @@
             <div class="location-field">
               <select id="folder" name="folder" aria-label="Folder">
                 <option value="">Select a folder</option>
-                <option value="Project Atlas">Project Atlas</option>
-                <option value="Shared Media">Shared Media</option>
-                <option value="Marketing Assets">Marketing Assets</option>
-                <option value="Archive 2026">Archive 2026</option>
               </select>
             </div>
 
             <!-- Breadcrumb -->
             <nav id="breadcrumbs" class="breadcrumbs" aria-label="Folder path">
               <span>Workspace</span>
-              <span aria-hidden="true">›</span>
-              <span>Project Atlas</span>
             </nav>
 
             <!-- Search -->
@@ -185,95 +179,7 @@
                 </tr>
               </thead>
 
-              <tbody id="files">
-                <!-- Mock folder -->
-                <tr>
-                  <td>
-                    <span class="file-name">
-                      <span class="file-icon folder-type">▣</span>
-                      <span>Documents</span>
-                    </span>
-                  </td>
-                  <td>Folder</td>
-                  <td>—</td>
-                  <td>Oct 14, 2026</td>
-                  <td>
-                    <button type="button" class="table-action">Open</button>
-                  </td>
-                </tr>
-
-                <tr>
-                  <td>
-                    <span class="file-name">
-                      <span class="file-icon pdf-type">PDF</span>
-                      <span>Migration-plan.pdf</span>
-                    </span>
-                  </td>
-                  <td>PDF document</td>
-                  <td>2.4 MB</td>
-                  <td>Oct 14, 2026</td>
-                  <td>
-                    <div class="table-actions">
-                      <button
-                        type="button"
-                        class="table-action"
-                        data-preview-file="Migration-plan.pdf"
-                      >
-                        Preview
-                      </button>
-                      <button type="button" class="table-action">Download</button>
-                    </div>
-                  </td>
-                </tr>
-
-                <tr>
-                  <td>
-                    <span class="file-name">
-                      <span class="file-icon zip-type">ZIP</span>
-                      <span>Campaign-assets.zip</span>
-                    </span>
-                  </td>
-                  <td>Archive</td>
-                  <td>84 MB</td>
-                  <td>Oct 13, 2026</td>
-                  <td>
-                    <div class="table-actions">
-                      <button
-                        type="button"
-                        class="table-action"
-                        data-preview-file="Campaign-assets.zip"
-                      >
-                        Preview
-                      </button>
-                      <button type="button" class="table-action">Download</button>
-                    </div>
-                  </td>
-                </tr>
-
-                <tr>
-                  <td>
-                    <span class="file-name">
-                      <span class="file-icon video-type">MP4</span>
-                      <span>Product-preview.mp4</span>
-                    </span>
-                  </td>
-                  <td>Video</td>
-                  <td>72 MB</td>
-                  <td>Oct 12, 2026</td>
-                  <td>
-                    <div class="table-actions">
-                      <button
-                        type="button"
-                        class="table-action"
-                        data-preview-file="Product-preview.mp4"
-                      >
-                        Preview
-                      </button>
-                      <button type="button" class="table-action">Download</button>
-                    </div>
-                  </td>
-                </tr>
-              </tbody>
+              <tbody id="files"></tbody>
             </table>
 
             <!-- Infinite scroll trigger -->
@@ -284,8 +190,8 @@
 
           <!-- Explorer footer -->
           <div class="explorer-bottom">
-            <span id="fileCount" class="explorer-count">4 items · Demo</span>
-            <span id="listStatus"> Showing example files </span>
+            <span id="fileCount" class="explorer-count">0 items</span>
+            <span id="listStatus"></span>
           </div>
         </section>
 
@@ -458,6 +364,8 @@
 
     <script src="../js/particles.min.js"></script>
     <script src="../js/particles-effect.js"></script>
+    <script src="../js/mmiv-auth.js"></script>
+    <script src="../js/file-manager.js"></script>
     <script src="../js/upload-dialog.js"></script>
     <script src="../js/file-preview.js"></script>
   </body>
