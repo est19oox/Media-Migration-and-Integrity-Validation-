@@ -320,7 +320,7 @@ test('search narrows the records already loaded, without another request', async
   assert.equal(app.rows().length, 1);
   assert.equal(app.rows()[0].children[1].textContent, 'report.pdf');
   assert.equal(app.text('activityCount'), '1 activity');
-  assert.equal(app.text('activityListStatus'), 'Showing 1 of 3 activities');
+  assert.equal(app.text('activityListStatus'), 'Showing 1 of 3 activities loaded');
 
   // The folder name is searchable too, and matching is case-insensitive.
   app.element('activitySearch').value = 'archive';
@@ -330,7 +330,7 @@ test('search narrows the records already loaded, without another request', async
 
   app.element('activitySearch').value = 'nothing here';
   await app.trigger('activitySearch', 'input');
-  assert.equal(app.rows()[0].children[0].textContent, 'No activity matches your search.');
+  assert.equal(app.rows()[0].children[0].textContent, 'No loaded activity matches your search.');
   assert.equal(app.text('activityCount'), '0 activities');
   assert.equal(app.requests.length, before);
 });

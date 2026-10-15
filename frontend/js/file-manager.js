@@ -299,14 +299,17 @@
     if (fileCount) fileCount.textContent = files.length + (files.length === 1 ? ' item' : ' items');
 
     if (listStatus) {
-      if (query) listStatus.textContent = visible.length + ' of ' + files.length + ' match';
+      // The search only sees the pages fetched so far, so the count names them
+      // as loaded rather than implying the whole folder was searched.
+      if (query)
+        listStatus.textContent = visible.length + ' of ' + files.length + ' loaded files match';
       else if (cursor) listStatus.textContent = 'Scroll to load more';
       else listStatus.textContent = '';
     }
 
     if (emptyFolder) emptyFolder.hidden = files.length !== 0;
     if (files.length === 0) setBrowseStatus('');
-    else if (query && visible.length === 0) setBrowseStatus('No files match your search.');
+    else if (query && visible.length === 0) setBrowseStatus('No loaded files match your search.');
     else setBrowseStatus('');
 
     observeSentinel();
@@ -423,6 +426,11 @@
         select.append(option);
       });
       select.disabled = writable.length === 0;
+    });
+    // A read-only account is not offered the upload menus at all, because every
+    // upload they could start would end at a destination the server refuses.
+    document.querySelectorAll('.upload-menu').forEach((menu) => {
+      menu.hidden = writable.length === 0;
     });
   }
 

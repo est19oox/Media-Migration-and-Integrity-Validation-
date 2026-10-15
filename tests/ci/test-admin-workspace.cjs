@@ -1325,6 +1325,37 @@ test('a link is built on the entered origin, not the one being browsed', async (
   );
 });
 
+test('a reset link also follows the entered origin', async () => {
+  const token = 'c'.repeat(64);
+  const app = await page({
+    respond: backend({
+      handle: (path, settings) =>
+        path === '/api/v1/portal/admin/users/u-alice/password-reset' && settings.method === 'POST'
+          ? { status: 200, body: { token } }
+          : null,
+    }),
+  });
+  // The browsed origin stays the harness address; the operator names the one
+  // the recipient can open, which is what the link has to carry.
+  app.element('websiteAddress').value = 'https://portal.example';
+  await app.selectUser('alice');
+  await app.trigger('createResetLink');
+  await app.answer(true);
+  assert.equal(
+    app.element('resetLink').value,
+    'https://portal.example/reset-password.html#reset=' + token,
+  );
+});
+
+test('an unusable website address also costs no reset-link request', async () => {
+  const app = await page({ respond: backend() });
+  await app.selectUser('alice');
+  app.element('websiteAddress').value = 'not a url';
+  await app.trigger('createResetLink');
+  assert.equal(app.writes().length, 0);
+  assert.match(app.text('status'), /Enter the website origin/);
+});
+
 test('an unusable website address costs no request', async () => {
   const app = await page({ respond: backend() });
   app.element('invitationUsername').value = 'alice';

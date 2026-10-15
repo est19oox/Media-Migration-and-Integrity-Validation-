@@ -223,7 +223,7 @@
     if (loading && entries.length === 0) return 'Loading activity…';
     if (filter && filter.value === 'verification')
       return 'Integrity verification events are not included in this history.';
-    if (search && search.value.trim()) return 'No activity matches your search.';
+    if (search && search.value.trim()) return 'No loaded activity matches your search.';
     if (filter && filter.value !== 'all') return 'No activity of this kind yet.';
     return 'No activity yet.';
   }
@@ -248,7 +248,10 @@
     if (visible.length === 0) setListStatus(emptyMessage());
     else if (visible.length === entries.length)
       setListStatus('Showing ' + activities(visible.length));
-    else setListStatus('Showing ' + visible.length + ' of ' + activities(entries.length));
+    // Search and filter only see the pages fetched so far, so the narrowed
+    // count names them as loaded rather than implying the whole history.
+    else
+      setListStatus('Showing ' + visible.length + ' of ' + activities(entries.length) + ' loaded');
 
     observeSentinel();
   }

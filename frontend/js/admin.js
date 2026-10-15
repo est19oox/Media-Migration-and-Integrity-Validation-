@@ -845,6 +845,17 @@
   async function submitResetLink() {
     const user = currentUser();
     if (!user) return;
+    // The link is sent to someone else, so it is built on the origin the
+    // operator names rather than the one this page happens to be served from:
+    // through an SSM tunnel the browsed origin is a local address the recipient
+    // cannot open.
+    let origin;
+    try {
+      origin = websiteOrigin();
+    } catch (error) {
+      setStatus(error.message);
+      return;
+    }
     const accepted = await confirmAction(
       'Create password-reset link',
       'Create a one-use password-reset link for ' +
@@ -863,7 +874,7 @@
       const result = await response.json();
       if (!result || typeof result.token !== 'string' || !result.token)
         throw new Error('The reset link could not be read. Please try again.');
-      resetLink.value = linkFor(location.origin, RESET_PAGE, 'reset', result.token);
+      resetLink.value = linkFor(origin, RESET_PAGE, 'reset', result.token);
       setStatus('Reset link created for ' + user.username + '. Send it privately.');
       updateControls();
     });

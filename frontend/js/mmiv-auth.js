@@ -20,16 +20,28 @@
   const SESSION_URL = '/api/v1/session';
   const LOGIN_PAGE = '/pages/login.html';
   const SAFE_METHODS = ['GET', 'HEAD', 'OPTIONS'];
+  // The shape the invitation endpoint issues and redeems.
+  const INVITATION_TOKEN = /^[a-f0-9]{64}$/;
 
   let session;
   let logoutWired = false;
 
   /**
-   * Leaves for the login page. The throw stops the calling code path, because
-   * the navigation itself completes asynchronously.
+   * Leaves for the login page.
+   *
+   * An invitation the recipient arrived with is carried across in the fragment,
+   * so it survives the sign-in detour and the invitation page can still redeem
+   * it afterwards. A fragment that is not a well-formed token is dropped rather
+   * than forwarded. The token is never logged or stored, and location.replace
+   * keeps it out of the session history.
+   *
+   * The throw stops the calling code path, because the navigation itself
+   * completes asynchronously.
    */
   function login() {
-    location.replace(LOGIN_PAGE);
+    const invitation = new URLSearchParams((location.hash || '').slice(1)).get('invite');
+    const valid = invitation && INVITATION_TOKEN.test(invitation);
+    location.replace(LOGIN_PAGE + (valid ? '#invite=' + invitation : ''));
     throw new Error('Please sign in again.');
   }
 

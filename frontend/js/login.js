@@ -9,6 +9,9 @@
  *   3. GET  /api/v1/session              -> confirms the cookie and returns the
  *                                           CSRF contract for later pages
  *
+ * An invitation that arrived in the URL fragment is passed on to the invitation
+ * page instead of the workspace, so it can still be redeemed after signing in.
+ *
  * The token only lives in a local variable for the duration of step 2. It is
  * never written to localStorage, sessionStorage or a script-readable cookie;
  * the browser keeps it in the HttpOnly cookie that step 2 sets.
@@ -17,6 +20,10 @@
   const LOGIN_URL = '/user-access/api/auth/login';
   const SESSION_URL = '/api/v1/session';
   const HOME_URL = '/pages/home.html';
+  // The page that redeems an invitation, which the Gateway still serves.
+  const INVITE_URL = '/invite.html';
+  // The shape the invitation endpoint issues and redeems.
+  const INVITATION_TOKEN = /^[a-f0-9]{64}$/;
   const REQUEST_TIMEOUT_MS = 20000;
 
   const form = document.getElementById('login-form');
@@ -141,7 +148,11 @@
       authenticated = true;
       password.value = '';
       message('Signed in successfully. Opening your workspace…', 'success');
-      location.assign(HOME_URL);
+      // An invitation carried in with the sign-in is handed back to the page
+      // that redeems it, so the recipient never has to follow the link again.
+      const invitation = new URLSearchParams((location.hash || '').slice(1)).get('invite');
+      const valid = invitation && INVITATION_TOKEN.test(invitation);
+      location.assign(valid ? INVITE_URL + '#invite=' + invitation : HOME_URL);
     } catch (error) {
       message(
         error.name === 'AbortError'
