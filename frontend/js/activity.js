@@ -153,12 +153,20 @@
     const date = new Date(value);
     if (Number.isNaN(date.getTime())) return String(value);
     const now = new Date();
-    const time = date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+    const time = date.toLocaleTimeString('en-US', {
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true,
+    });
     if (date.toDateString() === now.toDateString()) return 'Today, ' + time;
     const yesterday = new Date(now);
     yesterday.setDate(now.getDate() - 1);
     if (date.toDateString() === yesterday.toDateString()) return 'Yesterday, ' + time;
-    return date.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
+    return date.toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    });
   }
 
   /** The record's own values; a missing one is shown as a dash, never filled in. */

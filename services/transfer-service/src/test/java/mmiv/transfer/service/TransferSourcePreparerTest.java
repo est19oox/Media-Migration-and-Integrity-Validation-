@@ -146,8 +146,13 @@ class TransferSourcePreparerTest {
   @Test
   void inputCloseFailureDoesNotLeakCompletedSnapshot() throws Exception {
     Set<Path> before = stagedFiles();
-    var input = spy(new ByteArrayInputStream(new byte[] {1}));
-    doThrow(new IOException("close failed")).when(input).close();
+    var input =
+        new ByteArrayInputStream(new byte[] {1}) {
+          @Override
+          public void close() throws IOException {
+            throw new IOException("close failed");
+          }
+        };
     assertThrows(
         IllegalStateException.class,
         () -> preparer.prepare(upload(input), "notes.txt", "assigned/key"));
