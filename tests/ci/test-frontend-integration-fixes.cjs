@@ -6,6 +6,9 @@ const vm = require('node:vm');
 const authSource = readFileSync('frontend/js/mmiv-auth.js', 'utf8');
 const loginSource = readFileSync('frontend/js/login.js', 'utf8');
 const managerSource = readFileSync('frontend/js/file-manager.js', 'utf8');
+const homeSource = readFileSync('frontend/js/home.js', 'utf8');
+const activitySource = readFileSync('frontend/js/activity.js', 'utf8');
+const adminSource = readFileSync('frontend/js/admin.js', 'utf8');
 const signupHtml = readFileSync('frontend/pages/signup.html', 'utf8');
 const gatewayPom = readFileSync('services/api-gateway/pom.xml', 'utf8');
 
@@ -248,7 +251,7 @@ async function loadFileManager(destinations) {
       mmivAuth: {
         ready: Promise.resolve(),
         fetch: async (url) => {
-          if (url === '/api/v1/portal/me')
+          if (url === '/api/access/me')
             return { ok: true, status: 200, json: async () => ({ role: 'USER', destinations }) };
           throw new Error('Unexpected request ' + url);
         },
@@ -292,4 +295,20 @@ test('one writable destination keeps the upload menus', async () => {
     app.element('destination').children.map((option) => option.value),
     ['', 'SW002'],
   );
+});
+
+test('frontend reads profile and reporting data without traversing Transfer', () => {
+  for (const script of [homeSource, activitySource, adminSource, managerSource]) {
+    for (const legacy of [
+      '/api/v1/portal/me',
+      '/api/v1/portal/history',
+      '/api/v1/portal/logs',
+    ]) {
+      assert.equal(script.includes(legacy), false, `legacy read remains: ${legacy}`);
+    }
+  }
+  assert.ok(homeSource.includes("'/api/access/me'"));
+  assert.ok(homeSource.includes("'/api/history?page=0'"));
+  assert.ok(activitySource.includes("'/api/history'"));
+  assert.ok(adminSource.includes("'/api/dashboard'"));
 });

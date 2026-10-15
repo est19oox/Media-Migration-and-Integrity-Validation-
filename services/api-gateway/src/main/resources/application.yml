@@ -105,7 +105,11 @@ spring:
             - id: reports-native-api
               uri: lb://reporting-service
               predicates:
-                - Path=/api/reports,/api/reports/**,/api/admin/reports,/api/admin/reports/**,/api/history,/api/dashboard
+                - Path=/api/reports,/api/reports/**,/api/admin/reports,/api/admin/reports/**
+            - id: reporting-read-api
+              uri: lb://reporting-service
+              predicates:
+                - Path=/api/history,/api/dashboard
             - id: discovery-api
               uri: lb://discovery-service
               predicates:

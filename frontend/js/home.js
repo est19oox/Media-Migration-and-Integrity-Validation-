@@ -8,10 +8,10 @@
  * the session and carries the CSRF header where one is required.
  *
  * Verified contracts:
- *   GET /api/v1/portal/me            -> { userId, username, role, destinations }
+ *   GET /api/access/me               -> { userId, username, role, destinations }
  *                                       destinations[]: { destination, permission }
  *                                       permission is READ or WRITE; role is USER or ADMIN
- *   GET /api/v1/portal/history?page=0 -> { entries, hasMore, page }
+ *   GET /api/history?page=0          -> { entries, hasMore, page }
  *                                       entries[]: { time, action, fileName,
  *                                                    folder, sizeBytes, status }
  *
@@ -19,8 +19,8 @@
  * login and logout messages owned by mmiv-auth.js are never overwritten.
  */
 (() => {
-  const PROFILE_URL = '/api/v1/portal/me';
-  const HISTORY_URL = '/api/v1/portal/history?page=0';
+  const PROFILE_URL = '/api/access/me';
+  const HISTORY_URL = '/api/history?page=0';
   const RECENT_LIMIT = 3;
 
   // Presentation for the action names the history endpoint returns. There is no

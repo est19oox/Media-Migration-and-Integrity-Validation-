@@ -12,7 +12,7 @@
  * Verified contracts (transfer-service PortalController and the services it
  * proxies to):
  *
- *   GET /api/v1/portal/me
+ *   GET /api/access/me
  *     -> { userId, username, role, destinations: [{ destination, permission }] }
  *        role is ADMIN or USER; permission is READ or WRITE.
  *
@@ -30,9 +30,9 @@
  *        produces and the Status column states that no status is available
  *        rather than inventing one.
  *
- *   GET /api/v1/portal/logs?page=<n>
+ *   GET /api/dashboard?page=<n>
  *     -> { logs: [{ _id, eventId, sourceService, occurredAt, operation, data }], page }
- *        Proxied to reporting-service /api/dashboard: 100 records per page,
+ *        Served directly by reporting-service: 100 records per page,
  *        newest first, with no total and no search, level or actor-name field.
  *        The Level column is therefore derived from each record's own outcome
  *        (see levelOf) and the User column shows the actor id the record
@@ -87,10 +87,10 @@
  * logged and nothing is written to browser storage.
  */
 (() => {
-  const PROFILE_URL = '/api/v1/portal/me';
+  const PROFILE_URL = '/api/access/me';
   const USERS_URL = '/api/v1/portal/admin/users';
   const FOLDERS_URL = '/api/v1/portal/admin/folders';
-  const LOGS_URL = '/api/v1/portal/logs';
+  const LOGS_URL = '/api/dashboard';
   const ADMIN_REPORTS_URL = '/api/admin/reports';
   const ADMIN_FOLDERS_URL = '/api/v1/portal/admin/folders';
   const DELETE_FOLDER_URL = '/api/v1/portal/folders';

@@ -6,10 +6,10 @@ const vm = require('node:vm');
 const source = readFileSync('frontend/js/admin.js', 'utf8');
 const html = readFileSync('frontend/pages/admin.html', 'utf8');
 
-const PROFILE = '/api/v1/portal/me';
+const PROFILE = '/api/access/me';
 const USERS = '/api/v1/portal/admin/users';
 const FOLDERS = '/api/v1/portal/admin/folders';
-const LOGS = '/api/v1/portal/logs';
+const LOGS = '/api/dashboard';
 const ADMIN_REPORTS = '/api/admin/reports';
 const REPORT_ID = '123e4567-e89b-42d3-a456-426614174000';
 
@@ -743,8 +743,6 @@ test('the admin script requests only the verified endpoints', () => {
       '/api/v1/portal/admin/invitations',
       '/api/v1/portal/admin/users',
       '/api/v1/portal/folders',
-      '/api/v1/portal/logs',
-      '/api/v1/portal/me',
     ].sort(),
   );
   // No invitation revoke endpoint exists, so none may be called.

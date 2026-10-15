@@ -42,6 +42,9 @@ class GatewayRoutingTest {
             (request, response) -> {
               response.header("X-Test-Backend", name);
               response.header("X-Test-Path", request.uri());
+              response.header(
+                  "X-Test-Authorization",
+                  request.requestHeaders().get(HttpHeaders.AUTHORIZATION, ""));
               if (request.method().name().equals("POST")) {
                 return response.sendString(request.receive().aggregate().asString());
               }
@@ -183,6 +186,22 @@ class GatewayRoutingTest {
         .isOk()
         .expectHeader()
         .valueEquals("X-Test-Path", "/api/v1/destinations");
+  }
+
+  @Test
+  void routesDirectProfileHistoryAndDashboardReadsWithVerifiedBearerToken() {
+    for (String path : new String[] {"/api/access/me", "/api/history", "/api/dashboard"}) {
+      authenticated()
+          .get()
+          .uri(path)
+          .exchange()
+          .expectStatus()
+          .isOk()
+          .expectHeader()
+          .valueEquals("X-Test-Path", path)
+          .expectHeader()
+          .valueEquals("X-Test-Authorization", "Bearer routing-test-token");
+    }
   }
 
   @Test

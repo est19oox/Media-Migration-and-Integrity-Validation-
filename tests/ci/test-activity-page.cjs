@@ -6,8 +6,8 @@ const vm = require('node:vm');
 const source = readFileSync('frontend/js/activity.js', 'utf8');
 const html = readFileSync('frontend/pages/activity.html', 'utf8');
 
-const PROFILE = '/api/v1/portal/me';
-const HISTORY = '/api/v1/portal/history';
+const PROFILE = '/api/access/me';
+const HISTORY = '/api/history';
 
 const now = new Date();
 const day = 24 * 60 * 60 * 1000;
@@ -577,7 +577,9 @@ test('the page ships no mock records and keeps its structure', () => {
 
 test('the activity script reads only the verified endpoints', () => {
   assert.deepEqual(
-    [...source.matchAll(/['"](\/api\/v1\/portal[^'"]*)['"]/g)].map((match) => match[1]),
+    [...source.matchAll(/['"](\/api\/(?:access\/me|history))['"]/g)].map(
+      (match) => match[1],
+    ),
     [PROFILE, HISTORY],
   );
   // A bare fetch would skip the CSRF header and the 401 redirect.
