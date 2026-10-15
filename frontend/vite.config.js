@@ -45,10 +45,6 @@ export default defineConfig({
       // proxy must not rewrite either path.
       '/user-access': { target: gateway, changeOrigin: true },
       '/api': { target: gateway, changeOrigin: true },
-      // Signup loads these two from the root the Gateway already serves, so
-      // they are proxied to the same place rather than copied into js/.
-      '/feedback.js': { target: gateway, changeOrigin: true },
-      '/english-validation.js': { target: gateway, changeOrigin: true },
     },
   },
   plugins: [loginPageAlias()],

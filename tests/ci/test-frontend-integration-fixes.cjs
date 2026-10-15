@@ -7,11 +7,7 @@ const authSource = readFileSync('frontend/js/mmiv-auth.js', 'utf8');
 const loginSource = readFileSync('frontend/js/login.js', 'utf8');
 const managerSource = readFileSync('frontend/js/file-manager.js', 'utf8');
 const signupHtml = readFileSync('frontend/pages/signup.html', 'utf8');
-const viteConfig = readFileSync('frontend/vite.config.js', 'utf8');
-const gatewayConfig = readFileSync(
-  'services/api-gateway/src/main/resources/application.yml',
-  'utf8',
-);
+const gatewayPom = readFileSync('services/api-gateway/pom.xml', 'utf8');
 
 const TOKEN = 'a1b2c3d4'.repeat(8);
 const flush = async () => {
@@ -194,7 +190,7 @@ async function submitLogin(options = {}) {
 
 test('signing in hands an invitation back to the page that redeems it', async () => {
   const app = await submitLogin({ hash: '#invite=' + TOKEN });
-  assert.deepEqual(app.assigned, ['/invite.html#invite=' + TOKEN]);
+  assert.deepEqual(app.assigned, ['/pages/invite.html#invite=' + TOKEN]);
 });
 
 test('signing in without an invitation opens the workspace as before', async () => {
@@ -214,28 +210,21 @@ test('the login page does not log the invitation it carries', async () => {
   assert.ok(!JSON.stringify(app.logged).includes(TOKEN), 'the token reached the console');
 });
 
-/* ------------------------- signup assets resolve in dev --------------------- */
+/* --------------------- signup assets belong to the Gateway ------------------ */
 
-test('the signup scripts the Gateway serves are proxied by the dev server', () => {
-  for (const asset of ['/feedback.js', '/english-validation.js']) {
-    assert.ok(signupHtml.includes('"' + asset + '"'), 'signup no longer loads ' + asset);
+test('the signup scripts are loaded from the Gateway-owned frontend', () => {
+  for (const asset of ['feedback.js', 'english-validation.js']) {
+    const browserPath = '../js/' + asset;
     assert.ok(
-      new RegExp("'" + asset.replace('.', '\\.') + "':\\s*\\{[^}]*target:\\s*gateway").test(
-        viteConfig,
-      ),
-      asset + ' is not proxied to the Gateway',
+      signupHtml.includes('"' + browserPath + '"'),
+      'signup no longer loads ' + browserPath,
     );
+    assert.ok(existsSync('frontend/js/' + asset), 'missing frontend/js/' + asset);
   }
 });
 
-test('the proxied signup scripts really exist where the Gateway looks', () => {
-  const staticRoot = 'services/user-access-service/src/main/resources/static/';
-  for (const asset of ['feedback.js', 'english-validation.js']) {
-    assert.ok(existsSync(staticRoot + asset), 'missing ' + staticRoot + asset);
-  }
-  // The Gateway route that resolves them has to name both.
-  assert.match(gatewayConfig, /Path=.*\/feedback\.js/);
-  assert.match(gatewayConfig, /Path=.*\/english-validation\.js/);
+test('the Gateway packages the shared frontend JavaScript directory', () => {
+  assert.match(gatewayPom, /<include>js\/\*\*<\/include>/);
 });
 
 /* --------------------- uploads are offered only where allowed ---------------- */
