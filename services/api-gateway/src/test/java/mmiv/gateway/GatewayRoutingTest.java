@@ -161,6 +161,9 @@ class GatewayRoutingTest {
           "/api/metadata/plans/123",
           "/api/discovery/scan",
           "/api/reports/123",
+          "/api/admin/reports/123",
+          "/api/history",
+          "/api/dashboard",
           "/api/integrity/validate"
         }) {
       authenticated()
