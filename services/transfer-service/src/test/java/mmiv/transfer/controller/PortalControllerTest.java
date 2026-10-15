@@ -25,6 +25,30 @@ class PortalControllerTest {
           new FolderAccessGuard());
 
   @Test
+  void profileHistoryAndLogsPortalMethodsNoLongerExist() {
+    var methods =
+        java.util.Arrays.stream(PortalController.class.getDeclaredMethods())
+            .map(java.lang.reflect.Method::getName)
+            .collect(java.util.stream.Collectors.toSet());
+    assertFalse(methods.contains("me"));
+    assertFalse(methods.contains("history"));
+    assertFalse(methods.contains("logs"));
+  }
+
+  @Test
+  void filesFoldersAndAdminMutationsRemainMapped() throws Exception {
+    assertNotNull(PortalController.class.getDeclaredMethod("files", String.class, String.class));
+    assertNotNull(
+        PortalController.class.getDeclaredMethod("create", PortalController.Folder.class));
+    assertNotNull(
+        PortalController.class.getDeclaredMethod(
+            "grant", java.util.UUID.class, PortalController.Grant.class));
+    assertNotNull(
+        PortalController.class.getDeclaredMethod(
+            "deleteUser", java.util.UUID.class, jakarta.servlet.http.HttpServletResponse.class));
+  }
+
+  @Test
   void ordinaryUsersCannotCreateStorageMarkers() {
     doThrow(new ResponseStatusException(HttpStatus.FORBIDDEN)).when(portal).admin();
     assertThrows(
@@ -86,7 +110,7 @@ class PortalControllerTest {
   }
 
   @Test
-  void deletingSelfClearsTheSharedSessionCookie() {
+  void deletingUserDoesNotManageGatewaySessionCookie() {
     var id = java.util.UUID.randomUUID();
     var jwt =
         org.springframework.security.oauth2.jwt.Jwt.withTokenValue("fixture")
@@ -100,14 +124,9 @@ class PortalControllerTest {
     try {
       var response = mock(jakarta.servlet.http.HttpServletResponse.class);
       controller.deleteUser(id, response);
-      verify(response)
-          .addHeader(
-              eq("Set-Cookie"),
-              argThat(
-                  value ->
-                      value.contains("MMIV_SESSION=")
-                          && value.contains("Max-Age=0")
-                          && value.contains("HttpOnly")));
+      verify(portal)
+          .access(org.springframework.http.HttpMethod.DELETE, "/api/admin/users/" + id, null);
+      verify(response, never()).addHeader(eq("Set-Cookie"), anyString());
       verify(response).setStatus(204);
     } finally {
       org.springframework.security.core.context.SecurityContextHolder.clearContext();

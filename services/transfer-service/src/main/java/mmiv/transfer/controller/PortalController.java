@@ -18,9 +18,6 @@ public class PortalController {
   private final S3Client s3;
   private final String bucket;
 
-  @Value("${mmiv.auth.cookie-secure:false}")
-  private boolean secureCookie;
-
   private final mmiv.transfer.service.FileMutationService mutations;
   private final FolderAccessGuard guard;
 
@@ -42,11 +39,6 @@ public class PortalController {
   @ModelAttribute
   void noCache(jakarta.servlet.http.HttpServletResponse response) {
     response.setHeader("Cache-Control", "no-store");
-  }
-
-  @GetMapping("/me")
-  public Object me() {
-    return metadata.profile();
   }
 
   @GetMapping("/admin/users")
@@ -113,19 +105,7 @@ public class PortalController {
 
   @DeleteMapping("/admin/users/{id}")
   public void deleteUser(@PathVariable UUID id, jakarta.servlet.http.HttpServletResponse response) {
-    boolean self = id.toString().equals(MetadataClient.currentJwt().getSubject());
     portal.access(HttpMethod.DELETE, "/api/admin/users/" + id, null);
-    if (self)
-      response.addHeader(
-          HttpHeaders.SET_COOKIE,
-          ResponseCookie.from(mmiv.transfer.config.TransferSecurityConfig.AUTH_COOKIE, "")
-              .httpOnly(true)
-              .secure(secureCookie)
-              .sameSite("Strict")
-              .path("/")
-              .maxAge(0)
-              .build()
-              .toString());
     response.setStatus(204);
   }
 
@@ -197,24 +177,6 @@ public class PortalController {
   public Object deleteFolder(
       @RequestParam String folder, @RequestParam(required = false) String path) {
     return mutations.deleteFolder(folder, path);
-  }
-
-  @GetMapping("/logs")
-  public Object logs(
-      @RequestParam(required = false) String folder, @RequestParam(defaultValue = "0") int page) {
-    if (page < 0 || page > 100000)
-      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid page");
-    return portal.dashboard(
-        "/api/dashboard?page="
-            + page
-            + (folder == null ? "" : "&folder=" + PortalClient.encode(folder)));
-  }
-
-  @GetMapping("/history")
-  public Object history(@RequestParam(defaultValue = "0") int page) {
-    if (page < 0 || page > 100000)
-      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid page");
-    return portal.dashboard("/api/history?page=" + page);
   }
 
   public record Folder(String name) {}

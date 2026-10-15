@@ -1,6 +1,5 @@
 package mmiv.transfer.config;
 
-import static org.junit.jupiter.api.Assertions.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
@@ -18,7 +17,6 @@ import java.security.interfaces.RSAPrivateKey;
 import java.security.interfaces.RSAPublicKey;
 import java.time.Instant;
 import java.util.Date;
-import mmiv.transfer.controller.BrowserSessionController;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -29,20 +27,15 @@ import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.web.bind.annotation.*;
 
-@WebMvcTest(
-    controllers = {
-      BrowserSessionController.class,
-      TransferSecurityIntegrationTest.ProtectedProbe.class
-    })
+@WebMvcTest(controllers = TransferSecurityIntegrationTest.ProtectedProbe.class)
 @ContextConfiguration(
-    classes = {
-      TransferSecurityConfig.class,
-      BrowserSessionController.class,
-      TransferSecurityIntegrationTest.ProtectedProbe.class
-    })
+    classes = {TransferSecurityConfig.class, TransferSecurityIntegrationTest.ProtectedProbe.class})
 class TransferSecurityIntegrationTest {
   @org.springframework.test.context.bean.override.mockito.MockitoBean
   mmiv.events.EventPublisher auditPublisher;
+
+  @org.springframework.test.context.bean.override.mockito.MockitoBean
+  mmiv.transfer.integration.MetadataClient metadata;
 
   static final String ISSUER = "https://auth.mmiv.example";
   static final KeyPair KEYS;
@@ -82,13 +75,51 @@ class TransferSecurityIntegrationTest {
     JWKS.stop(0);
   }
 
-  @org.springframework.test.context.bean.override.mockito.MockitoBean
-  mmiv.transfer.integration.MetadataClient metadata;
-
   @Autowired MockMvc mvc;
 
   @Test
-  void revokedDestinationReturns403AndPermissionOutageReturns503() throws Exception {
+  void bearerStillAuthenticatesTransferApi() throws Exception {
+    mvc.perform(post("/api/v1/transfers").header("Authorization", "Bearer " + valid()))
+        .andExpect(status().isOk());
+  }
+
+  @Test
+  void mmivSessionCookieAloneNoLongerAuthenticatesTransferDirectly() throws Exception {
+    mvc.perform(
+            get("/api/v1/files/"
+                    + mmiv.transfer.files.FileIds.encode("SW001/test.txt")
+                    + "/content")
+                .cookie(new Cookie("MMIV_SESSION", valid())))
+        .andExpect(status().isUnauthorized());
+  }
+
+  @Test
+  void sessionEndpointNoLongerExistsInTransfer() throws Exception {
+    mvc.perform(post("/api/v1/session").header("Authorization", "Bearer " + valid()))
+        .andExpect(status().isForbidden());
+  }
+
+  @Test
+  void invalidBearerTokensAreRejected() throws Exception {
+    String signed = valid();
+    int signatureStart = signed.lastIndexOf('.') + 1;
+    String forged =
+        signed.substring(0, signatureStart)
+            + (signed.charAt(signatureStart) == 'A' ? 'B' : 'A')
+            + signed.substring(signatureStart + 1);
+    for (String jwt :
+        new String[] {
+          token(ISSUER, Instant.now().minusSeconds(1)),
+          token("https://wrong.example", Instant.now().plusSeconds(600)),
+          forged
+        }) {
+      mvc.perform(post("/api/v1/transfers").header("Authorization", "Bearer " + jwt))
+          .andExpect(status().isUnauthorized());
+    }
+  }
+
+  @Test
+  void destinationPermissionFailuresStillPropagate() throws Exception {
     org.mockito.Mockito.doThrow(
             new org.springframework.web.server.ResponseStatusException(
                 org.springframework.http.HttpStatus.FORBIDDEN))
@@ -98,31 +129,8 @@ class TransferSecurityIntegrationTest {
             get("/api/v1/files/"
                     + mmiv.transfer.files.FileIds.encode("SW001/probe.txt")
                     + "/content")
-                .header("Authorization", "Bearer " + token(ISSUER, Instant.now().plusSeconds(300))))
+                .header("Authorization", "Bearer " + valid()))
         .andExpect(status().isForbidden());
-    org.mockito.Mockito.doThrow(
-            new org.springframework.web.server.ResponseStatusException(
-                org.springframework.http.HttpStatus.SERVICE_UNAVAILABLE))
-        .when(metadata)
-        .requireFolder("SW001", "READ");
-    mvc.perform(
-            get("/api/v1/files/"
-                    + mmiv.transfer.files.FileIds.encode("SW001/probe.txt")
-                    + "/content")
-                .header("Authorization", "Bearer " + token(ISSUER, Instant.now().plusSeconds(300))))
-        .andExpect(status().isServiceUnavailable());
-  }
-
-  @Test
-  void administratorPageChecksCurrentRoleAndRedirectsInvitationRecipients() throws Exception {
-    org.mockito.Mockito.when(metadata.profile())
-        .thenReturn(
-            new mmiv.transfer.integration.MetadataClient.Profile(
-                "U001", "alice", "USER", java.util.List.of()));
-    mvc.perform(get("/admin.html").header("Authorization", "Bearer " + valid()))
-        .andExpect(status().isFound())
-        .andExpect(header().string("Location", "/invite.html"));
-    org.mockito.Mockito.verify(metadata).profile();
   }
 
   static String token(String issuer, Instant expiry) throws Exception {
@@ -143,181 +151,8 @@ class TransferSecurityIntegrationTest {
     return token(ISSUER, Instant.now().plusSeconds(600));
   }
 
-  @Test
-  void anonymousPagesRedirectAndFileApiRejects() throws Exception {
-    for (String page : new String[] {"/", "/upload.html", "/files.html"}) {
-      mvc.perform(
-              get(page)
-                  .header("Host", "public.example:8080")
-                  .header("X-Forwarded-Host", "public.example")
-                  .header("X-Forwarded-Proto", "https"))
-          .andExpect(status().isFound())
-          .andExpect(header().string("Location", "/login.html"))
-          .andExpect(header().string("Cache-Control", "no-store"));
-    }
-    mvc.perform(get("/files.html")).andExpect(status().isFound());
-    mvc.perform(
-            get(
-                "/api/v1/files/"
-                    + mmiv.transfer.files.FileIds.encode("SW001/test.txt")
-                    + "/content"))
-        .andExpect(status().isUnauthorized());
-    mvc.perform(head("/api/v1/files/test/download")).andExpect(status().isUnauthorized());
-    mvc.perform(post("/api/v1/transfers").contentType("application/json").content("{}"))
-        .andExpect(status().isUnauthorized());
-  }
-
-  @Test
-  void newFrontendIsNoLongerPackagedByTransferWithoutChangingTheLegacyPages() throws Exception {
-    // Gateway owns the root frontend. Transfer must not silently retain a second
-    // packaged copy of its public pages or assets.
-    for (String path :
-        new String[] {
-          "/pages/login.html",
-          "/pages/signup.html",
-          "/css/style.css",
-          "/js/mmiv-auth.js",
-          "/img/bg.jpg",
-          "/font/Bender.woff",
-          "/assets/particles-config.json"
-        }) {
-      mvc.perform(get(path)).andExpect(status().isNotFound());
-    }
-    // Security still protects an unauthenticated new-page URL even though the
-    // resource itself now lives only in Gateway. Legacy behavior stays intact.
-    mvc.perform(get("/pages/home.html"))
-        .andExpect(status().isFound())
-        .andExpect(redirectedUrl("/pages/login.html"))
-        .andExpect(header().string("Cache-Control", "no-store"));
-    for (String page : new String[] {"/", "/upload.html", "/files.html", "/home.html"}) {
-      mvc.perform(get(page))
-          .andExpect(status().isFound())
-          .andExpect(redirectedUrl("/login.html"))
-          .andExpect(header().string("Cache-Control", "no-store"));
-    }
-  }
-
-  @Test
-  void aSessionCannotOpenGatewayOwnedPagesFromTransfer() throws Exception {
-    Cookie auth = new Cookie("MMIV_SESSION", valid());
-    for (String page :
-        new String[] {
-          "/pages/home.html",
-          "/pages/file-manager.html",
-          "/pages/admin.html",
-          "/pages/activity.html"
-        }) {
-      mvc.perform(get(page).cookie(auth)).andExpect(status().isNotFound());
-    }
-    // A page the new frontend still ships, but which this phase does not serve,
-    // stays closed rather than becoming reachable by adding a file.
-    mvc.perform(get("/pages/reset-password.html").cookie(auth)).andExpect(status().isForbidden());
-    // An unknown path under the new frontend is closed for the same reason.
-    mvc.perform(get("/pages/anything-else.html").cookie(auth)).andExpect(status().isForbidden());
-    // Transfer keeps only its legacy pages during the compatibility period.
-    mvc.perform(get("/home.html").cookie(auth)).andExpect(status().isOk());
-    mvc.perform(get("/upload.html").cookie(auth)).andExpect(status().isOk());
-    mvc.perform(get("/portal.js").cookie(auth)).andExpect(status().isOk());
-  }
-
-  @Test
-  void realSignedBearerEstablishesHttpOnlyCookieAndLoadsPage() throws Exception {
-    String jwt = valid();
-    var result =
-        mvc.perform(post("/api/v1/session").header("Authorization", "Bearer " + jwt))
-            .andExpect(status().isNoContent())
-            .andReturn();
-    String cookie = result.getResponse().getHeader("Set-Cookie");
-    assertNotNull(cookie);
-    assertTrue(cookie.contains("HttpOnly"));
-    assertTrue(cookie.contains("SameSite=Strict"));
-    mvc.perform(get("/upload.html").cookie(new Cookie("MMIV_SESSION", jwt)))
-        .andExpect(status().isOk());
-    mvc.perform(
-            get("/api/v1/files/"
-                    + mmiv.transfer.files.FileIds.encode("SW001/test.txt")
-                    + "/content")
-                .header("Authorization", "Bearer " + jwt))
-        .andExpect(status().isOk());
-  }
-
-  @Test
-  void expiredWrongIssuerAndForgedTokensAreRejected() throws Exception {
-    String signed = valid();
-    int signatureStart = signed.lastIndexOf('.') + 1;
-    String forged =
-        signed.substring(0, signatureStart)
-            + (signed.charAt(signatureStart) == 'A' ? 'B' : 'A')
-            + signed.substring(signatureStart + 1);
-    for (String jwt :
-        new String[] {
-          token(ISSUER, Instant.now().minusSeconds(1)),
-          token("https://wrong.example", Instant.now().plusSeconds(600)),
-          forged
-        }) {
-      mvc.perform(
-              get("/api/v1/files/"
-                      + mmiv.transfer.files.FileIds.encode("SW001/test.txt")
-                      + "/content")
-                  .header("Authorization", "Bearer " + jwt))
-          .andExpect(status().isUnauthorized());
-    }
-    mvc.perform(get("/upload.html").cookie(new Cookie("MMIV_SESSION", "forged")))
-        .andExpect(status().isFound())
-        .andExpect(redirectedUrl("/login.html"));
-  }
-
-  @Test
-  void cookieUploadsNeedCsrfAndLogoutClearsCookie() throws Exception {
-    Cookie auth = new Cookie("MMIV_SESSION", valid());
-    mvc.perform(post("/api/v1/transfers").cookie(auth))
-        .andExpect(status().isForbidden())
-        .andExpect(jsonPath("$.error").value("CSRF_INVALID"));
-    mvc.perform(delete("/api/v1/session").cookie(auth)).andExpect(status().isForbidden());
-    var result =
-        mvc.perform(get("/api/v1/session").cookie(auth))
-            .andExpect(status().isOk())
-            .andExpect(jsonPath("$.expiresInSeconds").isNumber())
-            .andReturn();
-    // The endpoint returns the masked CSRF value while the cookie stores the expected token.
-    String body = result.getResponse().getContentAsString();
-    var json = tools.jackson.databind.json.JsonMapper.builder().build().readTree(body);
-    Cookie csrf = result.getResponse().getCookie("XSRF-TOKEN");
-    assertNotNull(csrf);
-    String header = json.get("csrfHeader").asString();
-    String value = json.get("csrfToken").asString();
-    mvc.perform(post("/api/v1/transfers").cookie(auth, csrf).header(header, "invalid"))
-        .andExpect(status().isForbidden());
-    mvc.perform(post("/api/v1/transfers").cookie(auth, csrf).header(header, value))
-        .andExpect(status().isOk());
-    mvc.perform(delete("/api/v1/session").cookie(auth, csrf).header(header, value))
-        .andExpect(status().isNoContent())
-        .andExpect(
-            header().string("Set-Cookie", org.hamcrest.Matchers.containsString("Max-Age=0")));
-  }
-
-  @Test
-  void explicitBearerUploadDoesNotRequireBrowserCsrf() throws Exception {
-    mvc.perform(post("/api/v1/transfers").header("Authorization", "Bearer " + valid()))
-        .andExpect(status().isOk());
-    mvc.perform(get("/not-exposed").header("Authorization", "Bearer " + valid()))
-        .andExpect(status().isForbidden());
-    mvc.perform(post("/api/v1/transfers").header("Authorization", "Bearer invalid"))
-        .andExpect(status().isUnauthorized());
-    mvc.perform(
-            post("/api/v1/transfers")
-                .cookie(new Cookie("MMIV_SESSION", valid()))
-                .header("Authorization", "Basic invalid"))
-        .andExpect(status().isUnauthorized());
-  }
-
   @RestController
   static class ProtectedProbe {
-    @GetMapping("/upload.html")
-    String page() {
-      return "protected";
-    }
-
     @GetMapping("/api/v1/files/{id}/content")
     String file() {
       return "file";
