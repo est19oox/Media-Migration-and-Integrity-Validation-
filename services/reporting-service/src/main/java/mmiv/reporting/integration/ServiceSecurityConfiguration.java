@@ -43,7 +43,11 @@ public class ServiceSecurityConfiguration {
                     .requestMatchers("/actuator/health", "/actuator/health/**", "/actuator/info")
                     .permitAll()
                     .requestMatchers(
-                        "/api/reports/**", "/api/verification/**", "/api/dashboard", "/api/history")
+                        "/api/reports/**",
+                        "/api/admin/reports/**",
+                        "/api/verification/**",
+                        "/api/dashboard",
+                        "/api/history")
                     .authenticated()
                     .anyRequest()
                     .denyAll())
