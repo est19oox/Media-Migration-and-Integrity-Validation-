@@ -62,12 +62,14 @@
           <input class="admin-tab-input" type="radio" name="admin-tabs" id="tab-users" />
           <input class="admin-tab-input" type="radio" name="admin-tabs" id="tab-invitations" />
           <input class="admin-tab-input" type="radio" name="admin-tabs" id="tab-logs" />
+          <input class="admin-tab-input" type="radio" name="admin-tabs" id="tab-reports" />
 
           <div class="admin-tabs" aria-label="Administration sections">
             <label for="tab-folders" class="admin-tab">Folders</label>
             <label for="tab-users" class="admin-tab"> Users &amp; Permissions </label>
             <label for="tab-invitations" class="admin-tab"> Invitations </label>
             <label for="tab-logs" class="admin-tab"> System Logs </label>
+            <label for="tab-reports" class="admin-tab"> Reports </label>
           </div>
 
           <div class="admin-content">
@@ -389,6 +391,62 @@
               <div class="admin-section-footer">
                 <span class="admin-section-meta" id="logsMeta">Loading…</span>
                 <span id="logsHint">Newest first, 100 records per page.</span>
+              </div>
+            </section>
+
+            <section id="admin-reports" class="admin-section" aria-labelledby="admin-reports-title">
+              <div class="admin-section-heading">
+                <h2 id="admin-reports-title">Migration Reports</h2>
+              </div>
+              <div class="admin-section-scroll">
+                <div class="admin-log-controls">
+                  <div class="admin-field">
+                    <label for="adminReportUser">Initiated by</label>
+                    <input id="adminReportUser" type="search" placeholder="Exact user ID" />
+                  </div>
+                  <div class="admin-field">
+                    <label for="adminReportStatus">Status</label>
+                    <select id="adminReportStatus">
+                      <option value="">All statuses</option>
+                      <option value="PROCESSING">Processing</option>
+                      <option value="COMPLETED">Completed</option>
+                      <option value="PARTIALLY_COMPLETED">Partially completed</option>
+                      <option value="FAILED">Failed</option>
+                      <option value="INCOMPLETE">Incomplete</option>
+                    </select>
+                  </div>
+                  <div class="admin-log-actions">
+                    <button id="adminReportsPrevious" type="button" class="admin-secondary-button">
+                      Previous
+                    </button>
+                    <button id="adminReportsNext" type="button" class="admin-secondary-button">
+                      Next
+                    </button>
+                    <button id="refreshAdminReports" type="button" class="admin-secondary-button">
+                      Refresh
+                    </button>
+                  </div>
+                </div>
+                <div class="admin-table-scroll">
+                  <table class="admin-table">
+                    <thead>
+                      <tr>
+                        <th scope="col">Migration ID</th>
+                        <th scope="col">Initiated by</th>
+                        <th scope="col">Started</th>
+                        <th scope="col">Status</th>
+                        <th scope="col">Files</th>
+                        <th scope="col">Success rate</th>
+                        <th scope="col">Details</th>
+                      </tr>
+                    </thead>
+                    <tbody id="adminReportsTable"></tbody>
+                  </table>
+                </div>
+              </div>
+              <div class="admin-section-footer">
+                <span class="admin-section-meta" id="adminReportsMeta">Open this tab to load reports.</span>
+                <span>Report ownership and raw events are verified by the reporting service.</span>
               </div>
             </section>
           </div>

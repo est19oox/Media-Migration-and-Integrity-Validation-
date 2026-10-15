@@ -174,6 +174,128 @@
   border: 0;
 }
 
+.report-detail-main {
+  display: grid;
+  gap: 16px;
+  width: 100%;
+  padding: 12px 0;
+}
+
+.report-detail-message {
+  min-height: 20px;
+  margin: 0;
+  color: #9b4d45;
+  font-size: 13px;
+}
+
+.report-detail-card {
+  padding: 24px 26px;
+}
+
+.report-back-link {
+  display: inline-block;
+  margin-bottom: 10px;
+  color: #0878ce;
+  text-decoration: none;
+}
+
+.report-metadata,
+.report-summary-grid,
+.report-stage-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.report-metadata {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin: 0 0 18px;
+}
+
+.report-metadata div,
+.report-summary-grid div,
+.report-stage-grid div {
+  padding: 13px;
+  border: 1px solid var(--reports-line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.58);
+}
+
+.report-metadata dt,
+.report-summary-grid span,
+.report-stage-grid span {
+  display: block;
+  margin-bottom: 5px;
+  color: var(--reports-muted);
+  font-size: 11px;
+}
+
+.report-metadata dd {
+  margin: 0;
+  color: var(--reports-text);
+  overflow-wrap: anywhere;
+}
+
+.report-summary-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin-bottom: 12px;
+}
+
+.report-summary-grid strong {
+  color: var(--reports-text);
+  font-size: 22px;
+}
+
+.report-stage-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.report-section-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 15px;
+}
+
+.report-section-heading h2 {
+  margin: 0;
+  color: var(--reports-text);
+  font-size: 20px;
+}
+
+.report-section-heading span {
+  color: var(--reports-muted);
+  font-size: 12px;
+}
+
+.report-timeline {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.report-timeline li {
+  display: grid;
+  grid-template-columns: minmax(140px, 0.7fr) minmax(220px, 1.5fr) minmax(150px, 0.7fr);
+  gap: 14px;
+  padding: 12px 14px;
+  border-left: 4px solid #6eaddc;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.58);
+  color: #5f7188;
+  font-size: 12px;
+}
+
+.report-timeline strong {
+  color: var(--reports-text);
+}
+
+.report-timeline time {
+  text-align: right;
+}
+
 @media (max-width: 700px) {
   .reports-main {
     align-items: flex-start;
@@ -188,5 +310,16 @@
   .reports-footer {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .report-metadata,
+  .report-summary-grid,
+  .report-stage-grid,
+  .report-timeline li {
+    grid-template-columns: 1fr;
+  }
+
+  .report-timeline time {
+    text-align: left;
   }
 }
