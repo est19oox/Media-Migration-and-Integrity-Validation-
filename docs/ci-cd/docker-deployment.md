@@ -155,10 +155,10 @@ Terraform provisions the encrypted SQS file-log queue and DLQ. Its queue URL is
 passed through Terraform job outputs and setup-host into the release manifest and
 Transfer container. Apply the updated bootstrap once to grant queue provisioning
 permissions. Host setup creates a private persistent Transfer log outbox without
-another Ansible install. See [Transfer SQS logging](../../services/transfer-service/SQS-LOGGING.md)
+another Ansible install. See [Transfer SQS logging](../services/transfer-service/SQS-LOGGING.md)
 for timestamp meanings and producer configuration. The Reporting consumer is deferred to its owner.
 
 ## Current main additions
 
-See [main-update.md](main-update.md) for automatic User Access credentials, persistent Oracle,
+See [login and credential setup](login-access.md) for automatic User Access credentials, persistent Oracle,
 optional external configuration and the log service handoff. User Access is enabled; Reporting and Discovery remain commented out.

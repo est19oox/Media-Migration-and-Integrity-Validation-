@@ -53,7 +53,7 @@ services/user-access-service/mvnw -B -f services/api-gateway/pom.xml clean verif
 
 The Maven build tests the frontend and copies its production resources into
 `META-INF/resources`; there is no separate frontend container. See
-[`../../docs/integration/services.md`](../../docs/integration/services.md) for
+[`../../integration/services.md`](../../integration/services.md) for
 the complete local stack command and required private environment files.
 
 ## Runtime and outage acceptance

@@ -1,6 +1,6 @@
 # Generic microservice deployment role (manual/legacy)
 
-This role is retained for manual deployments and migration tests. Automatic CD uses Docker over SSM; see [the current process](../../../../docs/ci-cd/docker-deployment.md).
+This role is retained for manual deployments and migration tests. Automatic CD uses Docker over SSM; see [the current process](../../../../ci-cd/docker-deployment.md).
 
 Ansible handles ECR authentication, remote execution, health checks, and rollback.
 Docker Compose defines the container, ports, media mount, and shared network.

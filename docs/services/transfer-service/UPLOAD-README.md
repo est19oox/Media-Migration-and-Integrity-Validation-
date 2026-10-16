@@ -1,4 +1,4 @@
-See [the integrated service guide](../../docs/integration/services.md) for the current permission checks, destination assignments, and RabbitMQ events.
+See [the integrated service guide](../../integration/services.md) for the current permission checks, destination assignments, and RabbitMQ events.
 
 Open the Gateway root on port 8080 to log in. Login establishes an HttpOnly cookie and redirects to /upload.html. Anonymous Transfer pages redirect to login; APIs return 401. API clients must provide a Bearer token. The original local direct-page examples below should be used through the Gateway for browser login.
 
@@ -22,7 +22,7 @@ deleted. `cleanupStatus` distinguishes DELETED from DELETE_FAILED. The browser
 displays this result and hides links for unsuccessful transfers. See
 [INTEGRITY-FEIGN.md](INTEGRITY-FEIGN.md) for the contract, configuration, and limits.
 Extension checks and MIME labels do not verify file format or scan for malware.
-Transfer now requires a valid User Access JWT for pages, uploads and file reads. See ../../docs/ci-cd/login-access.md.
+Transfer now requires a valid User Access JWT for pages, uploads and file reads. See ../../ci-cd/login-access.md.
 
 Build using the project's existing Java 25 and Maven: mvn -B clean verify in services/transfer-service. The service uses Spring Boot 4.1.1, Spring Framework 7.0.9 and Spring Cloud 2025.1.3. The production Java version remains 25.
 
@@ -46,7 +46,7 @@ curl -i -H "Authorization: Bearer $TOKEN" -H 'Range: bytes=0-1023' http://EC2_PU
 
 Single byte ranges support MP4 seeking: closed, open-ended and suffix forms return 206. Unsupported, multiple or unsatisfiable ranges return 416 and `Content-Range: bytes */SIZE`. HEAD ignores Range. If-Range accepts the exact ETag; other values return the full file. Reads use the configured bucket and `If-Match` to prevent a HEAD/GET version race. S3 failures map to 403/404/412/502; no temporary download file is created.
 
-`fileId` is URL-safe Base64 of the S3 key. It identifies an object and is not an access credential. All file reads now require login, but this version does not track per-user ownership: any authenticated user with an object ID can read it. See ../../docs/ci-cd/login-access.md for login and session behavior.
+`fileId` is URL-safe Base64 of the S3 key. It identifies an object and is not an access credential. All file reads now require login, but this version does not track per-user ownership: any authenticated user with an object ID can read it. See ../../ci-cd/login-access.md for login and session behavior.
 
 The existing Terraform policy already grants GetObject; no IAM or Terraform change is needed. Do not make the bucket public. Integrity calls use Feign and Eureka service discovery. Metadata and presigned URLs are not used.
 

@@ -8,4 +8,4 @@ The automatic GitHub Actions CD workflow uses Docker images and Docker Compose o
 
 The SSM inventory is generated at runtime. No public SSH or backend port is required. The S3 bucket is used for temporary Ansible module transfer.
 
-The generic `microservice` role, `playbook.yml` and `rollback.yml` remain available as a manual/legacy path, including their existing runtime tests. The automatic stack workflow no longer invokes them. Use the stack release manifest for recovery on migrated hosts; the old role is intended for separate/manual deployments. See [Docker CD process](../../docs/ci-cd/docker-deployment.md) for the current pipeline.
+The generic `microservice` role, `playbook.yml` and `rollback.yml` remain available as a manual/legacy path, including their existing runtime tests. The automatic stack workflow no longer invokes them. Use the stack release manifest for recovery on migrated hosts; the old role is intended for separate/manual deployments. See [Docker CD process](../../ci-cd/docker-deployment.md) for the current pipeline.

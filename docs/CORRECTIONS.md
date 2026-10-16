@@ -1,6 +1,6 @@
 # Historical project corrections
 
-The current deployment process is documented in [Docker deployment](docs/ci-cd/docker-deployment.md). Entries below record earlier repairs and validation at the time they were made.
+The current deployment process is documented in [Docker deployment](ci-cd/docker-deployment.md). Entries below record earlier repairs and validation at the time they were made.
 
 ## Repairs
 

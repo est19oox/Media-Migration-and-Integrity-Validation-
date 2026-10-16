@@ -26,7 +26,7 @@ try {
     docker compose -f $ComposeFile config --quiet
     if ($LASTEXITCODE -ne 0) { throw "Invalid Compose configuration." }
     docker compose -f $ComposeFile up -d
-    if ($LASTEXITCODE -ne 0) { throw "Failed to start Oracle. See database/README.md for existing containers." }
+    if ($LASTEXITCODE -ne 0) { throw "Failed to start Oracle. See docs/database/README.md for existing containers." }
     docker compose -f $ComposeFile ps
     if ($LASTEXITCODE -ne 0) { throw "Failed to inspect Oracle container." }
 

@@ -79,7 +79,7 @@ flowchart LR
 
 All seven services publish service-ready, application log metadata, and HTTP request outcome records to the durable `mmiv.events` topic exchange with routing key `service.log`. HTTP records contain method, status, and duration. They omit request bodies, credentials, JWTs, cookies, arbitrary log messages, and filesystem paths.
 
-Reporting consumes `mmiv.service.logs` and stores records in MongoDB's `service_logs` collection. `eventId` is the Mongo document ID, so redelivery cannot create duplicate log records. Malformed records go to `mmiv.service.logs.dlq`; database outages requeue valid records with a delay. Business events use the uploaded [version 2 contract](../../contracts/events/v2/README.md), the `reporting.events` queue, and its dead-letter queue.
+Reporting consumes `mmiv.service.logs` and stores records in MongoDB's `service_logs` collection. `eventId` is the Mongo document ID, so redelivery cannot create duplicate log records. Malformed records go to `mmiv.service.logs.dlq`; database outages requeue valid records with a delay. Business events use the uploaded [version 2 contract](../contracts/events/v2/README.md), the `reporting.events` queue, and its dead-letter queue.
 
 Each producer has a separate persistent filesystem outbox. Events retain their IDs across retries/restarts and are removed only after a positive RabbitMQ publisher confirmation without an unroutable return. Broker outages therefore leave events pending for retry. A disk write failure is logged locally; a completed transfer is not converted into a retryable storage failure by logging errors.
 
