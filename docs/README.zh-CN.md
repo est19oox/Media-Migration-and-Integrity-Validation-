@@ -2,8 +2,7 @@
 
 [English](README.md) | [简体中文](README.zh-CN.md)
 
-使用本索引可直接打开维护中的专题指南。已有简体中文翻译时提供中英文配对链接。
-两份管理员指南和事件专属的 bootstrap 恢复说明目前仅有英文版。
+使用本索引可直接打开维护中的专题指南。所有指南均提供中英文配对链接。
 
 ## 架构
 
@@ -58,10 +57,9 @@
   [English](deployment/terraform.md) — 当前 Terraform 根目录和现有 EC2 保护。
 - [可选本地 Jenkins](jenkins/local-setup.zh-CN.md) |
   [English](jenkins/local-setup.md) — 本地演示控制器；托管 CI/CD 仍由 GitHub Actions 执行。
-- [Bootstrap 恢复说明](infrastructure/bootstrap/README.md)（英文）—
-  针对特定事件的历史恢复指引；使用前请与授权操作员核实当前 AWS 状态。
-
 ## 管理
 
-- [管理员访问](admin/administrator-access.md)（英文）— 初始化、邀请、密码重置和目标权限。
-- [文件夹工作区](admin/folder-workspace.md)（英文）— 浏览器流程、文件夹权限、删除和验证清理。
+- [管理员访问](admin/administrator-access.zh-CN.md) |
+  [English](admin/administrator-access.md) — 初始化、邀请、密码重置和目标权限。
+- [文件夹工作区](admin/folder-workspace.zh-CN.md) |
+  [English](admin/folder-workspace.md) — 浏览器流程、权限、文件操作和验证清理。

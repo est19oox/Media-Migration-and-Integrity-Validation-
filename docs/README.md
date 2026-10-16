@@ -2,10 +2,8 @@
 
 [English](README.md) | [简体中文](README.zh-CN.md)
 
-Use this index to open each maintained guide directly. English and Simplified
-Chinese links are paired where a translation is available. Two administration
-guides and the incident-specific bootstrap recovery notes currently remain
-English-only.
+Use this index to open maintained guides. English and Simplified Chinese links
+are paired for every guide.
 
 ## Architecture
 
@@ -77,13 +75,11 @@ English-only.
 - [Optional local Jenkins](jenkins/local-setup.md) |
   [简体中文](jenkins/local-setup.zh-CN.md) — local demonstration controller;
   GitHub Actions remains the hosted CI/CD path.
-- [Bootstrap recovery notes](infrastructure/bootstrap/README.md) (English) —
-  incident-specific historical recovery guidance. Verify current AWS state
-  with an authorized operator before use.
-
 ## Administration
 
-- [Administrator access](admin/administrator-access.md) (English) — bootstrap,
-  invitations, password resets, and destination permissions.
-- [Folder workspace](admin/folder-workspace.md) (English) — browser workflows,
-  folder permissions, deletion, and verification cleanup.
+- [Administrator access](admin/administrator-access.md) |
+  [简体中文](admin/administrator-access.zh-CN.md) — bootstrap, invitations,
+  password resets, and destination permissions.
+- [Folder workspace](admin/folder-workspace.md) |
+  [简体中文](admin/folder-workspace.zh-CN.md) — browser workflows, permissions,
+  file operations, and verification cleanup.
