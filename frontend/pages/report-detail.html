@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#eaf3fc" />
+    <meta name="description" content="MMIV Migration Report Details" />
+    <title>Migration Report · MMIV</title>
+    <link rel="stylesheet" href="../css/home.css" />
+    <link rel="stylesheet" href="../css/reports.css" />
+  </head>
+  <body class="home-page reports-page">
+    <div id="particles-js" aria-hidden="true"></div>
+    <div class="fx fx-glow" aria-hidden="true"></div>
+
+    <div class="home-shell">
+      <header class="home-header glass-panel">
+        <nav class="home-nav" aria-label="Main navigation">
+          <a href="home.html">Home</a>
+          <a href="file-manager.html">File Manager</a>
+          <a href="activity.html">Activity</a>
+          <a href="reports.html" class="active">Migration Reports</a>
+          <a href="admin.html" data-admin hidden>Administration</a>
+        </nav>
+        <div class="header-right">
+          <div class="home-account">
+            <div class="account-avatar" aria-hidden="true">MM</div>
+            <div class="account-copy">
+              <strong id="account">MMIV account</strong>
+              <span>Workspace member</span>
+            </div>
+            <button id="logout" class="sign-out-btn" type="button">Sign out</button>
+          </div>
+          <a href="home.html" class="mmiv-header" aria-label="MMIV Home">MMIV<span>.</span></a>
+        </div>
+      </header>
+
+      <main class="home-main report-detail-main">
+        <p id="reportDetailStatus" class="report-detail-message" role="status" aria-live="polite">
+          Loading migration report…
+        </p>
+
+        <section class="report-detail-card glass-panel" aria-labelledby="report-detail-title">
+          <div class="reports-heading">
+            <div>
+              <a class="report-back-link" href="reports.html">← All migration reports</a>
+              <h1 id="report-detail-title">Migration Report</h1>
+              <p id="reportMigrationId">—</p>
+            </div>
+            <span id="reportOverallStatus" class="report-status">—</span>
+          </div>
+
+          <dl class="report-metadata">
+            <div><dt>Initiated by</dt><dd id="reportInitiatedBy">—</dd></div>
+            <div><dt>Source</dt><dd id="reportSource">—</dd></div>
+            <div><dt>Started</dt><dd id="reportStartedAt">—</dd></div>
+            <div><dt>Completed</dt><dd id="reportCompletedAt">—</dd></div>
+          </dl>
+
+          <div class="report-summary-grid" aria-label="Migration summary">
+            <div><span>Total files</span><strong id="summaryTotal">—</strong></div>
+            <div><span>Successful</span><strong id="summarySuccessful">—</strong></div>
+            <div><span>Failed</span><strong id="summaryFailed">—</strong></div>
+            <div><span>Success rate</span><strong id="summarySuccessRate">—</strong></div>
+          </div>
+
+          <div class="report-stage-grid" aria-label="Stage counters">
+            <div><span>Discovery accepted</span><strong id="discoveryAccepted">—</strong></div>
+            <div><span>Discovery failed</span><strong id="discoveryFailed">—</strong></div>
+            <div><span>Transfer stored</span><strong id="transferStored">—</strong></div>
+            <div><span>Transfer failed</span><strong id="transferFailed">—</strong></div>
+            <div><span>Integrity passed</span><strong id="integrityPassed">—</strong></div>
+            <div><span>Integrity failed</span><strong id="integrityFailed">—</strong></div>
+          </div>
+        </section>
+
+        <section class="report-detail-card glass-panel" aria-labelledby="report-files-title">
+          <div class="report-section-heading">
+            <h2 id="report-files-title">Files</h2>
+            <span id="reportFileCount">0 files</span>
+          </div>
+          <div class="reports-table-scroll" tabindex="0" aria-label="Scrollable file results">
+            <table class="reports-table report-files-table">
+              <thead>
+                <tr>
+                  <th scope="col">File</th>
+                  <th scope="col">Relative path</th>
+                  <th scope="col">Discovery</th>
+                  <th scope="col">Transfer</th>
+                  <th scope="col">Integrity</th>
+                  <th scope="col">Final status</th>
+                  <th scope="col">Failure</th>
+                </tr>
+              </thead>
+              <tbody id="reportFileRows"></tbody>
+            </table>
+          </div>
+          <div class="reports-footer">
+            <span id="reportFilePage">Page 1</span>
+            <div class="reports-pagination">
+              <button id="reportFilesPrevious" type="button" disabled>Previous</button>
+              <button id="reportFilesNext" type="button" disabled>Next</button>
+            </div>
+          </div>
+        </section>
+
+        <section class="report-detail-card glass-panel" aria-labelledby="report-timeline-title">
+          <div class="report-section-heading">
+            <h2 id="report-timeline-title">Migration timeline</h2>
+          </div>
+          <ol id="reportTimeline" class="report-timeline"></ol>
+        </section>
+
+        <section
+          id="adminReportEvents"
+          class="report-detail-card glass-panel"
+          aria-labelledby="admin-events-title"
+          hidden
+        >
+          <div class="report-section-heading">
+            <h2 id="admin-events-title">Administrator event data</h2>
+            <span>Raw operational evidence</span>
+          </div>
+          <div class="reports-table-scroll" tabindex="0" aria-label="Scrollable raw events">
+            <table class="reports-table report-events-table">
+              <thead>
+                <tr>
+                  <th scope="col">Occurred</th>
+                  <th scope="col">Event</th>
+                  <th scope="col">Service</th>
+                  <th scope="col">File ID</th>
+                  <th scope="col">Data</th>
+                </tr>
+              </thead>
+              <tbody id="adminEventRows"></tbody>
+            </table>
+          </div>
+        </section>
+      </main>
+
+      <footer class="home-footer">
+        <span>MMIV · Media Migration and Integrity Validation</span>
+        <span>Migration Report</span>
+      </footer>
+    </div>
+
+    <script src="../js/particles.min.js"></script>
+    <script src="../js/particles-effect.js"></script>
+    <script src="../js/mmiv-auth.js"></script>
+    <script src="../js/report-detail.js"></script>
+  </body>
+</html>

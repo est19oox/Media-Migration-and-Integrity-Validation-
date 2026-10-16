@@ -14,6 +14,11 @@ runtime = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(runtime)
 
 class RuntimeConfigTest(unittest.TestCase):
+    def test_deployed_gateway_probe_uses_gateway_owned_login_page(self):
+        source = (ROOT / 'scripts/cd/verify-deployed-services.py').read_text()
+        self.assertIn("'/pages/login.html' if name == 'api-gateway'", source)
+        self.assertNotIn("'/upload.html' if name == 'api-gateway'", source)
+
     def test_default_uses_managed_oracle_without_github_secrets(self):
         self.assertEqual(runtime.values({}, 'deployment'), {
             'MANAGED_USER_ACCESS_ORACLE': 'true', 'ORACLE_CONFIG_REQUESTED': 'false'})

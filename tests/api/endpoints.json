@@ -27,16 +27,6 @@
         "anonymous": true
       },
       {
-        "name": "anonymous transfer page redirects to login",
-        "path": "/upload.html",
-        "status": 302,
-        "anonymous": true,
-        "follow_redirects": false,
-        "header_equals": {
-          "Location": "/login.html"
-        }
-      },
-      {
         "name": "missing source",
         "method": "POST",
         "path": "/api/v1/transfers",
@@ -579,14 +569,10 @@
         "anonymous": true
       },
       {
-        "name": "anonymous transfer page redirects to login",
-        "path": "/upload.html",
-        "status": 302,
-        "anonymous": true,
-        "follow_redirects": false,
-        "header_equals": {
-          "Location": "/login.html"
-        }
+        "name": "Gateway login page is public",
+        "path": "/pages/login.html",
+        "status": 200,
+        "anonymous": true
       },
       {
         "name": "gateway info endpoint",
@@ -600,14 +586,16 @@
         "status": 404
       },
       {
-        "name": "gateway forwards upload page",
-        "path": "/upload.html",
+        "name": "Gateway serves the report page",
+        "path": "/pages/reports.html",
         "status": 200
       },
       {
-        "name": "gateway forwards files page",
-        "path": "/files.html",
-        "status": 200
+        "name": "Gateway routes authenticated report queries directly",
+        "path": "/api/reports/mine?page=0&size=1",
+        "status": 200,
+        "json_object": true,
+        "json_required": ["content", "page"]
       },
       {
         "name": "gateway routes home to login page",

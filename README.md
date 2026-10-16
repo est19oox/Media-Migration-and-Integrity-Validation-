@@ -69,7 +69,12 @@ explicit Integrity settings. Integrity keeps its current database configuration.
 
 ## Login and Transfer access
 
-Gateway root (`http://EC2_PUBLIC_IP:8080/`) now opens the login page. After login, /upload.html opens. Transfer pages, uploads and file reads require a verified User Access JWT. Browser sessions use HttpOnly cookies and CSRF protection; API clients use Bearer headers. See [login setup](docs/ci-cd/login-access.md).
+Gateway root (`http://EC2_PUBLIC_IP:8080/`) opens the login page. After login,
+`/pages/home.html` opens. Gateway owns the frontend, browser session and CSRF
+checks; Transfer continues to own uploads and file operations. Reporting is
+routed directly through Gateway, so reports remain available during a Transfer
+outage. Browser sessions use HttpOnly cookies; API clients use Bearer headers.
+See [login setup](docs/ci-cd/login-access.md).
 
 Signup is available through **Create an account** on login, or `/signup.html`. New accounts persist in Oracle and initially have no destination access. An administrator must grant destination READ or WRITE permission before the account can read or upload files.
 

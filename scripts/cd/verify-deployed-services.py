@@ -47,7 +47,7 @@ def verify_scans(deployments, report_root, account_file):
                    'DAST_SERVICE_NAME': name, 'DAST_PORT': item['port'],
                    'DAST_REPORT_DIR': str(directory.resolve()),
                    'DAST_SCAN_MODE': 'api' if name == 'transfer-service' else 'baseline',
-                   'DAST_PATH': '/' if name == 'service-registry' else '/upload.html' if name == 'api-gateway' else '/user-access/actuator/health' if name == 'user-access-service' else '/actuator/health',
+                   'DAST_PATH': '/' if name == 'service-registry' else '/pages/login.html' if name == 'api-gateway' else '/user-access/actuator/health' if name == 'user-access-service' else '/actuator/health',
                    'DAST_READY_PATH': '/user-access/actuator/health' if name == 'user-access-service' else '/actuator/health',
                    'DAST_ENDPOINT_BASE_PATH': '/user-access' if name == 'user-access-service' else '',
                    'MMIV_VERIFICATION_ACCOUNT_FILE': str(account_file),

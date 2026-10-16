@@ -24,10 +24,6 @@ spring:
             connect-timeout: 3000
             response-timeout: ${GATEWAY_RESPONSE_TIMEOUT:300s}
           routes:
-            - id: user-access-login-page
-              uri: lb://user-access-service
-              predicates:
-                - Path=/login.html,/signup.html,/english-validation.js,/feedback.js,/reset-password.html
             - id: transfer-api
               uri: lb://transfer-service
               predicates:
@@ -40,17 +36,6 @@ spring:
               uri: lb://transfer-service
               predicates:
                 - Path=/api/v1/files,/api/v1/files/**
-            - id: transfer-pages
-              uri: lb://transfer-service
-              predicates:
-                - Path=/home.html,/upload.html,/files.html,/logs.html,/admin.html,/invite.html,/admin.js,/portal.js,/portal.css,/auth.js,/preview.js,/file-browser.js,/history.html
-            # The new frontend, served in addition to the legacy pages above and
-            # kept off /, /login.html, /home.html, /upload.html and /invite.html
-            # so the legacy site stays the default until the switch is made.
-            - id: transfer-new-frontend
-              uri: lb://transfer-service
-              predicates:
-                - Path=/pages/**,/css/**,/js/**,/img/**,/font/**,/assets/**
             - id: portal-api
               uri: lb://transfer-service
               predicates:
@@ -58,13 +43,35 @@ spring:
             - id: transfer-session
               uri: lb://transfer-service
               predicates:
-                - Path=/api/v1/session,/api/v1/destinations,/api/v1/verification/**
+                - Path=/api/v1/destinations,/api/v1/verification/**
             - id: home
-              uri: lb://transfer-service
+              uri: forward:///pages/home.html
               predicates:
                 - Path=/
+            - id: legacy-login-redirect
+              uri: no://op
+              predicates:
+                - Path=/login.html
               filters:
-                - SetPath=/home.html
+                - RedirectTo=302,/pages/login.html
+            - id: legacy-signup-redirect
+              uri: no://op
+              predicates:
+                - Path=/signup.html
+              filters:
+                - RedirectTo=302,/pages/signup.html
+            - id: legacy-password-reset-redirect
+              uri: no://op
+              predicates:
+                - Path=/reset-password.html
+              filters:
+                - RedirectTo=302,/pages/reset-password.html
+            - id: legacy-invite-redirect
+              uri: no://op
+              predicates:
+                - Path=/invite.html
+              filters:
+                - RedirectTo=302,/pages/invite.html
             - id: integrity-native-api
               uri: lb://integrity-service
               predicates:
@@ -98,7 +105,11 @@ spring:
             - id: reports-native-api
               uri: lb://reporting-service
               predicates:
-                - Path=/api/reports,/api/reports/**
+                - Path=/api/reports,/api/reports/**,/api/admin/reports,/api/admin/reports/**
+            - id: reporting-read-api
+              uri: lb://reporting-service
+              predicates:
+                - Path=/api/history,/api/dashboard
             - id: discovery-api
               uri: lb://discovery-service
               predicates:
@@ -128,6 +139,11 @@ management:
       probes:
         enabled: true
 
-# All services publish through the shared durable RabbitMQ outbox.
-mmiv.events.enabled: ${MMIV_EVENTS_ENABLED:true}
-mmiv.events.outbox-directory: ${MMIV_EVENTS_OUTBOX_DIRECTORY:./.mmiv-outbox}
+mmiv:
+  auth:
+    issuer: ${USER_ACCESS_JWT_ISSUER:https://auth.mmiv.example}
+    jwk-set-uri: ${USER_ACCESS_JWK_SET_URI:http://user-access-service:8083/.well-known/jwks.json}
+    cookie-secure: ${JWT_COOKIE_SECURE:false}
+  events:
+    enabled: ${MMIV_EVENTS_ENABLED:true}
+    outbox-directory: ${MMIV_EVENTS_OUTBOX_DIRECTORY:./.mmiv-outbox}

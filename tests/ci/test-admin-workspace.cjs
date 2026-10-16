@@ -6,10 +6,12 @@ const vm = require('node:vm');
 const source = readFileSync('frontend/js/admin.js', 'utf8');
 const html = readFileSync('frontend/pages/admin.html', 'utf8');
 
-const PROFILE = '/api/v1/portal/me';
+const PROFILE = '/api/access/me';
 const USERS = '/api/v1/portal/admin/users';
 const FOLDERS = '/api/v1/portal/admin/folders';
-const LOGS = '/api/v1/portal/logs';
+const LOGS = '/api/dashboard';
+const ADMIN_REPORTS = '/api/admin/reports';
+const REPORT_ID = '123e4567-e89b-42d3-a456-426614174000';
 
 const alice = {
   userId: 'u-alice',
@@ -170,6 +172,24 @@ async function page(options = {}) {
       if (path.startsWith(USERS)) return { status: 200, body: [alice, bob, carol] };
       if (path === FOLDERS) return { status: 200, body: ['SW001', 'semester2', 'Archive 2026'] };
       if (path.startsWith(LOGS)) return { status: 200, body: { logs: records, page: 0 } };
+      if (path.startsWith(ADMIN_REPORTS))
+        return {
+          status: 200,
+          body: {
+            content: [
+              {
+                migrationId: REPORT_ID,
+                initiatedBy: 'u-alice',
+                startedAt: '2026-10-14T10:00:00Z',
+                status: 'COMPLETED',
+                summary: { totalFiles: 2, successRate: 100 },
+              },
+            ],
+            number: 0,
+            totalPages: 1,
+            totalElements: 1,
+          },
+        };
       throw new Error('Unexpected request ' + path);
     });
 
@@ -723,8 +743,6 @@ test('the admin script requests only the verified endpoints', () => {
       '/api/v1/portal/admin/invitations',
       '/api/v1/portal/admin/users',
       '/api/v1/portal/folders',
-      '/api/v1/portal/logs',
-      '/api/v1/portal/me',
     ].sort(),
   );
   // No invitation revoke endpoint exists, so none may be called.
@@ -1501,5 +1519,56 @@ test('the confirmation dialog is part of the page', () => {
       new RegExp(`<button[^>]*id="${id}"[^>]*disabled`),
       id + ' must ship disabled',
     );
+  }
+});
+
+test('administrator reports load only when their own tab is opened', async () => {
+  const app = await page();
+  assert.equal(app.requests.some((url) => url.startsWith(ADMIN_REPORTS)), false);
+
+  app.element('tab-reports').checked = true;
+  await app.trigger('tab-reports', 'change');
+
+  assert.ok(app.requests.includes(ADMIN_REPORTS + '?page=0&size=20'));
+  const row = app.rows('adminReportsTable')[0];
+  assert.equal(row.children[0].textContent, REPORT_ID);
+  assert.equal(row.children[1].textContent, 'u-alice');
+  assert.equal(
+    row.children[6].children[0].href,
+    '/pages/report-detail.html?id=' + REPORT_ID,
+  );
+});
+
+test('administrator report status and owner filters remain separate from system logs', async () => {
+  const app = await page();
+  app.element('tab-reports').checked = true;
+  await app.trigger('tab-reports', 'change');
+  const logRequests = app.requests.filter((url) => url.startsWith(LOGS)).length;
+
+  app.element('adminReportStatus').value = 'FAILED';
+  await app.trigger('adminReportStatus', 'change');
+  app.element('adminReportUser').value = 'user/a b';
+  await app.trigger('adminReportUser', 'keydown', {
+    key: 'Enter',
+    preventDefault() {},
+  });
+
+  assert.equal(
+    app.requests.at(-1),
+    ADMIN_REPORTS + '?page=0&size=20&status=FAILED&initiatedBy=user%2Fa%20b',
+  );
+  assert.equal(app.requests.filter((url) => url.startsWith(LOGS)).length, logRequests);
+});
+
+test('the administrator workspace exposes a distinct reports section', () => {
+  for (const id of [
+    'tab-reports',
+    'admin-reports',
+    'adminReportUser',
+    'adminReportStatus',
+    'adminReportsTable',
+    'adminReportsMeta',
+  ]) {
+    assert.ok(html.includes('id="' + id + '"'), 'missing #' + id);
   }
 });

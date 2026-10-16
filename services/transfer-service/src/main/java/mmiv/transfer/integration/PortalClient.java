@@ -9,12 +9,11 @@ import org.springframework.web.server.ResponseStatusException;
 
 @Component
 public class PortalClient {
-  private final RestClient access, reporting;
-  private final java.net.URI accessBase, reportBase;
+  private final RestClient access;
+  private final java.net.URI accessBase;
 
   public PortalClient(
-      @Value("${mmiv.access.url:http://user-access-service:8083}") String accessUrl,
-      @Value("${mmiv.reporting.url:http://reporting-service:8084}") String reportUrl) {
+      @Value("${mmiv.access.url:http://user-access-service:8083}") String accessUrl) {
     var factory =
         new org.springframework.http.client.JdkClientHttpRequestFactory(
             java.net.http.HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(3)).build());
@@ -25,22 +24,11 @@ public class PortalClient {
             .baseUrl(accessUrl)
             .requestFactory(factory)
             .build();
-    reporting =
-        RestClient.builder()
-            .requestInterceptor(mmiv.resilience.DependencyCircuits.http("reporting", reportUrl))
-            .baseUrl(reportUrl)
-            .requestFactory(factory)
-            .build();
     accessBase = java.net.URI.create(accessUrl);
-    reportBase = java.net.URI.create(reportUrl);
   }
 
   public Object access(HttpMethod method, String path, Object body) {
     return call(access, method, path, body);
-  }
-
-  public Object dashboard(String path) {
-    return call(reporting, HttpMethod.GET, path, null);
   }
 
   public void admin() {
@@ -52,7 +40,7 @@ public class PortalClient {
       var request =
           client
               .method(method)
-              .uri((client == access ? accessBase : reportBase).resolve(path))
+              .uri(accessBase.resolve(path))
               .header("Authorization", "Bearer " + MetadataClient.currentJwt().getTokenValue());
       if (body != null) request.contentType(MediaType.APPLICATION_JSON).body(body);
       return request.retrieve().body(Object.class);

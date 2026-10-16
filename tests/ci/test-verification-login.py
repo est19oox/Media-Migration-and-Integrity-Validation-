@@ -27,6 +27,16 @@ class Response:
 
 
 class LoginTest(unittest.TestCase):
+    def test_frontend_invitation_uses_gateway_page_without_persisting_token(self):
+        login_script = (ROOT / 'frontend/js/login.js').read_text(encoding='utf-8')
+        invitation_script = (ROOT / 'frontend/js/invite.js').read_text(encoding='utf-8')
+        self.assertIn("const INVITE_URL = '/pages/invite.html'", login_script)
+        self.assertIn("history.replaceState(null, '', location.pathname + location.search)",
+                      invitation_script)
+        self.assertIn("'/user-access/api/admin/invitations/accept'", invitation_script)
+        self.assertNotIn('.setItem(', invitation_script)
+        self.assertNotIn('document.cookie', invitation_script)
+
     def run_login(self, path, result):
         with patch.object(login.sys, 'argv', ['login', 'http://127.0.0.1:18080', str(path)]), \
              patch.dict(os.environ, {'USER_ACCESS_TEST_USERNAME': 'alice',

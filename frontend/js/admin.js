@@ -12,7 +12,7 @@
  * Verified contracts (transfer-service PortalController and the services it
  * proxies to):
  *
- *   GET /api/v1/portal/me
+ *   GET /api/access/me
  *     -> { userId, username, role, destinations: [{ destination, permission }] }
  *        role is ADMIN or USER; permission is READ or WRITE.
  *
@@ -30,9 +30,9 @@
  *        produces and the Status column states that no status is available
  *        rather than inventing one.
  *
- *   GET /api/v1/portal/logs?page=<n>
+ *   GET /api/dashboard?page=<n>
  *     -> { logs: [{ _id, eventId, sourceService, occurredAt, operation, data }], page }
- *        Proxied to reporting-service /api/dashboard: 100 records per page,
+ *        Served directly by reporting-service: 100 records per page,
  *        newest first, with no total and no search, level or actor-name field.
  *        The Level column is therefore derived from each record's own outcome
  *        (see levelOf) and the User column shows the actor id the record
@@ -87,10 +87,11 @@
  * logged and nothing is written to browser storage.
  */
 (() => {
-  const PROFILE_URL = '/api/v1/portal/me';
+  const PROFILE_URL = '/api/access/me';
   const USERS_URL = '/api/v1/portal/admin/users';
   const FOLDERS_URL = '/api/v1/portal/admin/folders';
-  const LOGS_URL = '/api/v1/portal/logs';
+  const LOGS_URL = '/api/dashboard';
+  const ADMIN_REPORTS_URL = '/api/admin/reports';
   const ADMIN_FOLDERS_URL = '/api/v1/portal/admin/folders';
   const DELETE_FOLDER_URL = '/api/v1/portal/folders';
   const INVITATIONS_URL = '/api/v1/portal/admin/invitations';
@@ -139,8 +140,9 @@
   const usersTable = element('usersTable');
   const invitationsTable = element('invitationsTable');
   const logsTable = element('logsTable');
+  const adminReportsTable = element('adminReportsTable');
 
-  if (!foldersTable || !usersTable || !invitationsTable || !logsTable) return;
+  if (!foldersTable || !usersTable || !invitationsTable || !logsTable || !adminReportsTable) return;
 
   const foldersMeta = element('foldersMeta');
   const usersMeta = element('usersMeta');
@@ -155,6 +157,13 @@
   const refreshLogs = element('refreshLogs');
   const logsPrevious = element('logsPrevious');
   const logsNext = element('logsNext');
+  const tabReports = element('tab-reports');
+  const adminReportUser = element('adminReportUser');
+  const adminReportStatus = element('adminReportStatus');
+  const adminReportsPrevious = element('adminReportsPrevious');
+  const adminReportsNext = element('adminReportsNext');
+  const refreshAdminReports = element('refreshAdminReports');
+  const adminReportsMeta = element('adminReportsMeta');
   const invitationSearch = element('invitationSearch');
   const invitationStatus = element('invitationStatus');
   const selectedUser = element('selectedUser');
@@ -191,6 +200,9 @@
   let folderDeleteButtons = [];
   let logs = [];
   let logPage = 0;
+  let adminReportPage = 0;
+  let adminReportPages = 0;
+  let adminReportsLoaded = false;
   let lastStatus = null;
   // The signed-in administrator's id, used for the self-service warnings.
   let actorId = null;
@@ -249,6 +261,13 @@
     if (code === 403) return 'Administrator access required.';
     if (code === 503) return 'The reporting service is unavailable. Please try again later.';
     return 'System logs could not be loaded. Please try again.';
+  }
+
+  function reportsError(code) {
+    if (code === 400) return 'Those report filters are not valid.';
+    if (code === 403) return 'Administrator access required.';
+    if (code === 503) return 'The reporting service is unavailable. Please try again later.';
+    return 'Migration reports could not be loaded. Please try again.';
   }
 
   /** A single full-width message row, used for loading, empty and error states. */
@@ -1049,6 +1068,101 @@
   }
 
   /* ------------------------------------------------------------------ *
+   * Migration reports
+   * ------------------------------------------------------------------ */
+
+  function reportPage(payload) {
+    return (
+      payload &&
+      Array.isArray(payload.content) &&
+      Number.isInteger(payload.number) &&
+      payload.number >= 0 &&
+      Number.isInteger(payload.totalPages) &&
+      payload.totalPages >= 0 &&
+      typeof payload.totalElements === 'number' &&
+      Number.isFinite(payload.totalElements) &&
+      payload.totalElements >= 0
+    );
+  }
+
+  function reportTimestamp(value) {
+    if (typeof value !== 'string' || !value) return '—';
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? '—' : parsed.toLocaleString();
+  }
+
+  function adminReportRow(report) {
+    const row = document.createElement('tr');
+    const summary = report.summary && typeof report.summary === 'object' ? report.summary : {};
+    const details = document.createElement('td');
+    if (typeof report.migrationId === 'string' && report.migrationId) {
+      const link = document.createElement('a');
+      link.href = '/pages/report-detail.html?id=' + encodeURIComponent(report.migrationId);
+      link.textContent = 'View details';
+      details.append(link);
+    } else {
+      details.textContent = '—';
+    }
+    row.append(
+      textCell(report.migrationId || '—'),
+      textCell(report.initiatedBy || '—'),
+      textCell(reportTimestamp(report.startedAt)),
+      textCell(report.status || 'UNKNOWN'),
+      textCell(
+        typeof summary.totalFiles === 'number' && Number.isFinite(summary.totalFiles)
+          ? String(summary.totalFiles)
+          : '—',
+      ),
+      textCell(
+        typeof summary.successRate === 'number' && Number.isFinite(summary.successRate)
+          ? summary.successRate.toFixed(1) + '%'
+          : '—',
+      ),
+      details,
+    );
+    return row;
+  }
+
+  function adminReportsUrl() {
+    let url = ADMIN_REPORTS_URL + '?page=' + adminReportPage + '&size=20';
+    const selectedStatus = adminReportStatus ? adminReportStatus.value : '';
+    const initiatedBy = adminReportUser ? adminReportUser.value.trim() : '';
+    if (selectedStatus) url += '&status=' + encodeURIComponent(selectedStatus);
+    if (initiatedBy) url += '&initiatedBy=' + encodeURIComponent(initiatedBy);
+    return url;
+  }
+
+  async function loadAdminReports() {
+    messageRow(adminReportsTable, 7, 'Loading migration reports…');
+    if (adminReportsMeta) adminReportsMeta.textContent = 'Loading…';
+    try {
+      const response = await auth.fetch(adminReportsUrl());
+      if (!response.ok) throw new Error(reportsError(response.status));
+      const payload = await response.json();
+      if (!reportPage(payload)) throw new Error('Migration reports could not be read.');
+      adminReportPage = payload.number;
+      adminReportPages = payload.totalPages;
+      adminReportsLoaded = true;
+      if (payload.content.length) {
+        adminReportsTable.replaceChildren(...payload.content.map(adminReportRow));
+      } else {
+        messageRow(adminReportsTable, 7, 'No migration reports match these filters.');
+      }
+      if (adminReportsMeta)
+        adminReportsMeta.textContent =
+          plural(payload.totalElements, 'report') + ' · page ' + (adminReportPage + 1);
+      if (adminReportsPrevious) adminReportsPrevious.disabled = adminReportPage === 0;
+      if (adminReportsNext)
+        adminReportsNext.disabled = adminReportPages === 0 || adminReportPage + 1 >= adminReportPages;
+    } catch (error) {
+      messageRow(adminReportsTable, 7, error.message);
+      if (adminReportsMeta) adminReportsMeta.textContent = 'Unavailable';
+      if (adminReportsPrevious) adminReportsPrevious.disabled = true;
+      if (adminReportsNext) adminReportsNext.disabled = true;
+    }
+  }
+
+  /* ------------------------------------------------------------------ *
    * Invitations
    * ------------------------------------------------------------------ */
 
@@ -1166,6 +1280,37 @@
         loadLogs();
       });
 
+    if (tabReports)
+      tabReports.addEventListener('change', () => {
+        if (tabReports.checked && !adminReportsLoaded) loadAdminReports();
+      });
+    if (adminReportStatus)
+      adminReportStatus.addEventListener('change', () => {
+        adminReportPage = 0;
+        loadAdminReports();
+      });
+    if (adminReportUser)
+      adminReportUser.addEventListener('keydown', (event) => {
+        if (event.key !== 'Enter') return;
+        event.preventDefault();
+        adminReportPage = 0;
+        loadAdminReports();
+      });
+    if (refreshAdminReports)
+      refreshAdminReports.addEventListener('click', () => loadAdminReports());
+    if (adminReportsPrevious)
+      adminReportsPrevious.addEventListener('click', () => {
+        if (adminReportPage === 0) return;
+        adminReportPage -= 1;
+        loadAdminReports();
+      });
+    if (adminReportsNext)
+      adminReportsNext.addEventListener('click', () => {
+        if (adminReportPage + 1 >= adminReportPages) return;
+        adminReportPage += 1;
+        loadAdminReports();
+      });
+
     if (selectedUser) selectedUser.addEventListener('change', reflectPermissions);
     if (permissionFolder) permissionFolder.addEventListener('change', reflectPermissions);
     document
@@ -1221,9 +1366,11 @@
     messageRow(foldersTable, 4, 'Folders are unavailable.');
     messageRow(usersTable, 4, 'Users are unavailable.');
     messageRow(logsTable, 5, 'System logs are unavailable.');
+    messageRow(adminReportsTable, 7, 'Migration reports are unavailable.');
     if (foldersMeta) foldersMeta.textContent = 'Unavailable';
     if (usersMeta) usersMeta.textContent = 'Unavailable';
     if (logsMeta) logsMeta.textContent = 'Unavailable';
+    if (adminReportsMeta) adminReportsMeta.textContent = 'Unavailable';
   }
 
   /**
@@ -1240,6 +1387,7 @@
     usersTable.replaceChildren();
     invitationsTable.replaceChildren();
     logsTable.replaceChildren();
+    adminReportsTable.replaceChildren();
     setStatus('Administrator access required. Returning to your workspace…');
     location.replace(HOME_PAGE);
   }
@@ -1281,6 +1429,7 @@
   messageRow(foldersTable, 4, 'Loading folders…');
   messageRow(usersTable, 4, 'Loading users…');
   messageRow(logsTable, 5, 'Loading system logs…');
+  messageRow(adminReportsTable, 7, 'Open the Reports tab to load migration reports.');
   showInvitationAvailability();
   if (logsHint)
     logsHint.textContent =

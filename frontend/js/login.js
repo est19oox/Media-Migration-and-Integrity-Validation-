@@ -20,8 +20,7 @@
   const LOGIN_URL = '/user-access/api/auth/login';
   const SESSION_URL = '/api/v1/session';
   const HOME_URL = '/pages/home.html';
-  // The page that redeems an invitation, which the Gateway still serves.
-  const INVITE_URL = '/invite.html';
+  const INVITE_URL = '/pages/invite.html';
   // The shape the invitation endpoint issues and redeems.
   const INVITATION_TOKEN = /^[a-f0-9]{64}$/;
   const REQUEST_TIMEOUT_MS = 20000;

@@ -4,7 +4,7 @@
  * File Manager read operations: folder selection, listing, search and paging.
  *
  * Verified contracts:
- *   GET /api/v1/portal/me
+ *   GET /api/access/me
  *     -> { userId, username, role, destinations: [{ destination, permission }] }
  *
  *   GET /api/v1/portal/files?folder=<name>&cursor=<token>
@@ -19,7 +19,7 @@
  * this phase, so the row actions are rendered but disabled.
  */
 (() => {
-  const PROFILE_URL = '/api/v1/portal/me';
+  const PROFILE_URL = '/api/access/me';
   const FILES_URL = '/api/v1/portal/files';
   const TRANSFER_URL = '/api/v1/transfers';
   const FOLDER_TRANSFER_URL = '/api/v1/transfers/folder';

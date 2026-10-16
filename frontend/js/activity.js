@@ -9,14 +9,14 @@
  *
  * Verified contracts:
  *
- *   GET /api/v1/portal/me
+ *   GET /api/access/me
  *     -> { userId, username, role, destinations: [{ destination, permission }] }
  *        Used for the account name in the header and to reveal Administration.
  *
- *   GET /api/v1/portal/history?page=<n>
+ *   GET /api/history?page=<n>
  *     -> { entries: [{ time, action, fileName, folder, sizeBytes, status }],
  *          hasMore, page }
- *        Proxied to reporting-service /api/history, which reads the audit log
+ *        Served directly by reporting-service, which reads the audit log
  *        with data.actorId = the token subject. It is therefore this account's
  *        own history and needs no administrator role, so an ordinary member
  *        sees their own records and nobody else's.
@@ -39,8 +39,8 @@
  * login and logout messages owned by mmiv-auth.js are never overwritten.
  */
 (() => {
-  const PROFILE_URL = '/api/v1/portal/me';
-  const HISTORY_URL = '/api/v1/portal/history';
+  const PROFILE_URL = '/api/access/me';
+  const HISTORY_URL = '/api/history';
 
   const element = (id) => document.getElementById(id);
   const auth = window.mmivAuth;
@@ -153,12 +153,20 @@
     const date = new Date(value);
     if (Number.isNaN(date.getTime())) return String(value);
     const now = new Date();
-    const time = date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+    const time = date.toLocaleTimeString('en-US', {
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true,
+    });
     if (date.toDateString() === now.toDateString()) return 'Today, ' + time;
     const yesterday = new Date(now);
     yesterday.setDate(now.getDate() - 1);
     if (date.toDateString() === yesterday.toDateString()) return 'Yesterday, ' + time;
-    return date.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
+    return date.toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    });
   }
 
   /** The record's own values; a missing one is shown as a dash, never filled in. */

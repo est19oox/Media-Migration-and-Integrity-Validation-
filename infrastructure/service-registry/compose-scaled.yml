@@ -38,6 +38,7 @@ services:
       USER_ACCESS_URL: http://user-access-service:8083
       USER_ACCESS_JWK_SET_URI: http://user-access-service:8083/.well-known/jwks.json
       USER_ACCESS_JWT_ISSUER: ${USER_ACCESS_JWT_ISSUER:-https://auth.mmiv.example}
+      JWT_COOKIE_SECURE: ${JWT_COOKIE_SECURE:-false}
     volumes:
     - api-gateway-events:/var/lib/mmiv/event-outbox
   service-registry:
@@ -95,7 +96,6 @@ services:
       AWS_SESSION_TOKEN: ${AWS_SESSION_TOKEN:-}
       USER_ACCESS_JWT_ISSUER: ${USER_ACCESS_JWT_ISSUER:-https://auth.mmiv.example}
       USER_ACCESS_JWK_SET_URI: http://user-access-service:8083/.well-known/jwks.json
-      JWT_COOKIE_SECURE: ${JWT_COOKIE_SECURE:-false}
       SPRING_RABBITMQ_HOST: rabbitmq
       SPRING_RABBITMQ_USERNAME: mmiv
       SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:?Set RABBITMQ_PASSWORD}
@@ -225,6 +225,8 @@ services:
     image: rabbitmq:4.1.4-management-alpine@sha256:5cbd7145b0306399ad68422c3350b6cbd1bb95704b39f5896480e5b6d4238a04
     hostname: mmiv-local-rabbitmq
     restart: unless-stopped
+    ports:
+    - 127.0.0.1:15672:15672
     networks:
     - registry
     environment:

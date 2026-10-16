@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.file.*;
+import java.nio.file.attribute.PosixFileAttributeView;
 import java.nio.file.attribute.PosixFilePermissions;
 import java.time.Instant;
 import java.util.*;
@@ -23,8 +24,7 @@ public class EventPublisher {
     private final JsonMapper json = JsonMapper.builder().build();
     public EventPublisher(RabbitTemplate rabbit, String directory, String service, boolean enabled) {
         this.rabbit = rabbit; this.directory = Path.of(directory); this.service = service; this.enabled = enabled;
-        if (enabled) try { Files.createDirectories(this.directory); Files.setPosixFilePermissions(this.directory,
-                PosixFilePermissions.fromString("rwx------")); }
+        if (enabled) try { Files.createDirectories(this.directory); applyOwnerOnlyPermissions(this.directory, "rwx------"); }
         catch (IOException e) { throw new IllegalStateException("Cannot initialize event outbox", e); }
     }
     public void audit(String operation, Map<String, ?> data) {
@@ -43,13 +43,13 @@ public class EventPublisher {
         Path temporary = null;
         try {
             byte[] bytes = json.writeValueAsBytes(Map.of("route", route, "event", event));
-            temporary = Files.createTempFile(directory, ".pending-", ".tmp",
-                    PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rw-------")));
+            temporary = Files.createTempFile(directory, ".pending-", ".tmp");
+            applyOwnerOnlyPermissions(temporary, "rw-------");
             try (var out = FileChannel.open(temporary, StandardOpenOption.WRITE)) {
                 var buffer = ByteBuffer.wrap(bytes); while (buffer.hasRemaining()) out.write(buffer); out.force(true);
             }
             Files.move(temporary, directory.resolve(event.get("eventId") + ".json"), StandardCopyOption.ATOMIC_MOVE);
-            try (var parent = FileChannel.open(directory, StandardOpenOption.READ)) { parent.force(true); }
+            forceDirectoryMetadata();
         } catch (IOException e) { throw new IllegalStateException("Cannot persist event", e); }
         finally { if (temporary != null) try { Files.deleteIfExists(temporary); } catch (IOException ignored) {} }
     }
@@ -71,5 +71,19 @@ public class EventPublisher {
             }
         } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
         catch (Exception e) { /* Keep original eventId and bytes for the next attempt, including after restart. */ }
+    }
+
+    private static void applyOwnerOnlyPermissions(Path path, String permissions) throws IOException {
+        if (Files.getFileAttributeView(path, PosixFileAttributeView.class) != null) {
+            Files.setPosixFilePermissions(path, PosixFilePermissions.fromString(permissions));
+        }
+    }
+
+    private void forceDirectoryMetadata() throws IOException {
+        try (var parent = FileChannel.open(directory, StandardOpenOption.READ)) {
+            parent.force(true);
+        } catch (AccessDeniedException | UnsupportedOperationException ignored) {
+            // Windows cannot open directories as file channels; the event file itself is already forced.
+        }
     }
 }

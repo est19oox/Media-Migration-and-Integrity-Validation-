@@ -46,11 +46,11 @@ COMMIT;
 
 ## Gateway API
 
-Use a JWT from `/user-access/api/auth/login` in `Authorization: Bearer ...` for service APIs. Browser uploads retain the existing HttpOnly session and CSRF protection; Transfer forwards the validated JWT to its peers.
+Use a JWT from `/user-access/api/auth/login` in `Authorization: Bearer ...` for service APIs. Browser requests use Gateway's HttpOnly session and CSRF protection; Gateway validates the cookie and relays a verified Bearer token to the owning backend.
 
 1. `POST /api/metadata/plans` with `{"destinationId":"<configured ID>","sourcePath":"folder/file.pdf"}` creates an assignment for an existing readable file under the shared media root.
 2. `POST /api/metadata/plans/{metadataId}/transfer` starts the transfer through metadata. Alternatively, `POST /api/v1/transfers` accepts **only** `{"metadataId":"<UUID>"}`. Legacy sourcePath/destinationKey requests without a metadata ID return 400.
-3. `GET /api/reports/{migrationId}` returns the projected report. The migration ID is returned by metadata. Global report listing is denied to prevent exposing other users' reports.
+3. `GET /api/reports/mine` lists only reports owned by the JWT subject. `GET /api/reports/{migrationId}` returns an owned projected report; another user's ID returns 404. The migration ID is returned by metadata. Cross-user listing remains administrator-only.
 4. `GET /api/metadata/plans/{metadataId}` reads shared-folder metadata with READ permission. Assignments expire for new transfers after 24 hours; authorized metadata/report reads remain available.
 
 Multipart `/api/v1/transfers` accepts `file` and an optional `destinationId`. Transfer asks metadata to validate and allocate the destination before any S3 write. `/api/v1/transfers/folder` accepts matching `files`/`relativePaths` and `destinationId`; it validates the complete folder and authorizes all allocations before writing. Metadata preserves the relative folder path beneath each server-generated assignment prefix.

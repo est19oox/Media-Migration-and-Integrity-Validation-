@@ -15,6 +15,33 @@ import yaml
 ROOT = Path(__file__).resolve().parents[2]
 
 class ComposeRuntimeTest(unittest.TestCase):
+    def test_integrated_compose_assigns_browser_auth_to_gateway_only(self):
+        expected = {'api-gateway', 'service-registry', 'transfer-service',
+                    'discovery-service', 'user-access-service', 'reporting-service',
+                    'integrity-service', 'rabbitmq', 'mongodb'}
+        for filename in ('compose.yml', 'compose-scaled.yml'):
+            with self.subTest(filename=filename):
+                compose = yaml.safe_load((ROOT / 'infrastructure/service-registry' / filename).read_text())
+                services = compose['services']
+                self.assertEqual(set(services), expected)
+                gateway = services['api-gateway']
+                self.assertEqual(gateway['environment']['USER_ACCESS_JWK_SET_URI'],
+                                 'http://user-access-service:8083/.well-known/jwks.json')
+                self.assertIn('USER_ACCESS_JWT_ISSUER', gateway['environment'])
+                self.assertIn('JWT_COOKIE_SECURE', gateway['environment'])
+                transfer = services['transfer-service']['environment']
+                self.assertNotIn('JWT_COOKIE_SECURE', transfer)
+                self.assertNotIn('REPORTING_URL', transfer)
+                self.assertIn('127.0.0.1:15672:15672',
+                              [str(port) for port in services['rabbitmq'].get('ports', [])])
+                for name, service in services.items():
+                    for port in service.get('ports', []):
+                        binding = str(port)
+                        if name == 'api-gateway':
+                            self.assertFalse(binding.startswith('127.0.0.1:'))
+                        else:
+                            self.assertTrue(binding.startswith('127.0.0.1:'), (name, binding))
+
     def test_rollout_repeat_and_rollback(self):
         name = 'mmiv-test-' + uuid.uuid4().hex[:10]
         images = [name + ':' + tag for tag in ['first', 'second', 'unhealthy']]

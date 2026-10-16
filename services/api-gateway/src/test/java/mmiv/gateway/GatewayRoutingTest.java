@@ -2,19 +2,29 @@ package mmiv.gateway;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import java.time.Instant;
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Set;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.webtestclient.autoconfigure.AutoConfigureWebTestClient;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Import;
+import org.springframework.context.annotation.Primary;
 import org.springframework.core.io.ByteArrayResource;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.MultipartBodyBuilder;
+import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.security.oauth2.jwt.ReactiveJwtDecoder;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.reactive.server.WebTestClient;
+import reactor.core.publisher.Mono;
 import reactor.netty.DisposableServer;
 import reactor.netty.http.server.HttpServer;
 
@@ -22,6 +32,7 @@ import reactor.netty.http.server.HttpServer;
     webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
     properties = {"eureka.client.enabled=false", "spring.cloud.loadbalancer.cache.enabled=false"})
 @AutoConfigureWebTestClient
+@Import(GatewayRoutingTest.RoutingSecurityTestConfiguration.class)
 class GatewayRoutingTest {
   static DisposableServer backend(String name) {
     return HttpServer.create()
@@ -31,6 +42,9 @@ class GatewayRoutingTest {
             (request, response) -> {
               response.header("X-Test-Backend", name);
               response.header("X-Test-Path", request.uri());
+              response.header(
+                  "X-Test-Authorization",
+                  request.requestHeaders().get(HttpHeaders.AUTHORIZATION, ""));
               if (request.method().name().equals("POST")) {
                 return response.sendString(request.receive().aggregate().asString());
               }
@@ -42,6 +56,28 @@ class GatewayRoutingTest {
   static final DisposableServer first = backend("A");
   static final DisposableServer second = backend("B");
   @Autowired WebTestClient http;
+
+  private WebTestClient authenticated() {
+    return http.mutate()
+        .defaultHeader(HttpHeaders.AUTHORIZATION, "Bearer routing-test-token")
+        .build();
+  }
+
+  @TestConfiguration
+  static class RoutingSecurityTestConfiguration {
+    @Bean
+    @Primary
+    ReactiveJwtDecoder routingJwtDecoder() {
+      return token ->
+          Mono.just(
+              new Jwt(
+                  token,
+                  Instant.now().minusSeconds(30),
+                  Instant.now().plusSeconds(300),
+                  Map.of("alg", "RS256"),
+                  Map.of("sub", "U001", "iss", "https://auth.mmiv.example")));
+    }
+  }
 
   @DynamicPropertySource
   static void instances(DynamicPropertyRegistry registry) {
@@ -76,7 +112,8 @@ class GatewayRoutingTest {
     Set<String> selected = new HashSet<>();
     for (int i = 0; i < 6; i++) {
       var result =
-          http.get()
+          authenticated()
+              .get()
               .uri("/api/v1/files/example/content")
               .exchange()
               .expectStatus()
@@ -103,7 +140,8 @@ class GatewayRoutingTest {
         });
     parts.part("relativePaths", "album/subfolder/notes.txt");
     var result =
-        http.post()
+        authenticated()
+            .post()
             .uri("/api/v1/transfers/folder")
             .contentType(MediaType.MULTIPART_FORM_DATA)
             .bodyValue(parts.build())
@@ -126,9 +164,13 @@ class GatewayRoutingTest {
           "/api/metadata/plans/123",
           "/api/discovery/scan",
           "/api/reports/123",
+          "/api/admin/reports/123",
+          "/api/history",
+          "/api/dashboard",
           "/api/integrity/validate"
         }) {
-      http.get()
+      authenticated()
+          .get()
           .uri(path)
           .exchange()
           .expectStatus()
@@ -136,7 +178,8 @@ class GatewayRoutingTest {
           .expectHeader()
           .valueEquals("X-Test-Path", path);
     }
-    http.get()
+    authenticated()
+        .get()
         .uri("/api/v1/destinations")
         .exchange()
         .expectStatus()
@@ -146,9 +189,26 @@ class GatewayRoutingTest {
   }
 
   @Test
-  void routesEveryEnabledServiceAndPages() {
+  void routesDirectProfileHistoryAndDashboardReadsWithVerifiedBearerToken() {
+    for (String path : new String[] {"/api/access/me", "/api/history", "/api/dashboard"}) {
+      authenticated()
+          .get()
+          .uri(path)
+          .exchange()
+          .expectStatus()
+          .isOk()
+          .expectHeader()
+          .valueEquals("X-Test-Path", path)
+          .expectHeader()
+          .valueEquals("X-Test-Authorization", "Bearer routing-test-token");
+    }
+  }
+
+  @Test
+  void routesEveryEnabledService() {
     for (String prefix : new String[] {"integrity", "user-access", "reporting", "discovery"}) {
-      http.get()
+      authenticated()
+          .get()
           .uri("/" + prefix + "/actuator/health")
           .exchange()
           .expectStatus()
@@ -156,73 +216,24 @@ class GatewayRoutingTest {
           .expectHeader()
           .valueEquals("X-Test-Path", "/actuator/health");
     }
-    http.get()
+    authenticated()
+        .get()
         .uri("/api/access/example")
         .exchange()
         .expectStatus()
         .isOk()
         .expectHeader()
         .valueEquals("X-Test-Path", "/api/access/example");
-    for (String path :
-        new String[] {
-          "/home.html",
-          "/upload.html",
-          "/files.html",
-          "/admin.html",
-          "/admin.js",
-          "/logs.html",
-          "/portal.js",
-          "/portal.css",
-          "/api/v1/portal/me",
-          // The new frontend is served by the same service, beside the legacy
-          // pages above; it keeps its own prefixes so the two cannot collide.
-          "/pages/login.html",
-          "/pages/home.html",
-          "/pages/file-manager.html",
-          "/css/style.css",
-          "/js/mmiv-auth.js",
-          "/img/bg.jpg",
-          "/font/Bender.woff",
-          "/assets/particles-config.json"
-        })
-      http.get()
-          .uri(path)
-          .exchange()
-          .expectStatus()
-          .isOk()
-          .expectHeader()
-          .valueMatches("X-Test-Backend", "[AB]")
-          .expectHeader()
-          .valueEquals("X-Test-Path", path);
-    http.get()
-        .uri("/")
+    authenticated()
+        .get()
+        .uri("/api/v1/portal/me")
         .exchange()
         .expectStatus()
         .isOk()
         .expectHeader()
         .valueMatches("X-Test-Backend", "[AB]")
         .expectHeader()
-        .valueEquals("X-Test-Path", "/home.html");
-    for (String page : new String[] {"/login.html", "/signup.html"}) {
-      http.get()
-          .uri(page)
-          .exchange()
-          .expectStatus()
-          .isOk()
-          .expectHeader()
-          .valueEquals("X-Test-Backend", "A")
-          .expectHeader()
-          .valueEquals("X-Test-Path", page);
-    }
-    for (String path : new String[] {"/files.html", "/auth.js", "/api/v1/session"}) {
-      http.get()
-          .uri(path)
-          .exchange()
-          .expectStatus()
-          .isOk()
-          .expectHeader()
-          .valueEquals("X-Test-Path", path);
-    }
+        .valueEquals("X-Test-Path", "/api/v1/portal/me");
     for (String action : new String[] {"login", "signup"}) {
       http.post()
           .uri("/user-access/api/auth/" + action)
@@ -236,7 +247,7 @@ class GatewayRoutingTest {
           .expectHeader()
           .valueEquals("X-Test-Path", "/api/auth/" + action);
     }
-    http.get().uri("/eureka/apps").exchange().expectStatus().isNotFound();
+    authenticated().get().uri("/eureka/apps").exchange().expectStatus().isNotFound();
   }
 
   @Test

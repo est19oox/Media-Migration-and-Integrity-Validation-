@@ -9,6 +9,11 @@ import org.springframework.data.mongodb.repository.MongoRepository;
 public interface MigrationReportRepository
     extends MongoRepository<MigrationReportDocument, String> {
 
+  Page<MigrationReportDocument> findByInitiatedBy(String initiatedBy, Pageable pageable);
+
+  Page<MigrationReportDocument> findByInitiatedByAndStatus(
+      String initiatedBy, MigrationReportStatus status, Pageable pageable);
+
   Page<MigrationReportDocument> findByStatus(MigrationReportStatus status, Pageable pageable);
 
   List<MigrationReportDocument> findByStatusAndStartedAtBefore(

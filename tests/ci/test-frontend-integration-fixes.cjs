@@ -6,12 +6,11 @@ const vm = require('node:vm');
 const authSource = readFileSync('frontend/js/mmiv-auth.js', 'utf8');
 const loginSource = readFileSync('frontend/js/login.js', 'utf8');
 const managerSource = readFileSync('frontend/js/file-manager.js', 'utf8');
+const homeSource = readFileSync('frontend/js/home.js', 'utf8');
+const activitySource = readFileSync('frontend/js/activity.js', 'utf8');
+const adminSource = readFileSync('frontend/js/admin.js', 'utf8');
 const signupHtml = readFileSync('frontend/pages/signup.html', 'utf8');
-const viteConfig = readFileSync('frontend/vite.config.js', 'utf8');
-const gatewayConfig = readFileSync(
-  'services/api-gateway/src/main/resources/application.yml',
-  'utf8',
-);
+const gatewayPom = readFileSync('services/api-gateway/pom.xml', 'utf8');
 
 const TOKEN = 'a1b2c3d4'.repeat(8);
 const flush = async () => {
@@ -194,7 +193,7 @@ async function submitLogin(options = {}) {
 
 test('signing in hands an invitation back to the page that redeems it', async () => {
   const app = await submitLogin({ hash: '#invite=' + TOKEN });
-  assert.deepEqual(app.assigned, ['/invite.html#invite=' + TOKEN]);
+  assert.deepEqual(app.assigned, ['/pages/invite.html#invite=' + TOKEN]);
 });
 
 test('signing in without an invitation opens the workspace as before', async () => {
@@ -214,28 +213,21 @@ test('the login page does not log the invitation it carries', async () => {
   assert.ok(!JSON.stringify(app.logged).includes(TOKEN), 'the token reached the console');
 });
 
-/* ------------------------- signup assets resolve in dev --------------------- */
+/* --------------------- signup assets belong to the Gateway ------------------ */
 
-test('the signup scripts the Gateway serves are proxied by the dev server', () => {
-  for (const asset of ['/feedback.js', '/english-validation.js']) {
-    assert.ok(signupHtml.includes('"' + asset + '"'), 'signup no longer loads ' + asset);
+test('the signup scripts are loaded from the Gateway-owned frontend', () => {
+  for (const asset of ['feedback.js', 'english-validation.js']) {
+    const browserPath = '../js/' + asset;
     assert.ok(
-      new RegExp("'" + asset.replace('.', '\\.') + "':\\s*\\{[^}]*target:\\s*gateway").test(
-        viteConfig,
-      ),
-      asset + ' is not proxied to the Gateway',
+      signupHtml.includes('"' + browserPath + '"'),
+      'signup no longer loads ' + browserPath,
     );
+    assert.ok(existsSync('frontend/js/' + asset), 'missing frontend/js/' + asset);
   }
 });
 
-test('the proxied signup scripts really exist where the Gateway looks', () => {
-  const staticRoot = 'services/user-access-service/src/main/resources/static/';
-  for (const asset of ['feedback.js', 'english-validation.js']) {
-    assert.ok(existsSync(staticRoot + asset), 'missing ' + staticRoot + asset);
-  }
-  // The Gateway route that resolves them has to name both.
-  assert.match(gatewayConfig, /Path=.*\/feedback\.js/);
-  assert.match(gatewayConfig, /Path=.*\/english-validation\.js/);
+test('the Gateway packages the shared frontend JavaScript directory', () => {
+  assert.match(gatewayPom, /<include>js\/\*\*<\/include>/);
 });
 
 /* --------------------- uploads are offered only where allowed ---------------- */
@@ -259,7 +251,7 @@ async function loadFileManager(destinations) {
       mmivAuth: {
         ready: Promise.resolve(),
         fetch: async (url) => {
-          if (url === '/api/v1/portal/me')
+          if (url === '/api/access/me')
             return { ok: true, status: 200, json: async () => ({ role: 'USER', destinations }) };
           throw new Error('Unexpected request ' + url);
         },
@@ -303,4 +295,20 @@ test('one writable destination keeps the upload menus', async () => {
     app.element('destination').children.map((option) => option.value),
     ['', 'SW002'],
   );
+});
+
+test('frontend reads profile and reporting data without traversing Transfer', () => {
+  for (const script of [homeSource, activitySource, adminSource, managerSource]) {
+    for (const legacy of [
+      '/api/v1/portal/me',
+      '/api/v1/portal/history',
+      '/api/v1/portal/logs',
+    ]) {
+      assert.equal(script.includes(legacy), false, `legacy read remains: ${legacy}`);
+    }
+  }
+  assert.ok(homeSource.includes("'/api/access/me'"));
+  assert.ok(homeSource.includes("'/api/history?page=0'"));
+  assert.ok(activitySource.includes("'/api/history'"));
+  assert.ok(adminSource.includes("'/api/dashboard'"));
 });
