@@ -595,7 +595,12 @@
         "path": "/api/reports/mine?page=0&size=1",
         "status": 200,
         "json_object": true,
-        "json_required": ["content", "page"]
+        "json_required": [
+          "content",
+          "number",
+          "totalPages",
+          "totalElements"
+        ]
       },
       {
         "name": "gateway routes home to login page",
