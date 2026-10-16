@@ -70,55 +70,71 @@ public class MetadataPlanRepository implements InitializingBean {
 
   @org.springframework.transaction.annotation.Transactional
   public MetadataPlan saveNamed(MetadataPlan plan, Collection<String> occupied) {
+    return saveNamedBatch(List.of(plan), occupied).getFirst();
+  }
+
+  @org.springframework.transaction.annotation.Transactional
+  public List<MetadataPlan> saveNamedBatch(
+      List<MetadataPlan> requestedPlans, Collection<String> occupied) {
+    if (requestedPlans == null || requestedPlans.isEmpty()) {
+      throw new IllegalArgumentException("plans must not be empty");
+    }
+    String destination = requestedPlans.getFirst().destinationId();
+    if (requestedPlans.stream().anyMatch(plan -> !destination.equals(plan.destinationId()))) {
+      throw new IllegalArgumentException("all plans must share one destination");
+    }
     try {
       jdbc.update(
           "MERGE INTO MMIV_NAME_LOCKS t USING (SELECT ? FOLDER FROM dual) s ON (t.FOLDER=s.FOLDER) WHEN NOT MATCHED THEN INSERT(FOLDER) VALUES(s.FOLDER)",
-          plan.destinationId());
+          destination);
     } catch (org.springframework.dao.DuplicateKeyException concurrentFirstUpload) {
       /* Another transaction initialized this folder lock. */
     }
     jdbc.queryForObject(
-        "SELECT FOLDER FROM MMIV_NAME_LOCKS WHERE FOLDER=? FOR UPDATE",
-        String.class,
-        plan.destinationId());
+        "SELECT FOLDER FROM MMIV_NAME_LOCKS WHERE FOLDER=? FOR UPDATE", String.class, destination);
     var used = new HashSet<>(occupied == null ? List.<String>of() : occupied);
     used.addAll(
         jdbc.queryForList(
             "SELECT OBJECT_PATH FROM MMIV_NAME_RESERVATIONS WHERE FOLDER=?",
             String.class,
-            plan.destinationId()));
-    String path = UploadNames.available(plan.objectPath(), used);
-    String name = path.substring(path.lastIndexOf('/') + 1);
-    String key = plan.destinationId() + "/migrations/" + plan.metadataId() + "/" + path;
-    if (name.length() > 200
-        || path.getBytes(java.nio.charset.StandardCharsets.UTF_8).length > 900
-        || key.getBytes(java.nio.charset.StandardCharsets.UTF_8).length > 1024)
-      throw new org.springframework.web.server.ResponseStatusException(
-          org.springframework.http.HttpStatus.BAD_REQUEST,
-          "File path is too long after adding a duplicate-name suffix");
-    var named =
-        new MetadataPlan(
-            plan.metadataId(),
-            plan.migrationId(),
-            plan.fileId(),
-            plan.ownerId(),
-            plan.destinationId(),
-            plan.bucket(),
-            key,
-            plan.sourcePath(),
-            name,
-            plan.contentType(),
-            plan.sizeBytes(),
-            plan.kind(),
-            path,
-            plan.verificationRunId());
-    save(named);
-    jdbc.update(
-        "INSERT INTO MMIV_NAME_RESERVATIONS(FOLDER,OBJECT_PATH,PLAN_ID) VALUES (?,?,?)",
-        named.destinationId(),
-        path,
-        named.metadataId().toString());
-    return named;
+            destination));
+    var result = new ArrayList<MetadataPlan>(requestedPlans.size());
+    for (MetadataPlan plan : requestedPlans) {
+      String path = UploadNames.available(plan.objectPath(), used);
+      String name = path.substring(path.lastIndexOf('/') + 1);
+      String key = plan.destinationId() + "/migrations/" + plan.metadataId() + "/" + path;
+      if (name.length() > 200
+          || path.getBytes(java.nio.charset.StandardCharsets.UTF_8).length > 900
+          || key.getBytes(java.nio.charset.StandardCharsets.UTF_8).length > 1024)
+        throw new org.springframework.web.server.ResponseStatusException(
+            org.springframework.http.HttpStatus.BAD_REQUEST,
+            "File path is too long after adding a duplicate-name suffix");
+      var named =
+          new MetadataPlan(
+              plan.metadataId(),
+              plan.migrationId(),
+              plan.fileId(),
+              plan.ownerId(),
+              plan.destinationId(),
+              plan.bucket(),
+              key,
+              plan.sourcePath(),
+              name,
+              plan.contentType(),
+              plan.sizeBytes(),
+              plan.kind(),
+              path,
+              plan.verificationRunId());
+      save(named);
+      jdbc.update(
+          "INSERT INTO MMIV_NAME_RESERVATIONS(FOLDER,OBJECT_PATH,PLAN_ID) VALUES (?,?,?)",
+          named.destinationId(),
+          path,
+          named.metadataId().toString());
+      used.add(path);
+      result.add(named);
+    }
+    return List.copyOf(result);
   }
 
   public void releaseName(UUID id, String owner) {

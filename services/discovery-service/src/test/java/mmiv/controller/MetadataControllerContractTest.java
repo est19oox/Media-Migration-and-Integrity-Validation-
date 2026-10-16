@@ -14,6 +14,35 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 class MetadataControllerContractTest {
   @Test
+  void batchAllocationForwardsFilesAndVerificationRun() throws Exception {
+    var metadata = mock(MetadataService.class);
+    UUID run = UUID.randomUUID();
+    UUID migration = UUID.randomUUID();
+    when(metadata.allocateBatch(isNull(), any(BatchAllocationRequest.class), eq(run)))
+        .thenReturn(new BatchAllocationResponse(migration, java.util.List.of()));
+    var mvc =
+        MockMvcBuilders.standaloneSetup(
+                new MetadataController(
+                    metadata, mock(TransferClient.class), mock(VerificationCleanupService.class)))
+            .setCustomArgumentResolvers(new AuthenticationPrincipalArgumentResolver())
+            .build();
+
+    mvc.perform(
+            post("/api/metadata/allocations/batch")
+                .header("X-MMIV-Verification-Run", run)
+                .contentType("application/json")
+                .content(
+                    """
+                    {"destinationId":"landing","occupiedPaths":[],"files":[
+                      {"fileName":"a.txt","sizeBytes":5,"relativePath":"a.txt"}
+                    ]}
+                    """))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.migrationId").value(migration.toString()));
+    verify(metadata).allocateBatch(isNull(), any(BatchAllocationRequest.class), eq(run));
+  }
+
+  @Test
   void sourcePlanDoesNotRequireClientFileSizeOrDestinationKey() throws Exception {
     var metadata = mock(MetadataService.class);
     var id = UUID.randomUUID();
