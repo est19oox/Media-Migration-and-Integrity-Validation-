@@ -8,6 +8,7 @@ import mmiv.reporting.audit.AuditEventRepository;
 import mmiv.reporting.report.MigrationReportDocument;
 import mmiv.reporting.report.MigrationReportRepository;
 import mmiv.reporting.report.MigrationReportStatus;
+import mmiv.reporting.report.FileFinalStatus;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
@@ -45,8 +46,8 @@ public class ReportQueryService {
   }
 
   public Page<ReportResponse.FileResult> ownedFiles(
-      String subject, UUID migrationId, Pageable requested) {
-    return files(ownedDocument(subject, migrationId), requested);
+      String subject, UUID migrationId, boolean failedOnly, Pageable requested) {
+    return files(ownedDocument(subject, migrationId), failedOnly, requested);
   }
 
   public Page<ReportResponse> all(
@@ -74,8 +75,9 @@ public class ReportQueryService {
     return ReportResponse.from(find(migrationId));
   }
 
-  public Page<ReportResponse.FileResult> anyFiles(UUID migrationId, Pageable requested) {
-    return files(find(migrationId), requested);
+  public Page<ReportResponse.FileResult> anyFiles(
+      UUID migrationId, boolean failedOnly, Pageable requested) {
+    return files(find(migrationId), failedOnly, requested);
   }
 
   public Page<ReportResponse.AuditEvent> events(UUID migrationId, Pageable requested) {
@@ -123,10 +125,11 @@ public class ReportQueryService {
   }
 
   private Page<ReportResponse.FileResult> files(
-      MigrationReportDocument report, Pageable requested) {
+      MigrationReportDocument report, boolean failedOnly, Pageable requested) {
     Pageable pageable = page(requested, Sort.by(Sort.Direction.ASC, "fileId"));
     List<ReportResponse.FileResult> values =
         report.getFiles().stream()
+            .filter(value -> !failedOnly || value.getFinalStatus() == FileFinalStatus.FAILED)
             .sorted(Comparator.comparing(value -> value.getFileId()))
             .map(ReportResponse.FileResult::from)
             .toList();

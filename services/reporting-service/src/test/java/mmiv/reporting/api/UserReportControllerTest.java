@@ -17,6 +17,7 @@ import mmiv.reporting.report.MigrationReportDocument;
 import mmiv.reporting.report.MigrationReportRepository;
 import mmiv.reporting.report.MigrationReportStatus;
 import mmiv.reporting.report.MigrationSource;
+import mmiv.reporting.report.FailureView;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -102,7 +103,33 @@ class UserReportControllerTest {
         MIGRATION_ID.toString(), controller.report(jwt("alice"), MIGRATION_ID).migrationId());
     assertEquals(
         fileId.toString(),
-        controller.files(jwt("alice"), MIGRATION_ID, 0, 20).getContent().getFirst().fileId());
+        controller.files(jwt("alice"), MIGRATION_ID, false, 0, 20).getContent().getFirst().fileId());
+  }
+
+  @Test
+  void ownerCanSelectOnlyFailedFilesBeforePagination() {
+    MigrationReportDocument report = report("alice");
+    UUID succeeded = UUID.fromString("00000000-0000-0000-0000-000000000001");
+    UUID failedOne = UUID.fromString("00000000-0000-0000-0000-000000000002");
+    UUID failedTwo = UUID.fromString("00000000-0000-0000-0000-000000000003");
+    report.getOrCreateFile(succeeded).recordIntegrityPassed();
+    report
+        .getOrCreateFile(failedOne)
+        .recordDiscoveryFailed(new FailureView("DISCOVERY", "INVALID", "Invalid metadata"));
+    report
+        .getOrCreateFile(failedTwo)
+        .recordTransferFailed(new FailureView("TRANSFER", "STORE_FAILED", "Upload failed"));
+    when(reports.findById(MIGRATION_ID.toString())).thenReturn(Optional.of(report));
+
+    Page<ReportResponse.FileResult> failures =
+        controller.files(jwt("alice"), MIGRATION_ID, true, 0, 20);
+    Page<ReportResponse.FileResult> all =
+        controller.files(jwt("alice"), MIGRATION_ID, false, 0, 20);
+
+    assertEquals(2, failures.getTotalElements());
+    assertEquals(java.util.List.of(failedOne.toString(), failedTwo.toString()),
+        failures.getContent().stream().map(ReportResponse.FileResult::fileId).toList());
+    assertEquals(3, all.getTotalElements());
   }
 
   @Test
@@ -111,7 +138,8 @@ class UserReportControllerTest {
 
     assertThrows(ReportNotFoundException.class, () -> controller.report(jwt("bob"), MIGRATION_ID));
     assertThrows(
-        ReportNotFoundException.class, () -> controller.files(jwt("bob"), MIGRATION_ID, 0, 20));
+        ReportNotFoundException.class,
+        () -> controller.files(jwt("bob"), MIGRATION_ID, false, 0, 20));
   }
 
   @Test
