@@ -634,3 +634,83 @@ body {
     padding-top: 68px;
   }
 }
+
+/* Invitation — reuse Login card design */
+
+.invite-wrap {
+  perspective: 1400px;
+}
+
+.invite-wrap .login-card {
+  transform-origin: center center;
+  backface-visibility: hidden;
+  transition:
+    transform 180ms ease-out,
+    box-shadow 180ms ease-out;
+}
+
+.invite-message {
+  margin: 34px 0 28px;
+  padding: 14px 16px;
+  background: rgba(0, 120, 212, 0.06);
+  border-left: 3px solid #317bd0;
+  border-radius: 4px;
+  color: #64748b;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.invite-wrap .invite-logout {
+  margin-top: 14px;
+  background: transparent;
+  color: #317bd0;
+  border: 1px solid rgba(49, 123, 208, 0.35);
+}
+
+.invite-wrap .invite-logout:hover {
+  background: rgba(49, 123, 208, 0.07);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .invite-wrap .login-card {
+    transform: none !important;
+    transition: none;
+  }
+}
+
+/* Invite card — preserve the original Login design */
+
+#invite-card .sub {
+  margin-bottom: 32px;
+}
+
+#invite-card .msg {
+  margin: 0 0 24px;
+  min-height: 24px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+#invite-card #accept {
+  margin-bottom: 14px;
+}
+
+#invite-card #logout {
+  background: transparent;
+  border: 1px solid #317bd0;
+  color: #317bd0;
+}
+
+#invite-card #logout:hover {
+  background: rgba(49, 123, 208, 0.08);
+}
+
+#invite-card button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+#invite-card button:focus-visible {
+  outline: 3px solid #83b5f0;
+  outline-offset: 3px;
+}
