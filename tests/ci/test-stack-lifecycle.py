@@ -632,7 +632,7 @@ class RunnerAndBarrierTest(unittest.TestCase):
             self.assertEqual(set(names), ssm.expected_services())
             user_access = environments['user-access-service']
             self.assertEqual(user_access['DAST_PATH'], '/user-access/actuator/health')
-            self.assertEqual(user_access['DAST_READY_PATH'], '/user-access/actuator/health')
+            self.assertEqual(user_access['DAST_READY_PATH'], '/actuator/health')
             self.assertEqual(user_access['DAST_ENDPOINT_BASE_PATH'], '/user-access')
             restore.assert_not_called()
 
