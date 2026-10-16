@@ -170,7 +170,10 @@
     return {
       ...payload,
       content: payload.content.map((event) => {
-        const presentation = presentations[event.eventType] || ['MIGRATION', 'Migration status updated'];
+        const presentation = presentations[event.eventType] || [
+          'MIGRATION',
+          'Migration status updated',
+        ];
         const rawStatus = event.data && event.data.status;
         return {
           stage: presentation[0],
@@ -197,7 +200,9 @@
         cell(event.eventType),
         cell(event.sourceService),
         cell(event.fileId),
-        cell(event.data && typeof event.data === 'object' ? JSON.stringify(event.data) : event.data),
+        cell(
+          event.data && typeof event.data === 'object' ? JSON.stringify(event.data) : event.data,
+        ),
       );
       return row;
     });
@@ -241,7 +246,8 @@
         adminRows.replaceChildren();
       }
       rendered = true;
-      statusMessage.textContent = currentStatus === 'PROCESSING' ? 'Migration is still processing.' : '';
+      statusMessage.textContent =
+        currentStatus === 'PROCESSING' ? 'Migration is still processing.' : '';
     } catch (error) {
       statusMessage.textContent =
         rendered || isPolling

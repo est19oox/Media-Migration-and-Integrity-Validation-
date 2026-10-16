@@ -1153,7 +1153,8 @@
           plural(payload.totalElements, 'report') + ' · page ' + (adminReportPage + 1);
       if (adminReportsPrevious) adminReportsPrevious.disabled = adminReportPage === 0;
       if (adminReportsNext)
-        adminReportsNext.disabled = adminReportPages === 0 || adminReportPage + 1 >= adminReportPages;
+        adminReportsNext.disabled =
+          adminReportPages === 0 || adminReportPage + 1 >= adminReportPages;
     } catch (error) {
       messageRow(adminReportsTable, 7, error.message);
       if (adminReportsMeta) adminReportsMeta.textContent = 'Unavailable';

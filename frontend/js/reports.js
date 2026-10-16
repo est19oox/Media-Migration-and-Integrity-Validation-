@@ -119,7 +119,9 @@
       totalPages = payload.totalPages;
       render(payload.content);
       count.textContent = `${payload.totalElements} ${payload.totalElements === 1 ? 'report' : 'reports'}`;
-      status.textContent = payload.content.length ? `Showing page ${page + 1}` : 'No migration reports found.';
+      status.textContent = payload.content.length
+        ? `Showing page ${page + 1}`
+        : 'No migration reports found.';
       previous.disabled = page === 0;
       next.disabled = totalPages === 0 || page + 1 >= totalPages;
     } catch (_) {
