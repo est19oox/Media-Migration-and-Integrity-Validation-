@@ -33,7 +33,7 @@ Regular users can delete only files assigned to them by Metadata, while they ret
 
 The folder list is compact on desktop and uses rows with touch controls on phones. English file-picker labels and validation messages replace browser-localized page controls. The operating system’s file picker and browser PDF/media controls may still follow the device language.
 
-PWA installation and worker registration are currently commented out at the project owner’s request. The normal website remains responsive on phones. Optional PWA assets are retained for future use; no unregister step is needed because this feature was not deployed.
+PWA installation and worker registration are disabled. The responsive website remains usable on phones; retained PWA assets are not served as an installed application.
 
 Invitation copying uses the Clipboard API where available, then a selected-text copy fallback on HTTP. If browser restrictions prevent both, the link stays selected with English Ctrl+C/Cmd+C instructions. Searching for an unknown account or inviting a nonexistent administrator recipient shows an account-creation prompt. Failed login advises using Create an account while retaining a generic credential failure.
 

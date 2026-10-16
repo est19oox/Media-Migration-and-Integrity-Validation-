@@ -1,5 +1,9 @@
 # MMIV 本地 Jenkins 运行指南
 
+[English](local-setup.md) | [简体中文](local-setup.zh-CN.md)
+
+本指南介绍可选的本地 Jenkins 演示环境，不是仓库的权威托管 CI/CD 流程。托管验证和发布自动化由 GitHub Actions 执行。
+
 ## 1. 使用范围
 
 本项目通过 Docker 提供可复现的本地 Jenkins 环境，用于开发、课程演示和 CI 验证。组员不需要单独安装 Jenkins、Java、Semgrep、Trivy 或 Checkov，这些工具由 Jenkins 镜像提供。

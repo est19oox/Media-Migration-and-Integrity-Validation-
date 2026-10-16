@@ -1,5 +1,11 @@
 # Bootstrap configuration and recovery
 
+> **Review before use:** This contains incident-specific historical recovery
+> notes and resource identifiers. It is not a verified description of the
+> current AWS account or Terraform state. Confirm the live workflow, state
+> backend, IAM permissions, and resources with an authorized operator before
+> following any recovery steps.
+
 GitHubActions-MMIV-Terraform must already exist and trust the repository. It must have permissions to manage the bootstrap resources and access their remote state.
 
 bootstrap/main.tf defines the Terraform state bucket and its public access block, encryption and versioning. bootstrap/github.tf defines GitHub OIDC and deployment roles/policies. IAM user/group configuration remains in infrastructure/terraform/modules/iam/main.tf and must not be copied into the bootstrap root module.
