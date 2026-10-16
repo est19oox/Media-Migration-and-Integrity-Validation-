@@ -93,7 +93,16 @@
         <section class="report-detail-card glass-panel" aria-labelledby="report-files-title">
           <div class="report-section-heading">
             <h2 id="report-files-title">Files</h2>
-            <span id="reportFileCount">0 files</span>
+            <div class="report-file-heading-tools">
+              <label id="reportFileScopeControl" hidden>
+                <span>Show</span>
+                <select id="reportFileScope">
+                  <option value="failed">Failed files</option>
+                  <option value="all">All files</option>
+                </select>
+              </label>
+              <span id="reportFileCount">0 files</span>
+            </div>
           </div>
           <div class="reports-table-scroll" tabindex="0" aria-label="Scrollable file results">
             <table class="reports-table report-files-table">

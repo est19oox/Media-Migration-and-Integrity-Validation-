@@ -244,7 +244,7 @@ function detailPage(options = {}) {
   const responses = {
     ['/api/access/me']: profile,
     [`/api/reports/${MIGRATION_ID}`]: summary,
-    [`/api/reports/${MIGRATION_ID}/files?page=0&size=20`]: {
+    [`/api/reports/${MIGRATION_ID}/files?page=0&size=20&failedOnly=true`]: {
       content: [
         {
           fileId: 'file-1',
@@ -290,7 +290,7 @@ function detailPage(options = {}) {
       totalElements: 1,
     },
     [`/api/admin/reports/${MIGRATION_ID}`]: summary,
-    [`/api/admin/reports/${MIGRATION_ID}/files?page=0&size=20`]: {
+    [`/api/admin/reports/${MIGRATION_ID}/files?page=0&size=20&failedOnly=true`]: {
       content: [
         {
           fileId: 'file-1',
@@ -306,6 +306,12 @@ function detailPage(options = {}) {
       number: 0,
       totalPages: 1,
       totalElements: 1,
+    },
+    [`/api/admin/reports/${MIGRATION_ID}/files?page=0&size=20&failedOnly=false`]: {
+      content: [],
+      number: 0,
+      totalPages: 0,
+      totalElements: 0,
     },
     ...(options.responses || {}),
   };
@@ -391,7 +397,7 @@ test('loads summary files and sanitized timeline for an owned report', async () 
   assert.deepEqual(app.requests, [
     '/api/access/me',
     `/api/reports/${MIGRATION_ID}`,
-    `/api/reports/${MIGRATION_ID}/files?page=0&size=20`,
+    `/api/reports/${MIGRATION_ID}/files?page=0&size=20&failedOnly=true`,
     `/api/reports/${MIGRATION_ID}/timeline?page=0&size=50`,
   ]);
   assert.equal(app.element('reportMigrationId').textContent, MIGRATION_ID);
@@ -408,6 +414,8 @@ test('does not request admin events for a USER profile', async () => {
   await app.flush();
   assert.equal(app.requests.some((url) => url.includes('/api/admin/reports/')), false);
   assert.equal(app.element('adminReportEvents').hidden, true);
+  assert.equal(app.element('reportFileScopeControl').hidden, true);
+  assert.equal(app.requests.some((url) => url.includes('failedOnly=false')), false);
 });
 
 test('requests /api/admin/reports/{id}/events only for current ADMIN', async () => {
@@ -419,7 +427,25 @@ test('requests /api/admin/reports/{id}/events only for current ADMIN', async () 
   assert.ok(app.requests.includes(`/api/admin/reports/${MIGRATION_ID}`));
   assert.equal(app.requests.includes(`/api/reports/${MIGRATION_ID}`), false);
   assert.equal(app.element('adminReportEvents').hidden, false);
+  assert.equal(app.element('reportFileScopeControl').hidden, false);
   assert.equal(app.element('adminEventRows').children.length, 1);
+});
+
+test('administrator can switch from failed files to all files from page zero', async () => {
+  const app = detailPage({ profile: { userId: 'admin', username: 'admin', role: 'ADMIN' } });
+  await app.flush();
+  assert.ok(
+    app.requests.includes(
+      `/api/admin/reports/${MIGRATION_ID}/files?page=0&size=20&failedOnly=true`,
+    ),
+  );
+  app.element('reportFileScope').value = 'all';
+  app.element('reportFileScope').listeners.change({ preventDefault() {} });
+  await app.flush();
+  assert.equal(
+    app.requests.at(-1),
+    `/api/admin/reports/${MIGRATION_ID}/files?page=0&size=20&failedOnly=false`,
+  );
 });
 
 test('polls PROCESSING every ten seconds and stops on every terminal status', async () => {
@@ -493,6 +519,8 @@ test('detail page exposes report, file, timeline and admin event regions', () =>
     'reportTimeline',
     'adminReportEvents',
     'adminEventRows',
+    'reportFileScope',
+    'reportFileScopeControl',
   ].forEach((id) => assert.ok(detailHtml.includes(`id="${id}"`), `missing ${id}`));
   assert.ok(detailHtml.includes('id="reportBackLink"'));
   assert.ok(detailHtml.includes('href="/pages/reports.html"'));

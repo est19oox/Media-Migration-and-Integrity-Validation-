@@ -304,6 +304,29 @@ body.home-page.reports-page {
   font-size: 12px;
 }
 
+.report-file-heading-tools {
+  display: flex;
+  align-items: end;
+  gap: 14px;
+}
+
+.report-file-heading-tools label {
+  display: grid;
+  gap: 5px;
+  color: var(--reports-muted);
+  font-size: 11px;
+}
+
+.report-file-heading-tools select {
+  min-width: 140px;
+  height: 36px;
+  padding: 0 10px;
+  border: 1px solid var(--reports-line);
+  border-radius: 6px;
+  color: var(--reports-text);
+  background: rgba(255, 255, 255, 0.78);
+}
+
 .report-timeline {
   display: grid;
   gap: 10px;

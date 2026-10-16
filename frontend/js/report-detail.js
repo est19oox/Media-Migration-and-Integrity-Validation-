@@ -24,14 +24,19 @@
   const timeline = element('reportTimeline');
   const adminSection = element('adminReportEvents');
   const adminRows = element('adminEventRows');
+  const fileScopeControl = element('reportFileScopeControl');
+  const fileScope = element('reportFileScope');
   let profile = null;
   let currentStatus = null;
   let filePage = 0;
   let filePages = 0;
+  let failedOnly = true;
   let timer = null;
   let rendered = false;
 
   adminSection.hidden = true;
+  fileScopeControl.hidden = true;
+  fileScope.value = 'failed';
 
   const text = (value, fallback = '—') =>
     value === null || value === undefined || value === '' ? fallback : String(value);
@@ -101,6 +106,7 @@
         link.hidden = value.role !== 'ADMIN';
       });
     }
+    fileScopeControl.hidden = value.role !== 'ADMIN';
   }
 
   function renderSummary(report) {
@@ -236,13 +242,17 @@
     }
   }
 
+  function filesUrl(root, requestedPage) {
+    return `${root}/${id}/files?page=${requestedPage}&size=${FILE_SIZE}&failedOnly=${failedOnly}`;
+  }
+
   async function refresh(isPolling = false) {
     cancelPoll();
     try {
       const reportRoot = profile.role === 'ADMIN' ? '/api/admin/reports' : '/api/reports';
       const tasks = [
         read(`${reportRoot}/${id}`),
-        read(`${reportRoot}/${id}/files?page=${filePage}&size=${FILE_SIZE}`),
+        read(filesUrl(reportRoot, filePage)),
       ];
       tasks.push(
         profile.role === 'ADMIN'
@@ -276,7 +286,7 @@
   async function loadFilePage(nextPage) {
     try {
       const root = profile.role === 'ADMIN' ? '/api/admin/reports' : '/api/reports';
-      const payload = await read(`${root}/${id}/files?page=${nextPage}&size=${FILE_SIZE}`);
+      const payload = await read(filesUrl(root, nextPage));
       renderFiles(payload);
       statusMessage.textContent = '';
     } catch (_) {
@@ -290,6 +300,12 @@
   });
   element('reportFilesNext').addEventListener('click', () => {
     if (filePage + 1 < filePages) loadFilePage(filePage + 1);
+  });
+  fileScope.addEventListener('change', () => {
+    if (!profile || profile.role !== 'ADMIN') return;
+    failedOnly = fileScope.value !== 'all';
+    filePage = 0;
+    loadFilePage(0);
   });
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden') {
