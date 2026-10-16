@@ -75,6 +75,7 @@ are paired for every guide.
 - [Optional local Jenkins](jenkins/local-setup.md) |
   [简体中文](jenkins/local-setup.zh-CN.md) — local demonstration controller;
   GitHub Actions remains the hosted CI/CD path.
+
 ## Administration
 
 - [Administrator access](admin/administrator-access.md) |
