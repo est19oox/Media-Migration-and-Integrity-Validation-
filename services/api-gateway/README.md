@@ -28,16 +28,16 @@ Gateway also requires `USER_ACCESS_JWT_ISSUER` and
 
 ## Main routes
 
-| Gateway path | Owner | Notes |
-| --- | --- | --- |
-| `/`, `/pages/**`, `/css/**`, `/js/**`, `/assets/**` | API Gateway | Frontend packaged in the Gateway image |
-| `/api/v1/session` | API Gateway | Browser session and CSRF lifecycle |
-| `/user-access/**`, `/api/access/**` | User Access | Login/account and permission APIs |
-| `/api/v1/transfers/**`, `/api/v1/files/**`, `/api/v1/portal/**` | Transfer | Migration/file operations |
-| `/api/metadata/**`, `/api/discovery/**`, `/discovery/**` | Discovery | Metadata and discovery operations |
-| `/api/integrity/**`, `/integrity/**` | Integrity | Integrity validation |
-| `/api/reports/**`, `/api/admin/reports/**`, `/api/history`, `/api/dashboard` | Reporting | Owner and administrator report queries |
-| `/reporting/**` | Reporting | Compatibility prefix with `/reporting` stripped |
+| Gateway path                                                                 | Owner       | Notes                                           |
+| ---------------------------------------------------------------------------- | ----------- | ----------------------------------------------- |
+| `/`, `/pages/**`, `/css/**`, `/js/**`, `/assets/**`                          | API Gateway | Frontend packaged in the Gateway image          |
+| `/api/v1/session`                                                            | API Gateway | Browser session and CSRF lifecycle              |
+| `/user-access/**`, `/api/access/**`                                          | User Access | Login/account and permission APIs               |
+| `/api/v1/transfers/**`, `/api/v1/files/**`, `/api/v1/portal/**`              | Transfer    | Migration/file operations                       |
+| `/api/metadata/**`, `/api/discovery/**`, `/discovery/**`                     | Discovery   | Metadata and discovery operations               |
+| `/api/integrity/**`, `/integrity/**`                                         | Integrity   | Integrity validation                            |
+| `/api/reports/**`, `/api/admin/reports/**`, `/api/history`, `/api/dashboard` | Reporting   | Owner and administrator report queries          |
+| `/reporting/**`                                                              | Reporting   | Compatibility prefix with `/reporting` stripped |
 
 Unknown routes are not dynamically exposed. A missing discovered backend gives
 a clean 503 after Eureka observes the outage. Gateway does not retry mutation
