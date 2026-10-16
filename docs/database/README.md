@@ -1,5 +1,7 @@
 # Local Oracle database
 
+[English](README.md) | [简体中文](README.zh-CN.md)
+
 Requirements: Docker running with Linux containers and Docker Compose v2.
 
 From the repository root on Windows:
