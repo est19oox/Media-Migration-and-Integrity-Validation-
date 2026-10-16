@@ -45,6 +45,21 @@
     return Number.isNaN(parsed.getTime()) ? '—' : parsed.toLocaleString();
   };
 
+  const formatSource = (source) => {
+    if (typeof source === 'string') return text(source);
+    if (!source || typeof source !== 'object') return '—';
+    const type = typeof source.type === 'string' ? source.type : '';
+    const label = type
+      ? type.charAt(0).toUpperCase() + type.slice(1).toLowerCase().replaceAll('_', ' ')
+      : 'Migration source';
+    const parts = [label];
+    if (typeof source.rootId === 'string' && source.rootId) parts.push(`Root: ${source.rootId}`);
+    if (typeof source.manifestName === 'string' && source.manifestName) {
+      parts.push(`Manifest: ${source.manifestName}`);
+    }
+    return parts.join(' · ');
+  };
+
   const cell = (value) => {
     const result = document.createElement('td');
     result.textContent = text(value);
@@ -93,7 +108,7 @@
     currentStatus = text(report.status, 'UNKNOWN');
     element('reportMigrationId').textContent = text(report.migrationId);
     element('reportInitiatedBy').textContent = text(report.initiatedBy);
-    element('reportSource').textContent = text(report.source);
+    element('reportSource').textContent = formatSource(report.source);
     element('reportStartedAt').textContent = date(report.startedAt);
     element('reportCompletedAt').textContent = date(report.completedAt);
     const badge = element('reportOverallStatus');

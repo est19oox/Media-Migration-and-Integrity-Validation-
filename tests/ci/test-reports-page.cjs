@@ -225,7 +225,7 @@ function detailPage(options = {}) {
     migrationId: MIGRATION_ID,
     status: 'COMPLETED',
     initiatedBy: 'alice',
-    source: 'MANIFEST',
+    source: { type: 'MANIFEST', rootId: 'uploads/2026', manifestName: 'batch.csv' },
     startedAt: '2026-10-11T10:00:00Z',
     completedAt: '2026-10-11T10:05:00Z',
     summary: {
@@ -395,6 +395,10 @@ test('loads summary files and sanitized timeline for an owned report', async () 
     `/api/reports/${MIGRATION_ID}/timeline?page=0&size=50`,
   ]);
   assert.equal(app.element('reportMigrationId').textContent, MIGRATION_ID);
+  assert.equal(
+    app.element('reportSource').textContent,
+    'Manifest · Root: uploads/2026 · Manifest: batch.csv',
+  );
   assert.equal(app.element('reportFileRows').children.length, 1);
   assert.equal(app.element('reportTimeline').children.length, 1);
 });
@@ -490,4 +494,13 @@ test('detail page exposes report, file, timeline and admin event regions', () =>
     'adminReportEvents',
     'adminEventRows',
   ].forEach((id) => assert.ok(detailHtml.includes(`id="${id}"`), `missing ${id}`));
+  assert.ok(detailHtml.includes('id="reportBackLink"'));
+  assert.ok(detailHtml.includes('href="/pages/reports.html"'));
+  assert.ok(detailHtml.includes('class="report-detail-toolbar"'));
+});
+
+test('detail styles keep the document scrollable and grids responsive', () => {
+  const css = readFileSync('frontend/css/reports.css', 'utf8');
+  assert.match(css, /\.reports-page \.home-shell[\s\S]*overflow:\s*visible/);
+  assert.match(css, /@media \(max-width: 1000px\)[\s\S]*\.report-metadata/);
 });
