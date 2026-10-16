@@ -8,6 +8,7 @@ const html = readFileSync('frontend/pages/reports.html', 'utf8');
 const detailSource = readFileSync('frontend/js/report-detail.js', 'utf8');
 const detailHtml = readFileSync('frontend/pages/report-detail.html', 'utf8');
 const REPORTS = '/api/reports/mine';
+const PROFILE = '/api/access/me';
 const MIGRATION_ID = '123e4567-e89b-42d3-a456-426614174000';
 
 const report = {
@@ -56,6 +57,8 @@ function node(tagName) {
 
 async function page(options = {}) {
   const nodes = new Map();
+  const adminLinks = [node('A')];
+  adminLinks[0].hidden = true;
   const requests = [];
   const redirects = [];
   const byId = (id) => {
@@ -64,12 +67,14 @@ async function page(options = {}) {
   };
   byId('reportStatusFilter').value = '';
 
-  const respond =
-    options.respond ||
-    (() => ({
+  const reportRespond = options.respond || (() => ({
       status: 200,
       body: { content: [report], number: 0, totalPages: 1, totalElements: 1 },
     }));
+  const respond = (url) =>
+    url === PROFILE
+      ? { status: 200, body: options.profile || { username: 'alice', role: 'USER' } }
+      : reportRespond(url);
   const fetchMock = async (url) => {
     requests.push(url);
     const response = respond(url);
@@ -81,6 +86,7 @@ async function page(options = {}) {
     document: {
       getElementById: byId,
       createElement: (tag) => node(String(tag).toUpperCase()),
+      querySelectorAll: (selector) => (selector === '[data-admin]' ? adminLinks : []),
     },
     window: { mmivAuth: { ready: Promise.resolve(), fetch: fetchMock } },
     location: { replace: (value) => redirects.push(value) },
@@ -97,6 +103,7 @@ async function page(options = {}) {
     requests,
     redirects,
     element: byId,
+    adminLinks,
     rows: () => byId('reportRows').children,
     flush,
     async trigger(id, event = 'click') {
@@ -108,7 +115,7 @@ async function page(options = {}) {
 
 test('loads only /api/reports/mine and renders summary values safely', async () => {
   const app = await page();
-  assert.deepEqual(app.requests, [REPORTS + '?page=0&size=20']);
+  assert.deepEqual(app.requests, [PROFILE, REPORTS + '?page=0&size=20']);
   const row = app.rows()[0];
   assert.equal(row.children[0].textContent, '<migration-001>');
   assert.equal(row.children[3].textContent, '10');
@@ -117,6 +124,17 @@ test('loads only /api/reports/mine and renders summary values safely', async () 
   assert.equal(row.children[6].textContent, '80.0%');
   assert.equal(row.children[7].children[0].href, '/pages/report-detail.html?id=%3Cmigration-001%3E');
   assert.equal(row.children[0].innerWrites(), 0);
+});
+
+test('renders the current profile and only reveals administration to ADMIN', async () => {
+  const admin = await page({ profile: { username: 'admin-user', role: 'ADMIN' } });
+  assert.equal(admin.element('account').textContent, 'admin-user');
+  assert.equal(admin.element('accountRole').textContent, 'Administrator');
+  assert.equal(admin.adminLinks[0].hidden, false);
+  assert.equal(admin.requests.filter((url) => url.startsWith(REPORTS)).length, 1);
+
+  const user = await page();
+  assert.equal(user.adminLinks[0].hidden, true);
 });
 
 test('status filter resets pagination and encodes the value', async () => {
@@ -147,6 +165,7 @@ test('next and previous buttons obey returned page metadata', async () => {
   });
   assert.equal(app.element('reportsPrevious').disabled, true);
   assert.equal(app.element('reportsNext').disabled, false);
+  assert.equal(app.element('reportsPagePosition').textContent, 'Page 1 of 2');
   await app.trigger('reportsNext');
   assert.equal(app.requests.at(-1), REPORTS + '?page=1&size=20');
   assert.equal(app.element('reportsPrevious').disabled, false);
@@ -180,10 +199,12 @@ test('page exposes the required report controls and navigation', () => {
     'reportStatusFilter',
     'reportRows',
     'reportCount',
+    'reportsPagePosition',
     'reportsPrevious',
     'reportsNext',
     'reportsStatus',
   ].forEach((id) => assert.ok(html.includes(`id="${id}"`), `missing ${id}`));
+  assert.ok(html.includes('class="home-page reports-page"'));
   assert.ok(html.includes('<script src="../js/reports.js"></script>'));
   assert.equal(html.includes('Demo data'), false);
 });

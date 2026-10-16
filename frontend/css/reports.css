@@ -4,6 +4,26 @@
   --reports-line: rgba(110, 155, 200, 0.16);
 }
 
+html:has(body.reports-page),
+body.home-page.reports-page {
+  height: auto;
+  min-height: 100%;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.reports-page .home-shell {
+  height: auto;
+  min-height: 100dvh;
+  overflow: visible;
+}
+
+.reports-page .home-main {
+  flex: 1 0 auto;
+  min-height: auto;
+  overflow: visible;
+}
+
 .reports-main {
   width: 100%;
   flex: 1;
@@ -17,7 +37,7 @@
   width: 100%;
   min-height: 0;
   padding: 24px 26px;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .reports-heading,
@@ -137,6 +157,11 @@
 
 .reports-pagination {
   gap: 8px;
+}
+
+#reportsPagePosition {
+  margin-right: 4px;
+  white-space: nowrap;
 }
 
 .reports-pagination button {
