@@ -13,11 +13,11 @@ import java.util.UUID;
 import mmiv.reporting.audit.AuditEventDocument;
 import mmiv.reporting.audit.AuditEventRepository;
 import mmiv.reporting.contract.EventType;
+import mmiv.reporting.report.FailureView;
 import mmiv.reporting.report.MigrationReportDocument;
 import mmiv.reporting.report.MigrationReportRepository;
 import mmiv.reporting.report.MigrationReportStatus;
 import mmiv.reporting.report.MigrationSource;
-import mmiv.reporting.report.FailureView;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -103,7 +103,11 @@ class UserReportControllerTest {
         MIGRATION_ID.toString(), controller.report(jwt("alice"), MIGRATION_ID).migrationId());
     assertEquals(
         fileId.toString(),
-        controller.files(jwt("alice"), MIGRATION_ID, false, 0, 20).getContent().getFirst().fileId());
+        controller
+            .files(jwt("alice"), MIGRATION_ID, false, 0, 20)
+            .getContent()
+            .getFirst()
+            .fileId());
   }
 
   @Test
@@ -127,7 +131,8 @@ class UserReportControllerTest {
         controller.files(jwt("alice"), MIGRATION_ID, false, 0, 20);
 
     assertEquals(2, failures.getTotalElements());
-    assertEquals(java.util.List.of(failedOne.toString(), failedTwo.toString()),
+    assertEquals(
+        java.util.List.of(failedOne.toString(), failedTwo.toString()),
         failures.getContent().stream().map(ReportResponse.FileResult::fileId).toList());
     assertEquals(3, all.getTotalElements());
   }

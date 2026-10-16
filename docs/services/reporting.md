@@ -7,6 +7,13 @@ immutable audit trail in MongoDB, and projects one queryable report per
 migration. It does not orchestrate Discovery, Transfer, or Integrity and it
 does not read their relational tables.
 
+A folder upload is one migration run: Discovery allocates one shared
+`migrationId` for every file in the batch, and Reporting aggregates all file
+outcomes under that single report. For example, a 160-file upload produces one
+report summary, not 160 report cards. The owner view lists failed files by
+default. Administrators can switch between failed-only and all-file views for
+troubleshooting; both views are paginated and retain their full result totals.
+
 The frozen producer contract and examples are in
 [`../contracts/events/v2/README.md`](../contracts/events/v2/README.md).
 Discovery publishes
@@ -26,6 +33,7 @@ the relayed JWT again and applies data ownership itself:
 | `GET /api/reports/{migrationId}/files`    | Report owner       | Stable paged file results          |
 | `GET /api/reports/{migrationId}/timeline` | Report owner       | Sanitized business timeline        |
 | `GET /api/admin/reports`                  | Administrator      | Cross-user report search           |
+| `GET /api/admin/reports/{migrationId}/files` | Administrator   | Failed/all file troubleshooting    |
 | `GET /api/history`                        | Administrator      | Operational audit history          |
 | `GET /api/dashboard`                      | Administrator      | Aggregate operational dashboard    |
 
@@ -40,6 +48,8 @@ must go through Gateway; frontend code must not call Reporting directly.
 
 - `audit_events` contains the immutable consumed event records.
 - `migration_reports` contains the current migration projection.
+- Per-file events remain individually auditable, but they do not create
+  separate migration reports.
 - Messages are acknowledged only after audit and projection persistence.
 - Reusing an `eventId` with different content is rejected as a conflict.
 - Events may arrive out of order; stage-owned fields are recalculated safely.

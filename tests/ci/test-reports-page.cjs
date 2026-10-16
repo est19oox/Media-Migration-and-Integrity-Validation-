@@ -432,13 +432,30 @@ test('requests /api/admin/reports/{id}/events only for current ADMIN', async () 
 });
 
 test('administrator can switch from failed files to all files from page zero', async () => {
-  const app = detailPage({ profile: { userId: 'admin', username: 'admin', role: 'ADMIN' } });
+  const app = detailPage({
+    profile: { userId: 'admin', username: 'admin', role: 'ADMIN' },
+    responses: {
+      [`/api/admin/reports/${MIGRATION_ID}/files?page=0&size=20&failedOnly=true`]: {
+        content: [{ fileId: 'failed-1', finalStatus: 'FAILED' }],
+        number: 0,
+        totalPages: 1,
+        totalElements: 3,
+      },
+      [`/api/admin/reports/${MIGRATION_ID}/files?page=0&size=20&failedOnly=false`]: {
+        content: [{ fileId: 'file-1', finalStatus: 'SUCCEEDED' }],
+        number: 0,
+        totalPages: 8,
+        totalElements: 160,
+      },
+    },
+  });
   await app.flush();
   assert.ok(
     app.requests.includes(
       `/api/admin/reports/${MIGRATION_ID}/files?page=0&size=20&failedOnly=true`,
     ),
   );
+  assert.equal(app.element('reportFileCount').textContent, '3 files');
   app.element('reportFileScope').value = 'all';
   app.element('reportFileScope').listeners.change({ preventDefault() {} });
   await app.flush();
@@ -446,6 +463,8 @@ test('administrator can switch from failed files to all files from page zero', a
     app.requests.at(-1),
     `/api/admin/reports/${MIGRATION_ID}/files?page=0&size=20&failedOnly=false`,
   );
+  assert.equal(app.element('reportFileCount').textContent, '160 files');
+  assert.equal(app.element('reportFilesNext').disabled, false);
 });
 
 test('polls PROCESSING every ten seconds and stops on every terminal status', async () => {
