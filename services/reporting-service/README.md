@@ -1,99 +1,96 @@
-See [the integrated stack guide](../../docs/integration/services.md) for producer wiring, account permissions, and RabbitMQ service logging. The standalone examples below exercise the reporting event contract.
-
 # Reporting Service
 
-Reporting consumes MMIV v2 outcome events from RabbitMQ, stores an immutable
-audit trail in MongoDB, and maintains one queryable report per migration. It
-does not control the Discovery, Transfer, or Integrity workflow.
+Reporting consumes MMIV v2 business outcome events from RabbitMQ, stores an
+immutable audit trail in MongoDB, and projects one queryable report per
+migration. It does not orchestrate Discovery, Transfer, or Integrity and it
+does not read their relational tables.
 
-The frozen publisher contract and examples are in
-[`../../contracts/events/v2`](../../contracts/events/v2).
+The frozen producer contract and examples are in
+[`../../contracts/events/v2`](../../contracts/events/v2). Discovery publishes
+migration/discovery outcomes, Transfer publishes storage outcomes, and
+Integrity publishes validation outcomes. Duplicate delivery is idempotent and
+invalid or exhausted events are sent to `reporting.events.dlq`.
 
-## Local prerequisites
+## Access model
 
-- Docker Desktop (Windows/macOS) or Docker Engine with Compose v2 (Linux)
-- JDK 25 for building the service JAR
-- PowerShell 5.1+ on Windows, or POSIX `sh`, `curl`, and Python 3 on macOS/Linux
+Browser and external clients use API Gateway on port 8080. Reporting validates
+the relayed JWT again and applies data ownership itself:
 
-MongoDB and RabbitMQ are separate containers. The Compose stack uses pinned
-multi-architecture images so the same setup works on Windows/Linux amd64 and
-Apple Silicon arm64.
+| Gateway endpoint | Access | Purpose |
+| --- | --- | --- |
+| `GET /api/reports/mine` | Authenticated user | Paged reports owned by JWT subject |
+| `GET /api/reports/{migrationId}` | Report owner | One sanitized report |
+| `GET /api/reports/{migrationId}/files` | Report owner | Stable paged file results |
+| `GET /api/reports/{migrationId}/timeline` | Report owner | Sanitized business timeline |
+| `GET /api/admin/reports` | Administrator | Cross-user report search |
+| `GET /api/history` | Administrator | Operational audit history |
+| `GET /api/dashboard` | Administrator | Aggregate operational dashboard |
 
-## Start and smoke-test the complete local stack
+A user cannot select another owner with a query parameter. Internal exception
+text, infrastructure addresses, credentials, absolute paths, and checksum
+values are not returned by the user timeline.
 
-Windows:
+The service's loopback port 8084 is for local diagnostics. Production access
+must go through Gateway; frontend code must not call Reporting directly.
 
-```powershell
-powershell -ExecutionPolicy Bypass -File services/reporting-service/scripts/smoke.ps1
-```
+## Storage and processing guarantees
 
-macOS/Linux:
+- `audit_events` contains the immutable consumed event records.
+- `migration_reports` contains the current migration projection.
+- Messages are acknowledged only after audit and projection persistence.
+- Reusing an `eventId` with different content is rejected as a conflict.
+- Events may arrive out of order; stage-owned fields are recalculated safely.
+- A late terminal event can recover an `INCOMPLETE` report.
+- MongoDB and RabbitMQ run as separate containers from the Java service.
 
-```sh
-sh services/reporting-service/scripts/smoke.sh
-```
+Transfer's older AWS SQS operational log is unrelated and is not consumed by
+Reporting.
 
-The smoke test builds the JAR, starts Reporting + MongoDB + RabbitMQ, publishes
-the five successful-path contract fixtures, waits for a completed report, and
-replays the Integrity event to prove duplicate delivery does not change totals.
-It deliberately leaves the stack running for inspection.
+## Build and unit test
 
-Stop containers while keeping MongoDB/RabbitMQ data:
-
-```sh
-docker compose -f services/reporting-service/compose.yml down
-```
-
-Delete containers **and** local data only when intentional:
-
-```sh
-docker compose -f services/reporting-service/compose.yml down --volumes
-```
-
-Copy `.env.example` to `.env` in this directory only if you need different
-local ports or credentials. Do not commit a real `.env` file.
-
-## Local endpoints
-
-| Endpoint                                                     | Purpose                                           |
-| ------------------------------------------------------------ | ------------------------------------------------- |
-| `GET http://localhost:8084/actuator/health`                  | Runtime health                                    |
-| `GET http://localhost:8084/api/reports/{migrationId}`        | One migration report                              |
-| `GET http://localhost:8084/api/reports?page=0&size=20`       | Paged reports                                     |
-| `GET http://localhost:8084/api/reports/{migrationId}/files`  | Stable, paged file results                        |
-| `GET http://localhost:8084/api/reports/{migrationId}/events` | Ordered audit events without processing internals |
-| `http://localhost:15672`                                     | RabbitMQ management UI                            |
-
-Default local RabbitMQ login: `mmiv` / `mmiv-local`. These are development-only
-defaults and must be overridden outside a developer machine.
-
-## Build and test without Docker
-
-From the repository root:
+Use Java 25 and the repository Maven wrapper:
 
 ```sh
 services/user-access-service/mvnw -B -f services/reporting-service/pom.xml clean verify
 ```
 
-The Spring context test disables external health contributors and listener
-startup, so unit verification does not require MongoDB or RabbitMQ to be
-running. Runtime health in the actual Compose stack still checks both systems.
+Unit tests disable external listeners and health contributors. The real Compose
+runtime still checks RabbitMQ and MongoDB health.
 
-## Event processing guarantees
+## Standalone smoke test
 
-- Messages are ACKed only after the audit event and report projection persist.
-- Reusing an `eventId` with different bytes is rejected as an integrity conflict.
-- Identical redelivery is idempotent and does not double-count a file.
-- Invalid/permanently conflicting events and exhausted transient failures go to
-  `reporting.events.dlq` through `mmiv.events.dlx`.
-- Events may arrive out of order; reports are recalculated from stage-owned
-  fields and a late terminal event can recover an `INCOMPLETE` report.
-- Event/report JSON contains no absolute host paths or checksum values.
+For Reporting-only development, the existing smoke test starts Reporting,
+RabbitMQ, and MongoDB, publishes the five successful-path examples, and proves
+duplicate delivery does not change totals:
 
-## Relationship to the existing Transfer SQS log
+```powershell
+powershell -ExecutionPolicy Bypass -File services/reporting-service/scripts/smoke.ps1
+```
 
-Transfer currently also publishes a separate version 1 operational log to AWS
-SQS. That log is retained for compatibility, but it is not an MMIV Reporting v2
-event and is not consumed by this service. Discovery, Transfer, and Integrity
-must publish the RabbitMQ v2 events defined in `contracts/events/v2` for the
-migration report to become complete.
+```sh
+sh services/reporting-service/scripts/smoke.sh
+```
+
+Stop that standalone stack without deleting its volumes:
+
+```sh
+docker compose -f services/reporting-service/compose.yml down
+```
+
+## Integrated Transfer-outage acceptance
+
+After starting the complete integrated stack, run:
+
+```sh
+bash tests/api/verify-reporting-with-transfer-down.sh
+```
+
+This is stronger than the standalone smoke test: it creates a real User Access
+account, signs into Gateway, publishes a report whose `initiatedBy` equals that
+user's JWT subject, and verifies that the frontend, session, report list,
+detail, file results, and timeline remain available while Transfer is stopped.
+Cleanup restarts Transfer and deletes the temporary account and MongoDB fixture.
+
+The integrated Compose stack exposes RabbitMQ management only on
+`127.0.0.1:15672` so the acceptance script can publish fixtures without making
+the management UI remotely reachable.

@@ -6,13 +6,50 @@ import os
 import subprocess
 import tempfile
 import unittest
+from unittest.mock import patch
 import yaml
+import importlib.util
+import sys
+from types import SimpleNamespace
 from jinja2 import Environment, StrictUndefined
 
 ROOT = Path(__file__).resolve().parents[2]
 ROLE = ROOT / 'infrastructure/ansible/roles/microservice'
 
 class DeploymentConfigurationTest(unittest.TestCase):
+    def test_remote_stack_assigns_browser_auth_and_public_binding_to_gateway(self):
+        if 'fcntl' not in sys.modules:
+            sys.modules['fcntl'] = SimpleNamespace(LOCK_EX=1, LOCK_NB=2, LOCK_UN=8,
+                                                   flock=lambda *_: None)
+        spec = importlib.util.spec_from_file_location(
+            'docker_stack_remote_contract', ROOT / 'scripts/cd/docker-stack-remote.py')
+        remote = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(remote)
+        names = ['service-registry', 'api-gateway', 'transfer-service', 'integrity-service',
+                 'user-access-service', 'reporting-service', 'discovery-service']
+        state = {'AWS_REGION': 'ap-southeast-1', 'MMIV_BUCKET_NAME': 'test',
+                 'MMIV_LOG_QUEUE_URL': 'https://sqs.example/queue',
+                 'USER_ACCESS_JWT_ISSUER': 'https://auth.mmiv.example',
+                 'USER_ACCESS_CONFIG_ID': 'a' * 64,
+                 'services': {name: {'image': 'example/' + name, 'port': port}
+                              for name, port in zip(names, [8761, 8080, 8081, 8082, 8083, 8084, 8085])}}
+        with patch.object(remote, 'managed_access', return_value=False):
+            services = remote.config_for(state)['services']
+        gateway = services['api-gateway']
+        self.assertEqual(gateway['ports'], ['0.0.0.0:8080:8080'])
+        self.assertEqual(gateway['environment']['JWT_COOKIE_SECURE'], 'false')
+        self.assertIn('USER_ACCESS_JWK_SET_URI', gateway['environment'])
+        self.assertNotIn('JWT_COOKIE_SECURE', services['transfer-service']['environment'])
+        self.assertNotIn('REPORTING_URL', services['transfer-service']['environment'])
+        for name in set(services) - {'api-gateway'}:
+            for binding in services[name].get('ports', []):
+                self.assertTrue(binding.startswith('127.0.0.1:'), name)
+        with patch.object(remote, 'managed_access', return_value=False):
+            tls_services = remote.config_for({**state, 'JWT_COOKIE_SECURE': 'true'})['services']
+        self.assertEqual(tls_services['api-gateway']['environment']['JWT_COOKIE_SECURE'], 'true')
+        with patch.object(remote, 'managed_access', return_value=False), self.assertRaises(ValueError):
+            remote.config_for({**state, 'JWT_COOKIE_SECURE': 'yes'})
+
     def test_compose_configuration_for_each_service(self):
         environment = Environment(undefined=StrictUndefined)
         environment.filters['to_json'] = json.dumps

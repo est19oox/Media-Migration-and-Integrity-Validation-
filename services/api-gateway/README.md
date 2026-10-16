@@ -1,98 +1,82 @@
-# MMIV API Gateway and LoadBalancer
+# MMIV API Gateway
 
-API Gateway listens on 8080. It uses Eureka service-registry on 8761 and Spring
-Cloud LoadBalancer to select registered backend instances with default round
-robin. It is a software load balancer inside Gateway, not an AWS ALB.
+API Gateway is the only public application entry point. It serves the browser
+frontend, authenticates both Bearer JWTs and the browser's `MMIV_SESSION`
+cookie, enforces CSRF for cookie-authenticated mutations, and relays a verified
+Bearer token to backend services. Backends remain independently responsible
+for authorization of their own data.
 
-Transfer (8081), User Access (8083), Reporting (8084), and Integrity (8082)
-register with Eureka. Main's real Discovery Service (8085) is preserved but
-requires Oracle configuration and has no Eureka client yet. Its route is reserved.
+The Gateway listens on port 8080 and uses Eureka plus Spring Cloud LoadBalancer
+for explicit backend routes. It is an application load balancer, not an AWS
+ALB. The integrated Compose stack binds every other service port to
+`127.0.0.1`; only Gateway is reachable on all host interfaces.
 
-## Routes
+## Browser authentication
 
-| Gateway path                                 | Backend             | Forwarded path      |
-| -------------------------------------------- | ------------------- | ------------------- |
-| /api/v1/transfers and /api/v1/transfers/\*\* | transfer-service    | Unchanged           |
-| /api/v1/files and /api/v1/files/\*\*         | transfer-service    | Unchanged           |
-| /upload.html, /files.html                    | transfer-service    | Unchanged           |
-| /                                            | transfer-service    | /upload.html        |
-| /discovery/\*\*                              | discovery-service   | Remove /discovery   |
-| /user-access/\*\*                            | user-access-service | Remove /user-access |
-| /api/access and /api/access/\*\*             | user-access-service | Unchanged           |
-| /reporting/\*\*                              | reporting-service   | Remove /reporting   |
-| /integrity/\*\*                              | integrity-service   | Remove /integrity   |
-| /actuator/health                             | Gateway itself      | Local endpoint      |
+1. The public login page calls `POST /user-access/api/auth/login`.
+2. The browser exchanges the returned Bearer token at `POST /api/v1/session`.
+3. Gateway stores the JWT in a short-lived, HttpOnly, SameSite session cookie.
+4. `GET /api/v1/session` returns the current identity and CSRF token without
+   exposing the JWT.
+5. Frontend requests use the same Gateway origin. Gateway validates the cookie,
+   removes it before proxying, and sends a verified Bearer header downstream.
 
-Examples:
+`JWT_COOKIE_SECURE=false` is required by the current local and AWS development
+HTTP endpoints. Set it to `true` only after the Gateway is placed behind HTTPS.
+Gateway also requires `USER_ACCESS_JWT_ISSUER` and
+`USER_ACCESS_JWK_SET_URI`; it never signs tokens itself.
 
-- POST http://localhost:8080/api/v1/transfers/folder uses the existing multipart folder API.
-- POST http://localhost:8080/api/access/check uses the existing User Access request DTO.
-- /discovery/\*\* is reserved until Discovery registration is implemented.
-- GET http://localhost:8080/user-access/actuator/health checks User Access.
-- GET http://localhost:8080/reporting/actuator/health checks Reporting.
-- GET http://localhost:8080/integrity/actuator/health checks Integrity.
+## Main routes
 
-Open http://localhost:8080/upload.html for file/folder uploads. Its relative
-requests and links remain on the gateway origin. Business endpoints that do not
-yet exist still return 404; these routes do not implement validation/reporting
-logic or enable the reserved Transfer Feign integration.
+| Gateway path | Owner | Notes |
+| --- | --- | --- |
+| `/`, `/pages/**`, `/css/**`, `/js/**`, `/assets/**` | API Gateway | Frontend packaged in the Gateway image |
+| `/api/v1/session` | API Gateway | Browser session and CSRF lifecycle |
+| `/user-access/**`, `/api/access/**` | User Access | Login/account and permission APIs |
+| `/api/v1/transfers/**`, `/api/v1/files/**`, `/api/v1/portal/**` | Transfer | Migration/file operations |
+| `/api/metadata/**`, `/api/discovery/**`, `/discovery/**` | Discovery | Metadata and discovery operations |
+| `/api/integrity/**`, `/integrity/**` | Integrity | Integrity validation |
+| `/api/reports/**`, `/api/admin/reports/**`, `/api/history`, `/api/dashboard` | Reporting | Owner and administrator report queries |
+| `/reporting/**` | Reporting | Compatibility prefix with `/reporting` stripped |
 
-## Build and run
+Unknown routes are not dynamically exposed. A missing discovered backend gives
+a clean 503 after Eureka observes the outage. Gateway does not retry mutation
+requests because a retry could duplicate an upload.
 
-Use Java 25 and Maven. See ../service-registry/README.md for the seven-service
-build and Compose commands. For local Java processes, start the registry JAR
-first, then each backend JAR and Gateway JAR. The default registry URL is
-http://localhost:8761/eureka/; override EUREKA_DEFAULT_ZONE when needed.
+## Build and test
 
-The active Compose file exposes Gateway on 8080; backend and registry ports
-bind to localhost. Discovery is available with the optional discovery profile.
-Stop any conflicting root Compose setup before starting it. Actual S3 uploads
-still require AWS credentials, region and bucket configuration.
+Use Java 25 and the repository Maven wrapper from the repository root:
 
-## Test multiple replicas
-
-After building every JAR, stop the single-instance setup and start two Transfer
-and Integrity replicas:
-
-```bash
-docker compose -f infrastructure/service-registry/compose.yml down
-docker compose -f infrastructure/service-registry/compose-scaled.yml up --build -d --scale transfer-service=2 --scale integrity-service=2
-python3 infrastructure/service-registry/verify-registration.py
+```sh
+services/user-access-service/mvnw -B -f services/api-gateway/pom.xml clean verify
 ```
 
-The scaled file exposes only Gateway and loopback registry. Replicas share
-service names and internal ports but have distinct IPs and Eureka instance IDs.
-Check multiple UP entries at http://localhost:8761/. One instance has no workload
-to distribute; multiple instances receive requests by round robin. A whole folder
-request stays on one selected backend. All Transfer replicas must use the same
-S3 bucket and credentials with suitable access. The legacy server-side source
-path API also requires consistent media mounts across replicas; Compose is set
-up for local/browser multipart uploads.
+The Maven build tests the frontend and copies its production resources into
+`META-INF/resources`; there is no separate frontend container. See
+[`../../docs/integration/services.md`](../../docs/integration/services.md) for
+the complete local stack command and required private environment files.
 
-## Failure behavior and deployment
+## Runtime and outage acceptance
 
-Gateway connect timeout is 3 seconds; response timeout defaults to 300 seconds,
-configurable with GATEWAY_RESPONSE_TIMEOUT. Uploads are streamed. RequestSize
-rejects declared Content-Length above 101 MiB, while Transfer validates actual
-multipart and file sizes, including chunked requests. No automatic POST retry
-is added because it can duplicate S3 objects. No discovered backend yields 503;
-allow time for registration and Eureka cache updates after startup or shutdown.
+The active local stack is `infrastructure/service-registry/compose.yml`. The
+scaled file demonstrates multiple Transfer and Integrity replicas but does not
+change route ownership. AWS CD builds and deploys a complete immutable
+seven-service application release; RabbitMQ and MongoDB are supporting
+containers.
 
-Authentication, rate limiting and cross-origin frontend CORS policies are not
-configured here. The provided UI uses the same origin.
+After the integrated stack is healthy, verify that reports do not depend on
+Transfer:
 
-The CI/CD workflow enables six services; Discovery deployment is commented out
-pending database and media configuration. These services run on one EC2 instance with the
-shared Ansible network. Deploy/rollback use the Eureka URL. Terraform precedes
-deployment; matrix ordering is not guaranteed and clients retry registration.
-CI/CD deploys one container per service; scaled Compose is a replica example,
-not automatic EC2 scaling. Gateway health alone does not prove every route works.
-Terraform allows public TCP 8080 and Ansible binds Gateway to 0.0.0.0.
-Open http://<EC2-public-IP>:8080/upload.html after deployment.
-See ../../docs/ci-cd/gateway-access.md for direct and optional SSM access.
+```sh
+bash tests/api/verify-reporting-with-transfer-down.sh
+```
 
-GatewayRoutingTest uses two local HTTP backends and static discovery to verify
-round robin, multipart forwarding, all backend routes, pages and gateway health.
-Its static discovery replaces external Eureka only during tests.
+The test creates a temporary user and owned report fixture, establishes a real
+Gateway cookie session, stops only Transfer, checks the reports page and all
+owner report APIs, confirms the file route returns 503, restarts Transfer, and
+removes its temporary account/report data. Tokens and cookies are kept only in
+a restricted temporary directory.
 
-This merged project is complete. Keep FolderUploadService under src/main.
+Deployment smoke/DAST reachability uses `/pages/login.html`, not the removed
+Transfer-owned `/upload.html`. Authenticated endpoint verification also covers
+the report list through Gateway.

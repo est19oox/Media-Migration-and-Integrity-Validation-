@@ -60,6 +60,7 @@ def prepare(directory, instance, commit, release_id):
              'MANAGED_USER_ACCESS_ORACLE': os.getenv('MANAGED_USER_ACCESS_ORACLE', 'true') == 'true',
              'USER_ACCESS_JWT_ISSUER': os.getenv('USER_ACCESS_JWT_ISSUER', 'https://auth.mmiv.example'),
              'USER_ACCESS_JWT_KEY_ID': os.getenv('USER_ACCESS_JWT_KEY_ID', 'mmiv-user-access-key-1'),
+             'JWT_COOKIE_SECURE': os.getenv('JWT_COOKIE_SECURE', 'false'),
              'services': images, 'READY': False, 'ROLLED_BACK': False}
     return validate(state, instance, commit)
 

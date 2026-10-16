@@ -6,19 +6,19 @@ This complete project includes the earlier login-page update. Rebuild and redepl
 
 1. Open http://EC2_PUBLIC_IP:8080/ or http://localhost:8080/ through the Gateway tunnel.
 2. Sign in using a User Access account, or select Create an account to register. Signup returns to login before opening Home.
-3. Login calls /user-access/api/auth/login, then sends the returned Bearer token to POST /api/v1/session. Transfer verifies its signature, issuer, subject and expiry before setting the MMIV_SESSION cookie.
-4. Login confirms the browser cookie with GET /api/v1/session before redirecting to /home.html. Uploads and file previews/downloads use the HttpOnly SameSite=Strict cookie. The token is no longer stored in sessionStorage.
-5. Sign out clears the browser cookie and returns to /login.html. Expired sessions return to login. Clearing a cookie does not revoke a separately retained JWT; it remains valid until expiry.
+3. Login calls `/user-access/api/auth/login`, then sends the returned Bearer token to `POST /api/v1/session`. Gateway verifies its signature, issuer, subject and expiry before setting the `MMIV_SESSION` cookie.
+4. Login confirms the browser cookie with `GET /api/v1/session` before redirecting to `/pages/home.html`. Frontend requests use the HttpOnly SameSite cookie through Gateway. The token is no longer stored in browser storage.
+5. Sign out clears the browser cookie and returns to `/pages/login.html`. Expired sessions return to login. Clearing a cookie does not revoke a separately retained JWT; it remains valid until expiry.
 
-Anonymous /upload.html and /files.html requests redirect to /login.html. Anonymous file APIs and uploads are rejected. Cookie-authenticated mutations require a CSRF token from GET /api/v1/session; auth.js handles this. Direct backend API access also checks JWTs. Health endpoints remain available for deployment checks.
+Anonymous protected pages redirect to `/pages/login.html`. Anonymous file APIs and uploads are rejected. Cookie-authenticated mutations require a CSRF token from `GET /api/v1/session`; `mmiv-auth.js` handles this. Direct backend API access also checks JWTs. Health endpoints remain available for deployment checks.
 
 Home shows only permitted actions. Files lists objects inside the user's registered folders, with clickable previews and downloads. Every read checks the exact file key's folder, so knowing a file ID does not bypass folder permissions. Administration uses the same cookie and has no second login form; current Oracle roles protect every administrative action. The Log dashboard shows folder migration records to permitted users and system logs to administrators.
 
 ## Configuration
 
-Deployed Transfer retrieves public keys at http://user-access-service:8083/.well-known/jwks.json. USER_ACCESS_JWT_ISSUER must match the issuer used by User Access (default https://auth.mmiv.example). Both local Compose files include the corresponding Transfer configuration. Direct JVM runs default the JWKS URL to localhost:8083. Browser login must use the Gateway on port 8080.
+Deployed Gateway and protected backend services retrieve public keys at `http://user-access-service:8083/.well-known/jwks.json`. `USER_ACCESS_JWT_ISSUER` must match the issuer used by User Access (default `https://auth.mmiv.example`). Both local Compose files include the corresponding configuration. Browser login must use Gateway on port 8080.
 
-The current development Gateway uses HTTP, so JWT_COOKIE_SECURE defaults to false. When placing the deployment behind HTTPS, set JWT_COOKIE_SECURE=true in Transfer's environment (and in its deployment configuration). No private signing key is copied to Transfer.
+The current local and AWS development Gateway uses HTTP, so `JWT_COOKIE_SECURE` defaults to `false`. When placing the deployment behind HTTPS, set `JWT_COOKIE_SECURE=true` for Gateway. No private signing key is copied to Gateway or Transfer.
 
 ## Authenticated CD verification
 

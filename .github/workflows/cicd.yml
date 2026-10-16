@@ -8,8 +8,8 @@ on:
     paths:
       - 'services/**'
       - 'common/**'
-      # The new frontend is packaged into the Transfer Service image, so a change
-      # to it changes that image and has to run the same release.
+      # The frontend is packaged into the API Gateway image. The release remains
+      # a complete immutable seven-service deployment.
       - 'frontend/**'
       - 'infrastructure/bootstrap/**'
       - 'infrastructure/terraform/**'
@@ -199,11 +199,12 @@ jobs:
       - name: Validate repository
         run: bash scripts/ci/validate-repository.sh .
 
-      - name: Check CD dependency order and upload page
+      - name: Check CD dependency order and Gateway frontend
         run: |
           python3 -m pip install PyYAML
           python3 tests/ci/test-verification-login.py
           python3 tests/ci/test-runtime-config.py
+          python3 tests/ci/test-gateway-frontend-ownership.py
           python3 tests/ci/test-cd-contract.py
           python3 tests/ci/test-terraform-sqs-policy.py
           python3 tests/ci/test-verification-permission.py

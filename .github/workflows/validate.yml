@@ -103,6 +103,7 @@ jobs:
           ansible-playbook -i inventory/ci.ini stage-integrity.yml --syntax-check
           python ../../tests/ci/test-deployment-config.py
           python ../../tests/ci/test-compose-runtime.py
+          python ../../tests/ci/test-gateway-frontend-ownership.py
       - name: Docker build
         shell: bash
         run: |

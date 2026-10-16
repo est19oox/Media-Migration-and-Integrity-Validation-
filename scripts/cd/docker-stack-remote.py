@@ -453,6 +453,11 @@ def config_for(state):
                                           'SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE': '1'})
         if name == 'reporting-service':
             service['env_file'].append({'path': '/etc/mmiv/messaging/reporting.env', 'format': 'raw'})
+        if name == 'api-gateway':
+            cookie_secure = state.get('JWT_COOKIE_SECURE', 'false')
+            if cookie_secure not in ('true', 'false'):
+                raise ValueError('JWT_COOKIE_SECURE must be true or false')
+            service['environment']['JWT_COOKIE_SECURE'] = cookie_secure
         if name == 'transfer-service':
             service['environment']['USER_ACCESS_JWT_ISSUER'] = state.get('USER_ACCESS_JWT_ISSUER', 'https://auth.mmiv.example')
             service['environment']['USER_ACCESS_JWK_SET_URI'] = 'http://user-access-service:8083/.well-known/jwks.json'
