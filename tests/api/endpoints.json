@@ -521,7 +521,7 @@
       {
         "name": "global report listing is denied",
         "path": "/api/reports",
-        "status": 403
+        "status": 404
       }
     ],
     "discovery-service": [
