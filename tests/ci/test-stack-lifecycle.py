@@ -59,7 +59,8 @@ class StackLifecycleTest(unittest.TestCase):
         with patch.object(remote, 'inspect', return_value={
                 'NetworkSettings': {'Networks': {'mmiv-backend': {'IPAddress': '172.20.0.9'}}}}):
             remote.ready('integrity-service-2', self.state)
-        remote.registered.assert_called_with('integrity-service', '172.20.0.9', '8086')
+        remote.registered.assert_called_with(
+            'integrity-service', 'integrity-service-2:8086', '8086')
 
     def command(self, *args, check=True, timeout=120):
         self.calls.append(args)
@@ -562,20 +563,23 @@ class RemoteReadinessTest(unittest.TestCase):
                 patch.object(remote.time, 'sleep') as sleep:
             with self.assertRaises(RuntimeError):
                 remote.registered('transfer-service')
-            self.assertEqual(sleep.call_count, 29)
+            self.assertEqual(sleep.call_count, 59)
 
 
-    def test_stale_up_entry_does_not_satisfy_current_container_readiness(self):
+    def test_stale_up_entry_does_not_satisfy_current_instance_readiness(self):
         response = {'application': {'instance': [
-            {'status': 'UP', 'ipAddr': '172.20.0.2', 'port': {'$': 8081}},
-            {'status': 'DOWN', 'ipAddr': '172.20.0.3', 'port': {'$': 8081}}]}}
+            {'instanceId': 'transfer-service:old:8081', 'status': 'UP',
+             'ipAddr': '172.20.0.2', 'port': {'$': 8081}},
+            {'instanceId': 'transfer-service:8081', 'status': 'DOWN',
+             'ipAddr': '172.20.0.3', 'port': {'$': 8081}}]}}
         with patch.object(remote, 'urlopen', side_effect=lambda *a, **k: io.BytesIO(json.dumps(response).encode())), \
                 patch.object(remote.time, 'sleep'):
-            with self.assertRaises(RuntimeError):
-                remote.registered('transfer-service', '172.20.0.3', '8081')
+            with self.assertRaises(RuntimeError) as failure:
+                remote.registered('transfer-service', 'transfer-service:8081', '8081')
+            self.assertEqual(failure.exception.readiness_observation['registered_instances'][1]['status'], 'DOWN')
         response['application']['instance'][1]['status'] = 'UP'
         with patch.object(remote, 'urlopen', side_effect=lambda *a, **k: io.BytesIO(json.dumps(response).encode())):
-            remote.registered('transfer-service', '172.20.0.3', '8081')
+            remote.registered('transfer-service', 'transfer-service:8081', '8081')
 
 
 

@@ -36,12 +36,14 @@ def healthy(port):
     raise RuntimeError('Container health did not become UP')
 
 
-def registered(name, address=None, port=None):
+def registered(name, instance_id=None, port=None):
     # The registry server does not register itself as a client.
     if name == 'service-registry':
         return
-    deadline = time.monotonic() + 180
-    for attempt in range(30):
+    deadline = time.monotonic() + 300
+    observations = []
+    route_statuses = {}
+    for attempt in range(60):
         if time.monotonic() >= deadline:
             break
         try:
@@ -51,12 +53,19 @@ def registered(name, address=None, port=None):
                 instances = json.load(response)['application'].get('instance', [])
             if isinstance(instances, dict):
                 instances = [instances]
+            observations = [
+                {'instance_id': str(instance.get('instanceId', '')),
+                 'status': str(instance.get('status', 'UNKNOWN')),
+                 'ip': str(instance.get('ipAddr', '')),
+                 'port': str((instance.get('port') or {}).get('$', ''))}
+                for instance in instances if isinstance(instance, dict)]
             ready = any(isinstance(instance, dict) and instance.get('status') == 'UP'
-                        and (address is None or instance.get('ipAddr') == address)
+                        and (instance_id is None or instance.get('instanceId') == instance_id)
                         and (port is None or (isinstance(instance.get('port'), dict)
                              and str(instance['port'].get('$')) == str(port)))
                         for instance in instances)
             if ready and name == 'api-gateway':
+                route_statuses = {}
                 for path, expected in [('/', 200), ('/login.html', 200),
                                        ('/api/v1/files/invalid!/content', 401),
                                        ('/api/metadata/plans/00000000-0000-0000-0000-000000000000', 401),
@@ -66,6 +75,7 @@ def registered(name, address=None, port=None):
                             status = response.status
                     except HTTPError as error:
                         status = error.code
+                    route_statuses[path] = status
                     if status != expected:
                         ready = False
                         break
@@ -73,9 +83,14 @@ def registered(name, address=None, port=None):
                 return
         except (OSError, ValueError, KeyError, TypeError):
             pass
-        if attempt < 29:
+        if attempt < 59:
             time.sleep(5)
-    raise RuntimeError('Service registration or Gateway routes did not become ready')
+    error = RuntimeError('Service registration or Gateway routes did not become ready')
+    error.readiness_observation = {
+        'service': name, 'expected_instance_id': instance_id,
+        'expected_port': str(port) if port is not None else None,
+        'registered_instances': observations, 'gateway_route_statuses': route_statuses}
+    raise error
 
 
 def atomic_write(path, content):
@@ -250,6 +265,8 @@ def failure_details(error, state):
         args = error.cmd if isinstance(error.cmd, (list, tuple)) else []
         if args and args[0] in ('docker', 'aws', 'openssl'):
             result['failed_operation'] = args[0] + (' compose' if tuple(args[:2]) == ('docker', 'compose') else '')
+    if hasattr(error, 'readiness_observation'):
+        result['readiness_observation'] = error.readiness_observation
     containers = {}
     for name in list(state.get('services', {})) + (['oracle'] if state.get('MANAGED_USER_ACCESS_ORACLE') else []):
         try:
@@ -426,7 +443,12 @@ def config_for(state):
                    'ports': [f'{"0.0.0.0" if name == "api-gateway" else "127.0.0.1"}:{port}:{port}'],
                    'environment': {'SERVER_PORT': str(port), 'MMIV_MEDIA_ROOT': '/media', 'AWS_REGION': state['AWS_REGION'],
                                    'MMIV_BUCKET_NAME': state['MMIV_BUCKET_NAME'],
-                                   'EUREKA_DEFAULT_ZONE': 'http://service-registry:8761/eureka/'},
+                                   'EUREKA_DEFAULT_ZONE': 'http://service-registry:8761/eureka/',
+                                   'EUREKA_INSTANCE_HOSTNAME': name,
+                                   'EUREKA_INSTANCE_INSTANCE_ID': name + ':' + str(port),
+                                   'EUREKA_INSTANCE_PREFER_IP_ADDRESS': 'false',
+                                   'EUREKA_CLIENT_INITIAL_INSTANCE_INFO_REPLICATION_INTERVAL_SECONDS': '5',
+                                   'EUREKA_CLIENT_INSTANCE_INFO_REPLICATION_INTERVAL_SECONDS': '10'},
                    'volumes': [{'type': 'bind', 'source': '/var/lib/mmiv/media', 'target': '/media',
                                 'read_only': True}], 'networks': ['backend']}
         service['mem_limit'] = '384m'
@@ -629,11 +651,8 @@ def ready(name, state):
     item = state['services'][name]
     healthy(item['port'])
     if name != 'service-registry':
-        current = inspect(name)
-        address = current['NetworkSettings']['Networks']['mmiv-backend']['IPAddress']
-        if not address:
-            raise RuntimeError('Service has no shared-network address')
-        registered('integrity-service' if name == 'integrity-service-2' else name, address, item['port'])
+        registered('integrity-service' if name == 'integrity-service-2' else name,
+                   name + ':' + str(item['port']), item['port'])
 
 
 def save(path, data):
