@@ -26,13 +26,13 @@ class DeploymentConfigurationTest(unittest.TestCase):
         remote = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(remote)
         names = ['service-registry', 'api-gateway', 'transfer-service', 'integrity-service',
-                 'user-access-service', 'reporting-service', 'discovery-service']
+                 'integrity-service-2', 'user-access-service', 'reporting-service', 'discovery-service']
         state = {'AWS_REGION': 'ap-southeast-1', 'MMIV_BUCKET_NAME': 'test',
                  'MMIV_LOG_QUEUE_URL': 'https://sqs.example/queue',
                  'USER_ACCESS_JWT_ISSUER': 'https://auth.mmiv.example',
                  'USER_ACCESS_CONFIG_ID': 'a' * 64,
                  'services': {name: {'image': 'example/' + name, 'port': port}
-                              for name, port in zip(names, [8761, 8080, 8081, 8082, 8083, 8084, 8085])}}
+                              for name, port in zip(names, [8761, 8080, 8081, 8082, 9082, 8083, 8084, 8085])}}
         with patch.object(remote, 'managed_access', return_value=False):
             services = remote.config_for(state)['services']
         gateway = services['api-gateway']
@@ -40,7 +40,23 @@ class DeploymentConfigurationTest(unittest.TestCase):
         self.assertEqual(gateway['environment']['JWT_COOKIE_SECURE'], 'false')
         self.assertIn('USER_ACCESS_JWK_SET_URI', gateway['environment'])
         self.assertNotIn('JWT_COOKIE_SECURE', services['transfer-service']['environment'])
-        self.assertNotIn('REPORTING_URL', services['transfer-service']['environment'])
+        dependency_keys = {'METADATA_URL', 'USER_ACCESS_URL', 'TRANSFER_URL', 'REPORTING_URL'}
+        expected_dependencies = {
+            'service-registry': set(),
+            'api-gateway': set(),
+            'transfer-service': {'METADATA_URL', 'USER_ACCESS_URL'},
+            'integrity-service': {'METADATA_URL'},
+            'integrity-service-2': {'METADATA_URL'},
+            'user-access-service': set(),
+            'reporting-service': {'METADATA_URL', 'USER_ACCESS_URL'},
+            'discovery-service': {'USER_ACCESS_URL', 'TRANSFER_URL', 'REPORTING_URL'}}
+        for name, expected in expected_dependencies.items():
+            self.assertEqual(dependency_keys & services[name]['environment'].keys(), expected, name)
+        self.assertNotIn('USER_ACCESS_JWK_SET_URI', services['service-registry']['environment'])
+        self.assertNotIn('USER_ACCESS_JWK_SET_URI', services['user-access-service']['environment'])
+        for name in {'api-gateway', 'transfer-service', 'integrity-service',
+                     'integrity-service-2', 'reporting-service', 'discovery-service'}:
+            self.assertIn('USER_ACCESS_JWK_SET_URI', services[name]['environment'], name)
         for name in set(services) - {'api-gateway'}:
             for binding in services[name].get('ports', []):
                 self.assertTrue(binding.startswith('127.0.0.1:'), name)

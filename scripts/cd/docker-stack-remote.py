@@ -435,11 +435,28 @@ def config_for(state):
             'JAVA_TOOL_OPTIONS': '-Xms32m -Xmx192m -XX:MaxDirectMemorySize=64m',
             'SERVER_TOMCAT_THREADS_MAX': '16', 'SERVER_TOMCAT_THREADS_MIN_SPARE': '2',
             'SPRING_RABBITMQ_HOST': 'rabbitmq', 'MMIV_EVENTS_ENABLED': 'true',
-            'MMIV_EVENTS_OUTBOX_DIRECTORY': '/var/lib/mmiv/event-outbox',
-            'USER_ACCESS_JWT_ISSUER': state.get('USER_ACCESS_JWT_ISSUER', 'https://auth.mmiv.example'),
-            'USER_ACCESS_JWK_SET_URI': 'http://user-access-service/.well-known/jwks.json',
-            'METADATA_URL': 'http://discovery-service', 'USER_ACCESS_URL': 'http://user-access-service',
-            'TRANSFER_URL': 'http://transfer-service', 'REPORTING_URL': 'http://reporting-service'})
+            'MMIV_EVENTS_OUTBOX_DIRECTORY': '/var/lib/mmiv/event-outbox'})
+        issuer = state.get('USER_ACCESS_JWT_ISSUER', 'https://auth.mmiv.example')
+        if name == 'user-access-service':
+            service['environment']['USER_ACCESS_JWT_ISSUER'] = issuer
+        elif name != 'service-registry':
+            service['environment'].update({
+                'USER_ACCESS_JWT_ISSUER': issuer,
+                'USER_ACCESS_JWK_SET_URI': 'http://user-access-service/.well-known/jwks.json'})
+        service['environment'].update({
+            'transfer-service': {
+                'METADATA_URL': 'http://discovery-service',
+                'USER_ACCESS_URL': 'http://user-access-service'},
+            'integrity-service': {'METADATA_URL': 'http://discovery-service'},
+            'integrity-service-2': {'METADATA_URL': 'http://discovery-service'},
+            'reporting-service': {
+                'METADATA_URL': 'http://discovery-service',
+                'USER_ACCESS_URL': 'http://user-access-service'},
+            'discovery-service': {
+                'USER_ACCESS_URL': 'http://user-access-service',
+                'TRANSFER_URL': 'http://transfer-service',
+                'REPORTING_URL': 'http://reporting-service'}
+        }.get(name, {}))
         service['env_file'] = [{'path': '/etc/mmiv/messaging/rabbit-client.env', 'format': 'raw'}]
         service['volumes'].append({'type': 'bind', 'source': '/var/lib/mmiv/event-outbox/' + name,
                                   'target': '/var/lib/mmiv/event-outbox'})
@@ -460,9 +477,6 @@ def config_for(state):
             service['environment']['JWT_COOKIE_SECURE'] = cookie_secure
             service['environment']['SPRING_DATA_REDIS_HOST'] = 'redis'
             service['environment']['SPRING_DATA_REDIS_TIMEOUT'] = '2s'
-        if name == 'transfer-service':
-            service['environment']['USER_ACCESS_JWT_ISSUER'] = state.get('USER_ACCESS_JWT_ISSUER', 'https://auth.mmiv.example')
-            service['environment']['USER_ACCESS_JWK_SET_URI'] = 'http://user-access-service/.well-known/jwks.json'
         if name == 'user-access-service':
             service['mem_limit'] = '512m'
             service['memswap_limit'] = '512m'
