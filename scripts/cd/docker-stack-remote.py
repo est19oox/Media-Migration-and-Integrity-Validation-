@@ -444,9 +444,8 @@ def config_for(state):
                    'environment': {'SERVER_PORT': str(port), 'MMIV_MEDIA_ROOT': '/media', 'AWS_REGION': state['AWS_REGION'],
                                    'MMIV_BUCKET_NAME': state['MMIV_BUCKET_NAME'],
                                    'EUREKA_DEFAULT_ZONE': 'http://service-registry:8761/eureka/',
-                                   'EUREKA_INSTANCE_HOSTNAME': name,
                                    'EUREKA_INSTANCE_INSTANCE_ID': name + ':' + str(port),
-                                   'EUREKA_INSTANCE_PREFER_IP_ADDRESS': 'false',
+                                   'EUREKA_INSTANCE_PREFER_IP_ADDRESS': 'true',
                                    'EUREKA_CLIENT_INITIAL_INSTANCE_INFO_REPLICATION_INTERVAL_SECONDS': '5',
                                    'EUREKA_CLIENT_INSTANCE_INFO_REPLICATION_INTERVAL_SECONDS': '10'},
                    'volumes': [{'type': 'bind', 'source': '/var/lib/mmiv/media', 'target': '/media',
@@ -647,12 +646,17 @@ def up(compose, names, force=(), dependencies=True):
     command(*base, *names, timeout=1800)
 
 
-def ready(name, state):
+def ready(name, state, service_config=None):
     item = state['services'][name]
     healthy(item['port'])
     if name != 'service-registry':
+        environment = (service_config or {}).get('environment', {})
+        expected_id = (environment.get('EUREKA_INSTANCE_INSTANCE_ID')
+                       if isinstance(environment, dict) else None)
+        if service_config is None:
+            expected_id = name + ':' + str(item['port'])
         registered('integrity-service' if name == 'integrity-service-2' else name,
-                   name + ':' + str(item['port']), item['port'])
+                   expected_id, item['port'])
 
 
 def save(path, data):
@@ -680,8 +684,9 @@ def restore(state, directory, journal_path, journal):
     compose = directory / 'compose.yaml'
     save(compose, previous)
     recovery = journal.setdefault('recovery', {})
-    # Gateway first, then backends, then Registry. Unchanged containers stay put.
-    order = {'api-gateway': 0, 'service-registry': 2}
+    # Restore Registry first so every restarted client registers against the final
+    # server, then restore backends and put Gateway back last.
+    order = {'service-registry': 0, 'api-gateway': 2}
     for name in sorted(selected, key=lambda n: (order.get(n, 1), -int(state['services'][n]['port']))):
         if name in recovery:
             continue
@@ -701,7 +706,7 @@ def restore(state, directory, journal_path, journal):
         save(journal_path, journal)
     if not journal['compose_existed'] and not previous['services']:
         compose.unlink(missing_ok=True)
-    parallel(lambda name: ready(name, state),
+    parallel(lambda name: ready(name, state, previous['services'][name]),
              [name for name in previous['services'] if name in state['services']])
     journal['restored'] = True
     save(journal_path, journal)

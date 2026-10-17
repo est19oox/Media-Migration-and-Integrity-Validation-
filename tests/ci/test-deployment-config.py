@@ -41,10 +41,9 @@ class DeploymentConfigurationTest(unittest.TestCase):
         self.assertIn('USER_ACCESS_JWK_SET_URI', gateway['environment'])
         for name in names:
             environment = services[name]['environment']
-            self.assertEqual(environment['EUREKA_INSTANCE_HOSTNAME'], name)
             self.assertEqual(environment['EUREKA_INSTANCE_INSTANCE_ID'],
                              name + ':' + str(state['services'][name]['port']))
-            self.assertEqual(environment['EUREKA_INSTANCE_PREFER_IP_ADDRESS'], 'false')
+            self.assertEqual(environment['EUREKA_INSTANCE_PREFER_IP_ADDRESS'], 'true')
         self.assertNotIn('JWT_COOKIE_SECURE', services['transfer-service']['environment'])
         dependency_keys = {'METADATA_URL', 'USER_ACCESS_URL', 'TRANSFER_URL', 'REPORTING_URL'}
         expected_dependencies = {

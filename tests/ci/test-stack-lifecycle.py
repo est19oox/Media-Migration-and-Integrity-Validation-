@@ -62,6 +62,12 @@ class StackLifecycleTest(unittest.TestCase):
         remote.registered.assert_called_with(
             'integrity-service', 'integrity-service-2:8086', '8086')
 
+    def test_rollback_accepts_legacy_eureka_instance_identity(self):
+        legacy = remote.config_for(self.state)['services']['transfer-service']
+        legacy['environment'].pop('EUREKA_INSTANCE_INSTANCE_ID')
+        remote.ready('transfer-service', self.state, legacy)
+        remote.registered.assert_called_with('transfer-service', None, '8081')
+
     def command(self, *args, check=True, timeout=120):
         self.calls.append(args)
         result = subprocess.CompletedProcess(args, 0, '', '')
@@ -436,7 +442,7 @@ class StackLifecycleTest(unittest.TestCase):
             result = remote.run('deploy', dict(self.state))
         self.assertTrue(result['ROLLED_BACK'])
         self.assertTrue(all(c['Config']['Image'].endswith('-first') for n,c in self.containers.items() if n in self.state['services']))
-        self.assertEqual(list(result['recovery'])[0], 'api-gateway')
+        self.assertEqual(list(result['recovery'])[0], 'service-registry')
 
     def test_oracle_env_update_recreates_only_integrity_and_restores_secret(self):
         staged = self.root / ('etc/mmiv/next-integrity-' + self.state['RELEASE_ID'] + '.env')
