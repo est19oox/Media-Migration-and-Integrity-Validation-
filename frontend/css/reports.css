@@ -201,8 +201,10 @@ body.home-page.reports-page {
 
 .report-detail-main {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 16px;
   width: 100%;
+  min-width: 0;
   max-width: 1320px;
   margin: 0 auto;
   padding: 12px 0;
@@ -221,7 +223,14 @@ body.home-page.reports-page {
 }
 
 .report-detail-card {
+  min-width: 0;
+  max-width: 100%;
   padding: 24px 26px;
+}
+
+.report-detail-card .reports-table-scroll {
+  min-width: 0;
+  max-width: 100%;
 }
 
 .report-back-link {

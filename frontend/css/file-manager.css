@@ -1154,6 +1154,27 @@
   align-items: center;
 }
 
+.file-manager-page .folder-link,
+.file-manager-page .breadcrumb-link {
+  padding: 0;
+  border: 0;
+  color: inherit;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.file-manager-page .folder-link:hover,
+.file-manager-page .breadcrumb-link:hover {
+  color: var(--fm-primary);
+}
+
+.file-manager-page .breadcrumb-link[aria-current='page'] {
+  color: var(--fm-text);
+  font-weight: 600;
+}
+
 /* Infinite scroll footer */
 
 .file-manager-page .explorer-bottom {
