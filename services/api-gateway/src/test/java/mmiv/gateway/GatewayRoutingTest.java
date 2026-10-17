@@ -261,4 +261,17 @@ class GatewayRoutingTest {
         .jsonPath("$.status")
         .isEqualTo("UP");
   }
+
+  @Test
+  void exposesOnlyUserAccessHealthWithoutAuthentication() {
+    http.get()
+        .uri("/user-access/actuator/health")
+        .exchange()
+        .expectStatus()
+        .isOk()
+        .expectHeader()
+        .valueEquals("X-Test-Path", "/actuator/health");
+
+    http.get().uri("/user-access/api/access/me").exchange().expectStatus().isUnauthorized();
+  }
 }
