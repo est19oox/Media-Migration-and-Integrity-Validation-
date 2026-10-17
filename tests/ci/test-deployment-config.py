@@ -17,6 +17,16 @@ ROOT = Path(__file__).resolve().parents[2]
 ROLE = ROOT / 'infrastructure/ansible/roles/microservice'
 
 class DeploymentConfigurationTest(unittest.TestCase):
+    def test_every_eureka_client_registers_and_reports_health(self):
+        for service in ['api-gateway', 'transfer-service', 'integrity-service',
+                        'user-access-service', 'reporting-service', 'discovery-service']:
+            config = yaml.safe_load(
+                (ROOT / 'services' / service / 'src/main/resources/application.yml').read_text())
+            client = config['eureka']['client']
+            self.assertTrue(client['register-with-eureka'], service)
+            self.assertTrue(client['fetch-registry'], service)
+            self.assertTrue(client['healthcheck']['enabled'], service)
+
     def test_remote_stack_assigns_browser_auth_and_public_binding_to_gateway(self):
         if 'fcntl' not in sys.modules:
             sys.modules['fcntl'] = SimpleNamespace(LOCK_EX=1, LOCK_NB=2, LOCK_UN=8,
@@ -41,9 +51,9 @@ class DeploymentConfigurationTest(unittest.TestCase):
         self.assertIn('USER_ACCESS_JWK_SET_URI', gateway['environment'])
         for name in names:
             environment = services[name]['environment']
-            self.assertEqual(environment['EUREKA_INSTANCE_INSTANCE_ID'],
-                             name + ':' + str(state['services'][name]['port']))
-            self.assertEqual(environment['EUREKA_INSTANCE_PREFER_IP_ADDRESS'], 'true')
+            self.assertNotIn('EUREKA_INSTANCE_INSTANCE_ID', environment)
+            self.assertNotIn('EUREKA_INSTANCE_HOSTNAME', environment)
+            self.assertNotIn('EUREKA_INSTANCE_PREFER_IP_ADDRESS', environment)
         self.assertNotIn('JWT_COOKIE_SECURE', services['transfer-service']['environment'])
         dependency_keys = {'METADATA_URL', 'USER_ACCESS_URL', 'TRANSFER_URL', 'REPORTING_URL'}
         expected_dependencies = {

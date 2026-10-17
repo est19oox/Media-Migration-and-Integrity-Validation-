@@ -36,7 +36,7 @@ def healthy(port):
     raise RuntimeError('Container health did not become UP')
 
 
-def registered(name, instance_id=None, port=None):
+def registered(name, address=None, port=None):
     # The registry server does not register itself as a client.
     if name == 'service-registry':
         return
@@ -60,7 +60,7 @@ def registered(name, instance_id=None, port=None):
                  'port': str((instance.get('port') or {}).get('$', ''))}
                 for instance in instances if isinstance(instance, dict)]
             ready = any(isinstance(instance, dict) and instance.get('status') == 'UP'
-                        and (instance_id is None or instance.get('instanceId') == instance_id)
+                        and (address is None or instance.get('ipAddr') == address)
                         and (port is None or (isinstance(instance.get('port'), dict)
                              and str(instance['port'].get('$')) == str(port)))
                         for instance in instances)
@@ -87,7 +87,7 @@ def registered(name, instance_id=None, port=None):
             time.sleep(5)
     error = RuntimeError('Service registration or Gateway routes did not become ready')
     error.readiness_observation = {
-        'service': name, 'expected_instance_id': instance_id,
+        'service': name, 'expected_address': address,
         'expected_port': str(port) if port is not None else None,
         'registered_instances': observations, 'gateway_route_statuses': route_statuses}
     raise error
@@ -422,7 +422,10 @@ def parallel(function, values):
     values = list(values)
     if not values:
         return
-    with ThreadPoolExecutor(max_workers=min(5, len(values))) as pool:
+    # Readiness checks mostly wait on HTTP and must cover the whole release at
+    # once; batching eight services into groups made one failure take two full
+    # registration windows before rollback could begin.
+    with ThreadPoolExecutor(max_workers=len(values)) as pool:
         # Await all workers before returning an error or beginning recovery.
         futures = [pool.submit(function, value) for value in values]
         errors = []
@@ -443,11 +446,7 @@ def config_for(state):
                    'ports': [f'{"0.0.0.0" if name == "api-gateway" else "127.0.0.1"}:{port}:{port}'],
                    'environment': {'SERVER_PORT': str(port), 'MMIV_MEDIA_ROOT': '/media', 'AWS_REGION': state['AWS_REGION'],
                                    'MMIV_BUCKET_NAME': state['MMIV_BUCKET_NAME'],
-                                   'EUREKA_DEFAULT_ZONE': 'http://service-registry:8761/eureka/',
-                                   'EUREKA_INSTANCE_INSTANCE_ID': name + ':' + str(port),
-                                   'EUREKA_INSTANCE_PREFER_IP_ADDRESS': 'true',
-                                   'EUREKA_CLIENT_INITIAL_INSTANCE_INFO_REPLICATION_INTERVAL_SECONDS': '5',
-                                   'EUREKA_CLIENT_INSTANCE_INFO_REPLICATION_INTERVAL_SECONDS': '10'},
+                                   'EUREKA_DEFAULT_ZONE': 'http://service-registry:8761/eureka/'},
                    'volumes': [{'type': 'bind', 'source': '/var/lib/mmiv/media', 'target': '/media',
                                 'read_only': True}], 'networks': ['backend']}
         service['mem_limit'] = '384m'
@@ -650,13 +649,12 @@ def ready(name, state, service_config=None):
     item = state['services'][name]
     healthy(item['port'])
     if name != 'service-registry':
-        environment = (service_config or {}).get('environment', {})
-        expected_id = (environment.get('EUREKA_INSTANCE_INSTANCE_ID')
-                       if isinstance(environment, dict) else None)
-        if service_config is None:
-            expected_id = name + ':' + str(item['port'])
+        current = inspect(name)
+        address = current['NetworkSettings']['Networks']['mmiv-backend']['IPAddress']
+        if not address:
+            raise RuntimeError('Service has no shared-network address')
         registered('integrity-service' if name == 'integrity-service-2' else name,
-                   expected_id, item['port'])
+                   address, item['port'])
 
 
 def save(path, data):
