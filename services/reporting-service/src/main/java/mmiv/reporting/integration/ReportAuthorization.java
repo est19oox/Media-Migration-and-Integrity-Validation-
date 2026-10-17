@@ -1,11 +1,9 @@
 package mmiv.reporting.integration;
 
-import java.net.http.HttpClient;
 import java.time.Duration;
 import java.util.UUID;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
-import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.stereotype.Component;
@@ -17,17 +15,9 @@ public class ReportAuthorization {
   private final RestClient metadata;
 
   public ReportAuthorization(
-      @Value("${mmiv.metadata.url:http://discovery-service:8085}") String url) {
-    var f =
-        new JdkClientHttpRequestFactory(
-            HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(3)).build());
-    f.setReadTimeout(Duration.ofSeconds(5));
-    metadata =
-        RestClient.builder()
-            .requestInterceptor(mmiv.resilience.DependencyCircuits.http("metadata", url))
-            .baseUrl(url)
-            .requestFactory(f)
-            .build();
+      @Value("${mmiv.metadata.url:http://discovery-service}") String url,
+      mmiv.resilience.EurekaHttpClients.EurekaRestClientFactory clients) {
+    metadata = clients.create("metadata", url, Duration.ofSeconds(5));
   }
 
   public void require(UUID id) {

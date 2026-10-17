@@ -203,7 +203,7 @@ management:
 mmiv:
   auth:
     issuer: ${USER_ACCESS_JWT_ISSUER:https://auth.mmiv.example}
-    jwk-set-uri: ${USER_ACCESS_JWK_SET_URI:http://user-access-service:8083/.well-known/jwks.json}
+    jwk-set-uri: ${USER_ACCESS_JWK_SET_URI:http://user-access-service/.well-known/jwks.json}
     cookie-secure: ${JWT_COOKIE_SECURE:false}
   events:
     enabled: ${MMIV_EVENTS_ENABLED:true}

@@ -19,6 +19,11 @@ import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.server.ResponseStatusException;
 
 class AdminReportControllerTest {
+  private static mmiv.resilience.EurekaHttpClients.EurekaRestClientFactory clients() {
+    return new mmiv.resilience.EurekaHttpClients.EurekaRestClientFactory(
+        org.springframework.web.client.RestClient.builder());
+  }
+
   @Test
   void adminListRequiresSuccessfulCurrentAdminCheck() {
     ReportQueryService queries = mock(ReportQueryService.class);
@@ -46,7 +51,8 @@ class AdminReportControllerTest {
     server.start();
     try {
       CurrentAdminAuthorization authorization =
-          new CurrentAdminAuthorization("http://127.0.0.1:" + server.getAddress().getPort());
+          new CurrentAdminAuthorization(
+              "http://127.0.0.1:" + server.getAddress().getPort(), clients());
 
       ResponseStatusException failure =
           assertThrows(ResponseStatusException.class, () -> authorization.require("stale-token"));
@@ -64,7 +70,7 @@ class AdminReportControllerTest {
       unusedPort = socket.getLocalPort();
     }
     CurrentAdminAuthorization authorization =
-        new CurrentAdminAuthorization("http://127.0.0.1:" + unusedPort);
+        new CurrentAdminAuthorization("http://127.0.0.1:" + unusedPort, clients());
 
     ResponseStatusException failure =
         assertThrows(ResponseStatusException.class, () -> authorization.require("valid-token"));

@@ -13,17 +13,9 @@ public class PortalClient {
   private final java.net.URI accessBase;
 
   public PortalClient(
-      @Value("${mmiv.access.url:http://user-access-service:8083}") String accessUrl) {
-    var factory =
-        new org.springframework.http.client.JdkClientHttpRequestFactory(
-            java.net.http.HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(3)).build());
-    factory.setReadTimeout(Duration.ofSeconds(20));
-    access =
-        RestClient.builder()
-            .requestInterceptor(mmiv.resilience.DependencyCircuits.http("user-access", accessUrl))
-            .baseUrl(accessUrl)
-            .requestFactory(factory)
-            .build();
+      @Value("${mmiv.access.url:http://user-access-service}") String accessUrl,
+      mmiv.resilience.EurekaHttpClients.EurekaRestClientFactory clients) {
+    access = clients.create("user-access", accessUrl, Duration.ofSeconds(20));
     accessBase = java.net.URI.create(accessUrl);
   }
 

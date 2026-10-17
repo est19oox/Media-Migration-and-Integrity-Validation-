@@ -26,9 +26,21 @@ import org.springframework.security.web.SecurityFilterChain;
 public class TransferSecurityConfig {
   @Bean
   public JwtDecoder transferJwtDecoder(
-      @Value("${mmiv.auth.jwk-set-uri}") String jwks, @Value("${mmiv.auth.issuer}") String issuer) {
+      @Value("${mmiv.auth.jwk-set-uri}") String jwks,
+      @Value("${mmiv.auth.issuer}") String issuer,
+      @org.springframework.beans.factory.annotation.Qualifier("eurekaRestTemplate")
+          org.springframework.beans.factory.ObjectProvider<
+                  org.springframework.web.client.RestTemplate>
+              eurekaProvider) {
+    org.springframework.web.client.RestTemplate jwksClient =
+        mmiv.resilience.EurekaHttpClients.isDirect(jwks)
+            ? new org.springframework.web.client.RestTemplate()
+            : eurekaProvider.getObject();
     NimbusJwtDecoder decoder =
-        NimbusJwtDecoder.withJwkSetUri(jwks).jwsAlgorithm(SignatureAlgorithm.RS256).build();
+        NimbusJwtDecoder.withJwkSetUri(jwks)
+            .restOperations(jwksClient)
+            .jwsAlgorithm(SignatureAlgorithm.RS256)
+            .build();
     decoder.setJwtValidator(
         new DelegatingOAuth2TokenValidator<>(
             JwtValidators.createDefaultWithIssuer(issuer),

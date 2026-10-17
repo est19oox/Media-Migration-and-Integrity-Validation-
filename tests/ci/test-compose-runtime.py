@@ -26,7 +26,7 @@ class ComposeRuntimeTest(unittest.TestCase):
                 self.assertEqual(set(services), expected)
                 gateway = services['api-gateway']
                 self.assertEqual(gateway['environment']['USER_ACCESS_JWK_SET_URI'],
-                                 'http://user-access-service:8083/.well-known/jwks.json')
+                                 'http://user-access-service/.well-known/jwks.json')
                 self.assertIn('USER_ACCESS_JWT_ISSUER', gateway['environment'])
                 self.assertIn('JWT_COOKIE_SECURE', gateway['environment'])
                 transfer = services['transfer-service']['environment']

@@ -38,9 +38,9 @@ services:
       SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:?Set RABBITMQ_PASSWORD}
       MMIV_EVENTS_ENABLED: 'true'
       MMIV_EVENTS_OUTBOX_DIRECTORY: /var/lib/mmiv/event-outbox
-      METADATA_URL: http://discovery-service:8085
-      USER_ACCESS_URL: http://user-access-service:8083
-      USER_ACCESS_JWK_SET_URI: http://user-access-service:8083/.well-known/jwks.json
+      METADATA_URL: http://discovery-service
+      USER_ACCESS_URL: http://user-access-service
+      USER_ACCESS_JWK_SET_URI: http://user-access-service/.well-known/jwks.json
       USER_ACCESS_JWT_ISSUER: ${USER_ACCESS_JWT_ISSUER:-https://auth.mmiv.example}
       JWT_COOKIE_SECURE: ${JWT_COOKIE_SECURE:-false}
       SPRING_DATA_REDIS_HOST: redis
@@ -72,9 +72,9 @@ services:
       SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:?Set RABBITMQ_PASSWORD}
       MMIV_EVENTS_ENABLED: 'true'
       MMIV_EVENTS_OUTBOX_DIRECTORY: /var/lib/mmiv/event-outbox
-      METADATA_URL: http://discovery-service:8085
-      USER_ACCESS_URL: http://user-access-service:8083
-      USER_ACCESS_JWK_SET_URI: http://user-access-service:8083/.well-known/jwks.json
+      METADATA_URL: http://discovery-service
+      USER_ACCESS_URL: http://user-access-service
+      USER_ACCESS_JWK_SET_URI: http://user-access-service/.well-known/jwks.json
       USER_ACCESS_JWT_ISSUER: ${USER_ACCESS_JWT_ISSUER:-https://auth.mmiv.example}
     volumes:
     - service-registry-events:/var/lib/mmiv/event-outbox
@@ -100,14 +100,14 @@ services:
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
       AWS_SESSION_TOKEN: ${AWS_SESSION_TOKEN:-}
       USER_ACCESS_JWT_ISSUER: ${USER_ACCESS_JWT_ISSUER:-https://auth.mmiv.example}
-      USER_ACCESS_JWK_SET_URI: http://user-access-service:8083/.well-known/jwks.json
+      USER_ACCESS_JWK_SET_URI: http://user-access-service/.well-known/jwks.json
       SPRING_RABBITMQ_HOST: rabbitmq
       SPRING_RABBITMQ_USERNAME: mmiv
       SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:?Set RABBITMQ_PASSWORD}
       MMIV_EVENTS_ENABLED: 'true'
       MMIV_EVENTS_OUTBOX_DIRECTORY: /var/lib/mmiv/event-outbox
-      METADATA_URL: http://discovery-service:8085
-      USER_ACCESS_URL: http://user-access-service:8083
+      METADATA_URL: http://discovery-service
+      USER_ACCESS_URL: http://user-access-service
     volumes:
     - transfer-service-events:/var/lib/mmiv/event-outbox
     - ${DISCOVERY_MEDIA_PATH:-../../media}:/media:ro
@@ -133,9 +133,9 @@ services:
       SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:?Set RABBITMQ_PASSWORD}
       MMIV_EVENTS_ENABLED: 'true'
       MMIV_EVENTS_OUTBOX_DIRECTORY: /var/lib/mmiv/event-outbox
-      METADATA_URL: http://discovery-service:8085
-      USER_ACCESS_URL: http://user-access-service:8083
-      USER_ACCESS_JWK_SET_URI: http://user-access-service:8083/.well-known/jwks.json
+      METADATA_URL: http://discovery-service
+      USER_ACCESS_URL: http://user-access-service
+      USER_ACCESS_JWK_SET_URI: http://user-access-service/.well-known/jwks.json
       USER_ACCESS_JWT_ISSUER: ${USER_ACCESS_JWT_ISSUER:-https://auth.mmiv.example}
       MMIV_BUCKET_NAME: ${MMIV_BUCKET_NAME:-media-migration-dev-landing}
     volumes:
@@ -159,9 +159,9 @@ services:
       SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:?Set RABBITMQ_PASSWORD}
       MMIV_EVENTS_ENABLED: 'true'
       MMIV_EVENTS_OUTBOX_DIRECTORY: /var/lib/mmiv/event-outbox
-      METADATA_URL: http://discovery-service:8085
-      USER_ACCESS_URL: http://user-access-service:8083
-      USER_ACCESS_JWK_SET_URI: http://user-access-service:8083/.well-known/jwks.json
+      METADATA_URL: http://discovery-service
+      USER_ACCESS_URL: http://user-access-service
+      USER_ACCESS_JWK_SET_URI: http://user-access-service/.well-known/jwks.json
       USER_ACCESS_JWT_ISSUER: ${USER_ACCESS_JWT_ISSUER:-https://auth.mmiv.example}
     env_file:
     - path: ${USER_ACCESS_ENV_FILE:?Set USER_ACCESS_ENV_FILE to a private configuration
@@ -190,9 +190,9 @@ services:
       SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:?Set RABBITMQ_PASSWORD}
       MMIV_EVENTS_ENABLED: 'true'
       MMIV_EVENTS_OUTBOX_DIRECTORY: /var/lib/mmiv/event-outbox
-      METADATA_URL: http://discovery-service:8085
-      USER_ACCESS_URL: http://user-access-service:8083
-      USER_ACCESS_JWK_SET_URI: http://user-access-service:8083/.well-known/jwks.json
+      METADATA_URL: http://discovery-service
+      USER_ACCESS_URL: http://user-access-service
+      USER_ACCESS_JWK_SET_URI: http://user-access-service/.well-known/jwks.json
       USER_ACCESS_JWT_ISSUER: ${USER_ACCESS_JWT_ISSUER:-https://auth.mmiv.example}
       MONGODB_URI: mongodb://mmiv:${MONGODB_PASSWORD:?Set MONGODB_PASSWORD}@mongodb:27017/mmiv_reporting?authSource=admin
     volumes:
@@ -220,9 +220,9 @@ services:
       SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:?Set RABBITMQ_PASSWORD}
       MMIV_EVENTS_ENABLED: 'true'
       MMIV_EVENTS_OUTBOX_DIRECTORY: /var/lib/mmiv/event-outbox
-      METADATA_URL: http://discovery-service:8085
-      USER_ACCESS_URL: http://user-access-service:8083
-      USER_ACCESS_JWK_SET_URI: http://user-access-service:8083/.well-known/jwks.json
+      METADATA_URL: http://discovery-service
+      USER_ACCESS_URL: http://user-access-service
+      USER_ACCESS_JWK_SET_URI: http://user-access-service/.well-known/jwks.json
       USER_ACCESS_JWT_ISSUER: ${USER_ACCESS_JWT_ISSUER:-https://auth.mmiv.example}
     volumes:
     - integrity-service-events:/var/lib/mmiv/event-outbox
@@ -311,9 +311,9 @@ services:
       SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:?Set RABBITMQ_PASSWORD}
       MMIV_EVENTS_ENABLED: 'true'
       MMIV_EVENTS_OUTBOX_DIRECTORY: /var/lib/mmiv/event-outbox
-      METADATA_URL: http://discovery-service:8085
-      USER_ACCESS_URL: http://user-access-service:8083
-      USER_ACCESS_JWK_SET_URI: http://user-access-service:8083/.well-known/jwks.json
+      METADATA_URL: http://discovery-service
+      USER_ACCESS_URL: http://user-access-service
+      USER_ACCESS_JWK_SET_URI: http://user-access-service/.well-known/jwks.json
       USER_ACCESS_JWT_ISSUER: ${USER_ACCESS_JWT_ISSUER:-https://auth.mmiv.example}
       SERVER_PORT: '8086'
     volumes:

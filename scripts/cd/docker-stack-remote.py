@@ -437,9 +437,9 @@ def config_for(state):
             'SPRING_RABBITMQ_HOST': 'rabbitmq', 'MMIV_EVENTS_ENABLED': 'true',
             'MMIV_EVENTS_OUTBOX_DIRECTORY': '/var/lib/mmiv/event-outbox',
             'USER_ACCESS_JWT_ISSUER': state.get('USER_ACCESS_JWT_ISSUER', 'https://auth.mmiv.example'),
-            'USER_ACCESS_JWK_SET_URI': 'http://user-access-service:8083/.well-known/jwks.json',
-            'METADATA_URL': 'http://discovery-service:8085', 'USER_ACCESS_URL': 'http://user-access-service:8083',
-            'TRANSFER_URL': 'http://transfer-service:8081'})
+            'USER_ACCESS_JWK_SET_URI': 'http://user-access-service/.well-known/jwks.json',
+            'METADATA_URL': 'http://discovery-service', 'USER_ACCESS_URL': 'http://user-access-service',
+            'TRANSFER_URL': 'http://transfer-service', 'REPORTING_URL': 'http://reporting-service'})
         service['env_file'] = [{'path': '/etc/mmiv/messaging/rabbit-client.env', 'format': 'raw'}]
         service['volumes'].append({'type': 'bind', 'source': '/var/lib/mmiv/event-outbox/' + name,
                                   'target': '/var/lib/mmiv/event-outbox'})
@@ -462,7 +462,7 @@ def config_for(state):
             service['environment']['SPRING_DATA_REDIS_TIMEOUT'] = '2s'
         if name == 'transfer-service':
             service['environment']['USER_ACCESS_JWT_ISSUER'] = state.get('USER_ACCESS_JWT_ISSUER', 'https://auth.mmiv.example')
-            service['environment']['USER_ACCESS_JWK_SET_URI'] = 'http://user-access-service:8083/.well-known/jwks.json'
+            service['environment']['USER_ACCESS_JWK_SET_URI'] = 'http://user-access-service/.well-known/jwks.json'
         if name == 'user-access-service':
             service['mem_limit'] = '512m'
             service['memswap_limit'] = '512m'

@@ -16,7 +16,7 @@ Home shows only permitted actions. Files lists objects inside the user's registe
 
 ## Configuration
 
-Deployed Gateway and protected backend services retrieve public keys at `http://user-access-service:8083/.well-known/jwks.json`. `USER_ACCESS_JWT_ISSUER` must match the issuer used by User Access (default `https://auth.mmiv.example`). Both local Compose files include the corresponding configuration. Browser login must use Gateway on port 8080.
+Deployed Gateway and protected backend services retrieve public keys through Eureka using `http://user-access-service/.well-known/jwks.json`. `USER_ACCESS_JWT_ISSUER` must match the issuer used by User Access (default `https://auth.mmiv.example`). Both local Compose files include the corresponding configuration. Browser login must use Gateway on port 8080.
 
 The current local and AWS development Gateway uses HTTP, so `JWT_COOKIE_SECURE` defaults to `false`. When placing the deployment behind HTTPS, set `JWT_COOKIE_SECURE=true` for Gateway. No private signing key is copied to Gateway or Transfer.
 

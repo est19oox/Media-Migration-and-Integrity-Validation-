@@ -10,6 +10,11 @@ import org.junit.jupiter.api.Test;
 import org.springframework.security.oauth2.jwt.Jwt;
 
 class VerificationCleanupServiceTest {
+  private static mmiv.resilience.EurekaHttpClients.EurekaRestClientFactory clients() {
+    return new mmiv.resilience.EurekaHttpClients.EurekaRestClientFactory(
+        org.springframework.web.client.RestClient.builder());
+  }
+
   @Test
   void peerFailureRetainsPlansForRetryAndNeverDeletesUnrelatedRows() throws Exception {
     var repository = mock(MetadataPlanRepository.class);
@@ -27,7 +32,7 @@ class VerificationCleanupServiceTest {
     server.start();
     String url = "http://127.0.0.1:" + server.getAddress().getPort();
     try {
-      var service = new VerificationCleanupService(repository, permissions, url, url);
+      var service = new VerificationCleanupService(repository, permissions, url, url, clients());
       var jwt = Jwt.withTokenValue("fixture").header("alg", "RS256").subject("owner").build();
       assertThrows(
           org.springframework.web.server.ResponseStatusException.class,
@@ -52,7 +57,7 @@ class VerificationCleanupServiceTest {
         .requireActive("fixture");
     var service =
         new VerificationCleanupService(
-            repository, permissions, "http://127.0.0.1:1", "http://127.0.0.1:1");
+            repository, permissions, "http://127.0.0.1:1", "http://127.0.0.1:1", clients());
     var jwt = Jwt.withTokenValue("fixture").header("alg", "RS256").subject("owner").build();
     assertThrows(
         org.springframework.web.server.ResponseStatusException.class,

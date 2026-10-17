@@ -62,8 +62,8 @@ mmiv.events.outbox-directory: ${MMIV_EVENTS_OUTBOX_DIRECTORY:./.mmiv-outbox}
 mmiv.s3.bucket: ${MMIV_BUCKET_NAME:media-migration-dev-landing}
 mmiv.metadata.destination-id: ${MMIV_DESTINATION_ID:${MMIV_BUCKET_NAME:media-migration-dev-landing}}
 mmiv.auth.issuer: ${USER_ACCESS_JWT_ISSUER:https://auth.mmiv.example}
-mmiv.auth.jwk-set-uri: ${USER_ACCESS_JWK_SET_URI:http://user-access-service:8083/.well-known/jwks.json}
-mmiv.access.url: ${USER_ACCESS_URL:http://user-access-service:8083}
-mmiv.transfer.url: ${TRANSFER_URL:http://transfer-service:8081}
+mmiv.auth.jwk-set-uri: ${USER_ACCESS_JWK_SET_URI:http://user-access-service/.well-known/jwks.json}
+mmiv.access.url: ${USER_ACCESS_URL:http://user-access-service}
+mmiv.transfer.url: ${TRANSFER_URL:http://transfer-service}
 
-mmiv.reporting.url: ${REPORTING_URL:http://reporting-service:8084}
+mmiv.reporting.url: ${REPORTING_URL:http://reporting-service}

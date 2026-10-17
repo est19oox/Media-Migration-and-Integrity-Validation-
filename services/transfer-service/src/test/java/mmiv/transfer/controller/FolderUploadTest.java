@@ -8,7 +8,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import java.nio.file.Files;
 import java.util.List;
 import mmiv.transfer.dto.PreparedTransfer;
-import mmiv.transfer.factory.TransferStrategyFactory;
+import mmiv.transfer.factory.S3TransferStrategyFactory;
 import mmiv.transfer.service.*;
 import mmiv.transfer.strategy.S3TransferStrategy;
 import mmiv.transfer.validation.TransferRequestValidator;
@@ -62,7 +62,7 @@ class FolderUploadTest {
     var transfers =
         new TransferService(
             new mmiv.transfer.service.TransferSourcePreparer(validator, 104857600),
-            new TransferStrategyFactory(strategy),
+            new S3TransferStrategyFactory(strategy),
             passingIntegrity(),
             passingCleanup(),
             mock(mmiv.transfer.logging.FileEventLogger.class));

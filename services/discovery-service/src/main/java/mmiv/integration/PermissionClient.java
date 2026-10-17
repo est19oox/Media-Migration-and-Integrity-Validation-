@@ -1,11 +1,9 @@
 package mmiv.integration;
 
-import java.net.http.HttpClient;
 import java.time.Duration;
 import java.util.Map;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
-import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
@@ -15,17 +13,10 @@ import org.springframework.web.server.ResponseStatusException;
 public class PermissionClient {
   private final RestClient client;
 
-  public PermissionClient(@Value("${mmiv.access.url:http://user-access-service:8083}") String url) {
-    var factory =
-        new JdkClientHttpRequestFactory(
-            HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(3)).build());
-    factory.setReadTimeout(Duration.ofSeconds(5));
-    client =
-        RestClient.builder()
-            .requestInterceptor(mmiv.resilience.DependencyCircuits.http("user-access", url))
-            .baseUrl(url)
-            .requestFactory(factory)
-            .build();
+  public PermissionClient(
+      @Value("${mmiv.access.url:http://user-access-service}") String url,
+      mmiv.resilience.EurekaHttpClients.EurekaRestClientFactory clients) {
+    client = clients.create("user-access", url, Duration.ofSeconds(5));
   }
 
   public void require(String token, String userId, String destination, String action) {

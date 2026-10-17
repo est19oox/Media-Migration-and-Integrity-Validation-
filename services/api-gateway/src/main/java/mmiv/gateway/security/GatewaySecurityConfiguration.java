@@ -32,10 +32,26 @@ import reactor.core.publisher.Mono;
 @Configuration
 public class GatewaySecurityConfiguration {
   @Bean
+  @org.springframework.cloud.client.loadbalancer.LoadBalanced
+  @org.springframework.beans.factory.annotation.Qualifier("eurekaWebClientBuilder")
+  org.springframework.web.reactive.function.client.WebClient.Builder eurekaWebClientBuilder() {
+    return org.springframework.web.reactive.function.client.WebClient.builder();
+  }
+
+  @Bean
   ReactiveJwtDecoder gatewayJwtDecoder(
-      @Value("${mmiv.auth.jwk-set-uri}") String jwks, @Value("${mmiv.auth.issuer}") String issuer) {
+      @Value("${mmiv.auth.jwk-set-uri}") String jwks,
+      @Value("${mmiv.auth.issuer}") String issuer,
+      @org.springframework.beans.factory.annotation.Qualifier("eurekaWebClientBuilder")
+          org.springframework.web.reactive.function.client.WebClient.Builder eurekaBuilder) {
     NimbusReactiveJwtDecoder decoder =
-        NimbusReactiveJwtDecoder.withJwkSetUri(jwks).jwsAlgorithm(SignatureAlgorithm.RS256).build();
+        NimbusReactiveJwtDecoder.withJwkSetUri(jwks)
+            .webClient(
+                mmiv.resilience.EurekaHttpClients.isDirect(jwks)
+                    ? org.springframework.web.reactive.function.client.WebClient.create()
+                    : eurekaBuilder.build())
+            .jwsAlgorithm(SignatureAlgorithm.RS256)
+            .build();
     decoder.setJwtValidator(
         new DelegatingOAuth2TokenValidator<>(
             JwtValidators.createDefaultWithIssuer(issuer),
@@ -141,7 +157,8 @@ public class GatewaySecurityConfiguration {
                         "/actuator/health/**",
                         "/actuator/info",
                         "/user-access/actuator/health",
-                        "/user-access/actuator/health/**")
+                        "/user-access/actuator/health/**",
+                        "/user-access/.well-known/jwks.json")
                     .permitAll()
                     .pathMatchers(
                         HttpMethod.GET,

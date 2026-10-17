@@ -19,28 +19,13 @@ public class VerificationCleanupService {
   public VerificationCleanupService(
       MetadataPlanRepository repository,
       PermissionClient permissions,
-      @Value("${mmiv.transfer.url:http://transfer-service:8081}") String transferUrl,
-      @Value("${mmiv.reporting.url:http://reporting-service:8084}") String reportingUrl) {
+      @Value("${mmiv.transfer.url:http://transfer-service}") String transferUrl,
+      @Value("${mmiv.reporting.url:http://reporting-service}") String reportingUrl,
+      mmiv.resilience.EurekaHttpClients.EurekaRestClientFactory clients) {
     this.repository = repository;
     this.permissions = permissions;
-    var factory =
-        new org.springframework.http.client.JdkClientHttpRequestFactory(
-            java.net.http.HttpClient.newBuilder()
-                .connectTimeout(java.time.Duration.ofSeconds(3))
-                .build());
-    factory.setReadTimeout(java.time.Duration.ofMinutes(5));
-    transfer =
-        RestClient.builder()
-            .requestInterceptor(mmiv.resilience.DependencyCircuits.http("transfer", transferUrl))
-            .baseUrl(transferUrl)
-            .requestFactory(factory)
-            .build();
-    reporting =
-        RestClient.builder()
-            .requestInterceptor(mmiv.resilience.DependencyCircuits.http("reporting", reportingUrl))
-            .baseUrl(reportingUrl)
-            .requestFactory(factory)
-            .build();
+    transfer = clients.create("transfer", transferUrl, java.time.Duration.ofMinutes(5));
+    reporting = clients.create("reporting", reportingUrl, java.time.Duration.ofMinutes(5));
   }
 
   public boolean closed(Jwt jwt, UUID run) {

@@ -6,7 +6,7 @@ import static org.mockito.Mockito.*;
 import java.nio.file.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import mmiv.transfer.dto.*;
-import mmiv.transfer.factory.TransferStrategyFactory;
+import mmiv.transfer.factory.S3TransferStrategyFactory;
 import mmiv.transfer.integration.*;
 import mmiv.transfer.strategy.S3TransferStrategy;
 import mmiv.transfer.validation.TransferRequestValidator;
@@ -37,7 +37,7 @@ class TransferRetryCleanupTest {
     service =
         new TransferService(
             new mmiv.transfer.service.TransferSourcePreparer(validator, 104857600),
-            new TransferStrategyFactory(strategy),
+            new S3TransferStrategyFactory(strategy),
             new IntegrityValidationGateway(client, 3, 0),
             new S3ObjectCleanup(s3, 3, 0),
             mock(mmiv.transfer.logging.FileEventLogger.class));

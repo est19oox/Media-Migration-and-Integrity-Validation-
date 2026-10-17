@@ -17,20 +17,10 @@ public class VerificationCleanupController {
   private final VerificationCleanupGuard cleanup;
 
   public VerificationCleanupController(
-      @Value("${mmiv.metadata.url:http://discovery-service:8085}") String url,
-      VerificationCleanupGuard cleanup) {
-    var factory =
-        new org.springframework.http.client.JdkClientHttpRequestFactory(
-            java.net.http.HttpClient.newBuilder()
-                .connectTimeout(java.time.Duration.ofSeconds(3))
-                .build());
-    factory.setReadTimeout(java.time.Duration.ofSeconds(15));
-    this.metadata =
-        RestClient.builder()
-            .requestInterceptor(mmiv.resilience.DependencyCircuits.http("metadata", url))
-            .baseUrl(url)
-            .requestFactory(factory)
-            .build();
+      @Value("${mmiv.metadata.url:http://discovery-service}") String url,
+      VerificationCleanupGuard cleanup,
+      mmiv.resilience.EurekaHttpClients.EurekaRestClientFactory clients) {
+    this.metadata = clients.create("metadata", url, java.time.Duration.ofSeconds(15));
     this.cleanup = cleanup;
   }
 

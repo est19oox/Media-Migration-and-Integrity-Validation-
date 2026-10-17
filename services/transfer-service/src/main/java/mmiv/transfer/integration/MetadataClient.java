@@ -1,11 +1,9 @@
 package mmiv.transfer.integration;
 
-import java.net.http.HttpClient;
 import java.time.Duration;
 import java.util.*;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
-import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
@@ -22,26 +20,13 @@ public class MetadataClient {
   private final String metadataBase;
 
   public MetadataClient(
-      @Value("${mmiv.metadata.url:http://discovery-service:8085}") String url,
-      @Value("${mmiv.access.url:http://user-access-service:8083}") String accessUrl,
+      @Value("${mmiv.metadata.url:http://discovery-service}") String url,
+      @Value("${mmiv.access.url:http://user-access-service}") String accessUrl,
       @Value("${mmiv.s3.bucket}") String bucket,
-      @Value("${mmiv.metadata.destination-id:${mmiv.s3.bucket}}") String destination) {
-    var factory =
-        new JdkClientHttpRequestFactory(
-            HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(3)).build());
-    factory.setReadTimeout(Duration.ofSeconds(10));
-    metadata =
-        RestClient.builder()
-            .requestInterceptor(mmiv.resilience.DependencyCircuits.http("metadata", url))
-            .baseUrl(url)
-            .requestFactory(factory)
-            .build();
-    access =
-        RestClient.builder()
-            .requestInterceptor(mmiv.resilience.DependencyCircuits.http("user-access", accessUrl))
-            .baseUrl(accessUrl)
-            .requestFactory(factory)
-            .build();
+      @Value("${mmiv.metadata.destination-id:${mmiv.s3.bucket}}") String destination,
+      mmiv.resilience.EurekaHttpClients.EurekaRestClientFactory clients) {
+    metadata = clients.create("metadata", url, Duration.ofSeconds(10));
+    access = clients.create("user-access", accessUrl, Duration.ofSeconds(10));
     this.bucket = bucket;
     this.destination = destination;
     this.metadataBase = url;

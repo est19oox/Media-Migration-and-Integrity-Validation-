@@ -30,7 +30,7 @@ aws:
 mmiv:
   auth:
     issuer: ${USER_ACCESS_JWT_ISSUER:https://auth.mmiv.example}
-    jwk-set-uri: ${USER_ACCESS_JWK_SET_URI:http://localhost:8083/.well-known/jwks.json}
+    jwk-set-uri: ${USER_ACCESS_JWK_SET_URI:http://user-access-service/.well-known/jwks.json}
   integrity:
     max-attempts: ${INTEGRITY_MAX_ATTEMPTS:3}
     retry-delay-ms: ${INTEGRITY_RETRY_DELAY_MS:1000}
@@ -74,8 +74,8 @@ eureka:
 mmiv.events.enabled: ${MMIV_EVENTS_ENABLED:true}
 mmiv.events.outbox-directory: ${MMIV_EVENTS_OUTBOX_DIRECTORY:./.mmiv-outbox}
 
-mmiv.metadata.url: ${METADATA_URL:http://discovery-service:8085}
-mmiv.access.url: ${USER_ACCESS_URL:http://user-access-service:8083}
+mmiv.metadata.url: ${METADATA_URL:http://discovery-service}
+mmiv.access.url: ${USER_ACCESS_URL:http://user-access-service}
 mmiv.metadata.destination-id: ${MMIV_DESTINATION_ID:${MMIV_BUCKET_NAME:media-migration-dev-landing}}
 
 mmiv.s3.endpoint: ${MMIV_S3_ENDPOINT:}

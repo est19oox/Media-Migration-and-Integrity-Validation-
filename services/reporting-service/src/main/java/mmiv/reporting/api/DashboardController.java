@@ -25,27 +25,12 @@ public class DashboardController {
 
   public DashboardController(
       MongoTemplate mongo,
-      @Value("${mmiv.metadata.url:http://discovery-service:8085}") String metadataUrl,
-      @Value("${mmiv.access.url:http://user-access-service:8083}") String accessUrl) {
+      @Value("${mmiv.metadata.url:http://discovery-service}") String metadataUrl,
+      @Value("${mmiv.access.url:http://user-access-service}") String accessUrl,
+      mmiv.resilience.EurekaHttpClients.EurekaRestClientFactory clients) {
     this.mongo = mongo;
-    var factory =
-        new org.springframework.http.client.JdkClientHttpRequestFactory(
-            java.net.http.HttpClient.newBuilder()
-                .connectTimeout(java.time.Duration.ofSeconds(3))
-                .build());
-    factory.setReadTimeout(java.time.Duration.ofSeconds(10));
-    metadata =
-        RestClient.builder()
-            .requestInterceptor(mmiv.resilience.DependencyCircuits.http("metadata", metadataUrl))
-            .baseUrl(metadataUrl)
-            .requestFactory(factory)
-            .build();
-    access =
-        RestClient.builder()
-            .requestInterceptor(mmiv.resilience.DependencyCircuits.http("user-access", accessUrl))
-            .baseUrl(accessUrl)
-            .requestFactory(factory)
-            .build();
+    metadata = clients.create("metadata", metadataUrl, java.time.Duration.ofSeconds(10));
+    access = clients.create("user-access", accessUrl, java.time.Duration.ofSeconds(10));
   }
 
   @GetMapping("/api/dashboard")
