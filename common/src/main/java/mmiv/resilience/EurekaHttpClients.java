@@ -4,6 +4,8 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.time.Duration;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.cloud.client.loadbalancer.LoadBalancerClient;
+import org.springframework.cloud.client.loadbalancer.LoadBalancerInterceptor;
 import org.springframework.cloud.client.loadbalancer.LoadBalanced;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -14,13 +16,6 @@ import org.springframework.web.client.RestTemplate;
 /** Creates HTTP clients that resolve logical service names through Eureka and Spring Cloud. */
 @Configuration
 public class EurekaHttpClients {
-  @Bean
-  @LoadBalanced
-  @Qualifier("eurekaRestClientBuilder")
-  RestClient.Builder eurekaRestClientBuilder() {
-    return RestClient.builder();
-  }
-
   @Bean
   @LoadBalanced
   @Qualifier("eurekaRestTemplate")
@@ -38,9 +33,12 @@ public class EurekaHttpClients {
   }
 
   @Bean
-  EurekaRestClientFactory eurekaRestClientFactory(
-      @Qualifier("eurekaRestClientBuilder") RestClient.Builder loadBalancedBuilder) {
-    return new EurekaRestClientFactory(loadBalancedBuilder);
+  EurekaRestClientFactory eurekaRestClientFactory(LoadBalancerClient loadBalancerClient) {
+    // Do not publish a @LoadBalanced RestClient.Builder bean: Eureka's own HTTP
+    // transport would inherit it and try to discover the registry through itself.
+    RestClient.Builder businessClientBuilder =
+        RestClient.builder().requestInterceptor(new LoadBalancerInterceptor(loadBalancerClient));
+    return new EurekaRestClientFactory(businessClientBuilder);
   }
 
   public static final class EurekaRestClientFactory {

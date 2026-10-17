@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.*;
 import com.sun.net.httpserver.HttpServer;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
@@ -19,34 +20,44 @@ import org.springframework.test.context.DynamicPropertySource;
     properties = "eureka.client.enabled=false")
 class IntegrityFeignContractTest {
   static final HttpServer server;
+  static final HttpServer secondServer;
   static final AtomicReference<String> body = new AtomicReference<>();
+  static final AtomicInteger firstCalls = new AtomicInteger();
+  static final AtomicInteger secondCalls = new AtomicInteger();
   static final String checksum = "a".repeat(64);
 
   static {
     try {
-      server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
-      server.createContext(
-          "/api/integrity/validate",
-          exchange -> {
-            body.set(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
-            String json =
-                "{\"transferId\":\"transfer-1\",\"bucket\":\"bucket\",\"objectKey\":\"folder/key\","
-                    + "\"algorithm\":\"SHA-256\",\"sourceChecksum\":\""
-                    + checksum
-                    + "\","
-                    + "\"destinationChecksum\":\""
-                    + checksum
-                    + "\",\"valid\":true,\"validationResult\":\"PASSED\"}";
-            byte[] bytes = json.getBytes(StandardCharsets.UTF_8);
-            exchange.getResponseHeaders().set("Content-Type", "application/json");
-            exchange.sendResponseHeaders(200, bytes.length);
-            exchange.getResponseBody().write(bytes);
-            exchange.close();
-          });
-      server.start();
+      server = startServer(firstCalls);
+      secondServer = startServer(secondCalls);
     } catch (java.io.IOException e) {
       throw new ExceptionInInitializerError(e);
     }
+  }
+
+  private static HttpServer startServer(AtomicInteger calls) throws java.io.IOException {
+    HttpServer instance = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+    instance.createContext(
+        "/api/integrity/validate",
+        exchange -> {
+          calls.incrementAndGet();
+          body.set(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
+          String json =
+              "{\"transferId\":\"transfer-1\",\"bucket\":\"bucket\",\"objectKey\":\"folder/key\","
+                  + "\"algorithm\":\"SHA-256\",\"sourceChecksum\":\""
+                  + checksum
+                  + "\","
+                  + "\"destinationChecksum\":\""
+                  + checksum
+                  + "\",\"valid\":true,\"validationResult\":\"PASSED\"}";
+          byte[] bytes = json.getBytes(StandardCharsets.UTF_8);
+          exchange.getResponseHeaders().set("Content-Type", "application/json");
+          exchange.sendResponseHeaders(200, bytes.length);
+          exchange.getResponseBody().write(bytes);
+          exchange.close();
+        });
+    instance.start();
+    return instance;
   }
 
   @DynamicPropertySource
@@ -54,6 +65,9 @@ class IntegrityFeignContractTest {
     properties.add(
         "spring.cloud.discovery.client.simple.instances.integrity-service[0].uri",
         () -> "http://127.0.0.1:" + server.getAddress().getPort());
+    properties.add(
+        "spring.cloud.discovery.client.simple.instances.integrity-service[1].uri",
+        () -> "http://127.0.0.1:" + secondServer.getAddress().getPort());
   }
 
   @Autowired IntegrityValidationGateway gateway;
@@ -61,6 +75,7 @@ class IntegrityFeignContractTest {
   @AfterAll
   static void stop() {
     server.stop(0);
+    secondServer.stop(0);
   }
 
   @org.junit.jupiter.api.BeforeEach
@@ -90,5 +105,16 @@ class IntegrityFeignContractTest {
     assertTrue(body.get().contains("\"objectKey\":\"folder/key\""));
     assertTrue(body.get().contains(checksum));
     assertFalse(body.get().contains("sourcePath"));
+  }
+
+  @Test
+  void staticDiscoveryLoadBalancesAcrossBothIntegrityInstances() {
+    int firstBefore = firstCalls.get();
+    int secondBefore = secondCalls.get();
+    for (int attempt = 0; attempt < 10; attempt++) {
+      assertTrue(gateway.validate("transfer-1", "bucket", "folder/key", checksum).success());
+    }
+    assertTrue(firstCalls.get() > firstBefore);
+    assertTrue(secondCalls.get() > secondBefore);
   }
 }

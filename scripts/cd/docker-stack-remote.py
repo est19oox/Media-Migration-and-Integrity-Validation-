@@ -43,6 +43,7 @@ def registered(name, address=None, port=None):
     deadline = time.monotonic() + 300
     observations = []
     route_statuses = {}
+    registry_query = 'not_attempted'
     for attempt in range(60):
         if time.monotonic() >= deadline:
             break
@@ -51,6 +52,7 @@ def registered(name, address=None, port=None):
                               headers={'Accept': 'application/json'})
             with urlopen(request, timeout=3) as response:
                 instances = json.load(response)['application'].get('instance', [])
+                registry_query = 'HTTP_200'
             if isinstance(instances, dict):
                 instances = [instances]
             observations = [
@@ -81,15 +83,18 @@ def registered(name, address=None, port=None):
                         break
             if ready:
                 return
+        except HTTPError as error:
+            registry_query = 'HTTP_' + str(error.code)
         except (OSError, ValueError, KeyError, TypeError):
-            pass
+            registry_query = 'transport_or_invalid_response'
         if attempt < 59:
             time.sleep(5)
     error = RuntimeError('Service registration or Gateway routes did not become ready')
     error.readiness_observation = {
         'service': name, 'expected_address': address,
         'expected_port': str(port) if port is not None else None,
-        'registered_instances': observations, 'gateway_route_statuses': route_statuses}
+        'registered_instances': observations, 'gateway_route_statuses': route_statuses,
+        'registry_query': registry_query}
     raise error
 
 
@@ -99,6 +104,13 @@ def eureka_diagnostics(container):
                     'http://service-registry:8761/eureka/apps', check=False, timeout=10)
     logs = command('docker', 'logs', '--tail', '500', container, check=False, timeout=15)
     text = (logs.stdout + '\n' + logs.stderr).lower()
+    known_errors = {
+        'registry_through_load_balancer': 'no instances available for service-registry',
+        'dns_failure': 'unknownhostexception',
+        'connection_refused': 'connection refused',
+        'connection_timeout': 'sockettimeoutexception',
+        'tls_failure': 'sslhandshakeexception',
+    }
     signals = {
         'discovery_client_started': 'discoveryclient' in text,
         'registration_attempted': ('registering application' in text
@@ -109,7 +121,9 @@ def eureka_diagnostics(container):
                                  or 'request execution failure' in text),
         'transport_error': ('transportexception' in text or 'transport exception' in text)}
     return {'registry_http_reachable': probe.returncode == 0,
-            'eureka_log_signals': signals}
+            'eureka_log_signals': signals,
+            'client_error_kinds': [kind for kind, marker in known_errors.items()
+                                   if marker in text]}
 
 
 def atomic_write(path, content):

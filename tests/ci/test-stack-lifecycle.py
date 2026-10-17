@@ -84,6 +84,16 @@ class StackLifecycleTest(unittest.TestCase):
         self.assertTrue(result.exception.readiness_observation[
             'eureka_log_signals']['registry_unreachable'])
 
+    def test_eureka_diagnostics_identifies_registry_load_balancer_loop(self):
+        def response(*args, **kwargs):
+            output = ('No instances available for service-registry password=private-value'
+                      if args[-1] == 'integrity-service' else '')
+            return subprocess.CompletedProcess(args, 0, output, '')
+        with patch.object(remote, 'command', side_effect=response):
+            detail = remote.eureka_diagnostics('integrity-service')
+        self.assertIn('registry_through_load_balancer', detail['client_error_kinds'])
+        self.assertNotIn('private-value', json.dumps(detail))
+
     def command(self, *args, check=True, timeout=120):
         self.calls.append(args)
         result = subprocess.CompletedProcess(args, 0, '', '')

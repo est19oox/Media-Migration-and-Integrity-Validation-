@@ -6,6 +6,12 @@ The EC2 release manifest now includes `integrity-service` (8082) and
 name. Deployment waits for both physical instances to be healthy and registered;
 rollback tracks their containers independently. This is fixed horizontal replication,
 not an autoscaler, and it requires enough EC2 memory for the additional JVM.
+Business HTTP clients install their load-balancing interceptor on a private
+`RestClient.Builder`. Publishing a global `@LoadBalanced RestClient.Builder` also
+affected Eureka's own registration transport, making it try to discover the registry
+before it could register. `EurekaRegistrationTest` verifies that a real registration
+POST reaches a registry endpoint, and `IntegrityFeignContractTest` verifies that
+Transfer distributes validation calls across two discovered Integrity instances.
 The current Terraform host is an 8 GiB t3.large. Configured container maxima total
 approximately 7.4 GiB with the new components, leaving limited host headroom.
 Measure RSS under load and review capacity before production deployment; this change
