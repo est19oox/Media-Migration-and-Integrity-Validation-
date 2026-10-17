@@ -69,6 +69,21 @@ class StackLifecycleTest(unittest.TestCase):
             remote.ready('transfer-service', self.state, legacy)
         remote.registered.assert_called_with('transfer-service', '172.20.0.8', '8081')
 
+    def test_registration_failure_collects_safe_container_diagnostics(self):
+        failure = RuntimeError('Service registration or Gateway routes did not become ready')
+        failure.readiness_observation = {'service': 'transfer-service'}
+        with patch.object(remote, 'inspect', return_value={
+                'NetworkSettings': {'Networks': {'mmiv-backend': {'IPAddress': '172.20.0.8'}}}}), \
+                patch.object(remote, 'registered', side_effect=failure), \
+                patch.object(remote, 'eureka_diagnostics', return_value={
+                    'registry_http_reachable': False,
+                    'eureka_log_signals': {'registry_unreachable': True}}):
+            with self.assertRaises(RuntimeError) as result:
+                remote.ready('transfer-service', self.state)
+        self.assertFalse(result.exception.readiness_observation['registry_http_reachable'])
+        self.assertTrue(result.exception.readiness_observation[
+            'eureka_log_signals']['registry_unreachable'])
+
     def command(self, *args, check=True, timeout=120):
         self.calls.append(args)
         result = subprocess.CompletedProcess(args, 0, '', '')

@@ -26,6 +26,8 @@ class DeploymentConfigurationTest(unittest.TestCase):
             self.assertTrue(client['register-with-eureka'], service)
             self.assertTrue(client['fetch-registry'], service)
             self.assertTrue(client['healthcheck']['enabled'], service)
+        discovery_application = (ROOT / 'services/discovery-service/src/main/java/mmiv/Application.java').read_text()
+        self.assertIn('@EnableDiscoveryClient', discovery_application)
 
     def test_remote_stack_assigns_browser_auth_and_public_binding_to_gateway(self):
         if 'fcntl' not in sys.modules:

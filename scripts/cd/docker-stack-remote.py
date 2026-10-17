@@ -93,6 +93,25 @@ def registered(name, address=None, port=None):
     raise error
 
 
+def eureka_diagnostics(container):
+    """Return bounded, non-secret evidence before a failed container is rolled back."""
+    probe = command('docker', 'exec', container, 'wget', '-q', '--spider',
+                    'http://service-registry:8761/eureka/apps', check=False, timeout=10)
+    logs = command('docker', 'logs', '--tail', '500', container, check=False, timeout=15)
+    text = (logs.stdout + '\n' + logs.stderr).lower()
+    signals = {
+        'discovery_client_started': 'discoveryclient' in text,
+        'registration_attempted': ('registering application' in text
+                                   or 'registration status' in text),
+        'registration_accepted': 'registration status: 204' in text,
+        'registry_unreachable': ('cannot execute request on any known server' in text
+                                 or 'connection refused' in text
+                                 or 'request execution failure' in text),
+        'transport_error': ('transportexception' in text or 'transport exception' in text)}
+    return {'registry_http_reachable': probe.returncode == 0,
+            'eureka_log_signals': signals}
+
+
 def atomic_write(path, content):
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_suffix(path.suffix + '.next')
@@ -653,8 +672,13 @@ def ready(name, state, service_config=None):
         address = current['NetworkSettings']['Networks']['mmiv-backend']['IPAddress']
         if not address:
             raise RuntimeError('Service has no shared-network address')
-        registered('integrity-service' if name == 'integrity-service-2' else name,
-                   address, item['port'])
+        try:
+            registered('integrity-service' if name == 'integrity-service-2' else name,
+                       address, item['port'])
+        except RuntimeError as error:
+            if hasattr(error, 'readiness_observation'):
+                error.readiness_observation.update(eureka_diagnostics(name))
+            raise
 
 
 def save(path, data):
