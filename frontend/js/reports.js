@@ -2,6 +2,7 @@
 
 (() => {
   const REPORTS_URL = '/api/reports/mine';
+  const PROFILE_URL = '/api/access/me';
   const PAGE_SIZE = 20;
   const statusFilter = document.getElementById('reportStatusFilter');
   const rows = document.getElementById('reportRows');
@@ -9,6 +10,10 @@
   const previous = document.getElementById('reportsPrevious');
   const next = document.getElementById('reportsNext');
   const status = document.getElementById('reportsStatus');
+  const pagePosition = document.getElementById('reportsPagePosition');
+  const account = document.getElementById('account');
+  const accountRole = document.getElementById('accountRole');
+  const adminLinks = document.querySelectorAll('[data-admin]');
   const safeStatuses = new Set([
     'PROCESSING',
     'COMPLETED',
@@ -18,6 +23,24 @@
   ]);
   let page = 0;
   let totalPages = 0;
+
+  const renderProfile = (profile) => {
+    if (!profile || !['USER', 'ADMIN'].includes(profile.role)) {
+      throw new Error('Invalid profile response');
+    }
+    account.textContent =
+      typeof profile.username === 'string' && profile.username ? profile.username : 'MMIV account';
+    accountRole.textContent = profile.role === 'ADMIN' ? 'Administrator' : 'Workspace member';
+    adminLinks.forEach((link) => {
+      link.hidden = profile.role !== 'ADMIN';
+    });
+  };
+
+  const loadProfile = async () => {
+    const response = await window.mmivAuth.fetch(PROFILE_URL);
+    if (!response.ok) throw new Error('Profile unavailable');
+    renderProfile(await response.json());
+  };
 
   const cell = (value) => {
     const element = document.createElement('td');
@@ -117,6 +140,7 @@
 
       page = payload.number;
       totalPages = payload.totalPages;
+      pagePosition.textContent = totalPages === 0 ? 'Page 0 of 0' : `Page ${page + 1} of ${totalPages}`;
       render(payload.content);
       count.textContent = `${payload.totalElements} ${payload.totalElements === 1 ? 'report' : 'reports'}`;
       status.textContent = payload.content.length
@@ -148,7 +172,7 @@
     }
   });
 
-  window.mmivAuth.ready.then(load).catch(() => {
+  window.mmivAuth.ready.then(loadProfile).then(load).catch(() => {
     rows.replaceChildren();
     count.textContent = '0 reports';
     status.textContent = 'Your session could not be verified.';

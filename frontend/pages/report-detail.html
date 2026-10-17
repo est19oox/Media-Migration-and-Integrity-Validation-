@@ -36,6 +36,11 @@
       </header>
 
       <main class="home-main report-detail-main">
+        <div class="report-detail-toolbar">
+          <a id="reportBackLink" class="report-back-link" href="/pages/reports.html"
+            >← Back to migration reports</a
+          >
+        </div>
         <p id="reportDetailStatus" class="report-detail-message" role="status" aria-live="polite">
           Loading migration report…
         </p>
@@ -43,7 +48,6 @@
         <section class="report-detail-card glass-panel" aria-labelledby="report-detail-title">
           <div class="reports-heading">
             <div>
-              <a class="report-back-link" href="reports.html">← All migration reports</a>
               <h1 id="report-detail-title">Migration Report</h1>
               <p id="reportMigrationId">—</p>
             </div>
@@ -89,7 +93,16 @@
         <section class="report-detail-card glass-panel" aria-labelledby="report-files-title">
           <div class="report-section-heading">
             <h2 id="report-files-title">Files</h2>
-            <span id="reportFileCount">0 files</span>
+            <div class="report-file-heading-tools">
+              <label id="reportFileScopeControl" hidden>
+                <span>Show</span>
+                <select id="reportFileScope">
+                  <option value="failed">Failed files</option>
+                  <option value="all">All files</option>
+                </select>
+              </label>
+              <span id="reportFileCount">0 files</span>
+            </div>
           </div>
           <div class="reports-table-scroll" tabindex="0" aria-label="Scrollable file results">
             <table class="reports-table report-files-table">

@@ -51,7 +51,7 @@ public class FolderUploadService {
       }
     }
     return new FolderUploadResponse(
-        prefix, succeeded, files.size() - succeeded, List.copyOf(results));
+        prefix, succeeded, files.size() - succeeded, List.copyOf(results), null);
   }
 
   public void validate(List<MultipartFile> files, List<String> relativePaths) {

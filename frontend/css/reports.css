@@ -4,6 +4,26 @@
   --reports-line: rgba(110, 155, 200, 0.16);
 }
 
+html:has(body.reports-page),
+body.home-page.reports-page {
+  height: auto;
+  min-height: 100%;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.reports-page .home-shell {
+  height: auto;
+  min-height: 100dvh;
+  overflow: visible;
+}
+
+.reports-page .home-main {
+  flex: 1 0 auto;
+  min-height: auto;
+  overflow: visible;
+}
+
 .reports-main {
   width: 100%;
   flex: 1;
@@ -17,7 +37,7 @@
   width: 100%;
   min-height: 0;
   padding: 24px 26px;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .reports-heading,
@@ -139,6 +159,11 @@
   gap: 8px;
 }
 
+#reportsPagePosition {
+  margin-right: 4px;
+  white-space: nowrap;
+}
+
 .reports-pagination button {
   min-width: 82px;
   padding: 8px 12px;
@@ -178,7 +203,14 @@
   display: grid;
   gap: 16px;
   width: 100%;
+  max-width: 1320px;
+  margin: 0 auto;
   padding: 12px 0;
+}
+
+.report-detail-toolbar {
+  display: flex;
+  justify-content: flex-start;
 }
 
 .report-detail-message {
@@ -194,8 +226,12 @@
 
 .report-back-link {
   display: inline-block;
-  margin-bottom: 10px;
+  padding: 9px 12px;
+  border: 1px solid var(--reports-line);
+  border-radius: 6px;
   color: #0878ce;
+  background: rgba(255, 255, 255, 0.7);
+  font-weight: 600;
   text-decoration: none;
 }
 
@@ -268,6 +304,29 @@
   font-size: 12px;
 }
 
+.report-file-heading-tools {
+  display: flex;
+  align-items: end;
+  gap: 14px;
+}
+
+.report-file-heading-tools label {
+  display: grid;
+  gap: 5px;
+  color: var(--reports-muted);
+  font-size: 11px;
+}
+
+.report-file-heading-tools select {
+  min-width: 140px;
+  height: 36px;
+  padding: 0 10px;
+  border: 1px solid var(--reports-line);
+  border-radius: 6px;
+  color: var(--reports-text);
+  background: rgba(255, 255, 255, 0.78);
+}
+
 .report-timeline {
   display: grid;
   gap: 10px;
@@ -294,6 +353,14 @@
 
 .report-timeline time {
   text-align: right;
+}
+
+@media (max-width: 1000px) {
+  .report-metadata,
+  .report-summary-grid,
+  .report-stage-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 700px) {

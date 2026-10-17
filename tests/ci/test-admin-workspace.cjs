@@ -1530,6 +1530,7 @@ test('administrator reports load only when their own tab is opened', async () =>
   await app.trigger('tab-reports', 'change');
 
   assert.ok(app.requests.includes(ADMIN_REPORTS + '?page=0&size=20'));
+  assert.equal(app.element('adminReportsMeta').textContent, '1 report · Page 1 of 1');
   const row = app.rows('adminReportsTable')[0];
   assert.equal(row.children[0].textContent, REPORT_ID);
   assert.equal(row.children[1].textContent, 'u-alice');
@@ -1571,4 +1572,5 @@ test('the administrator workspace exposes a distinct reports section', () => {
   ]) {
     assert.ok(html.includes('id="' + id + '"'), 'missing #' + id);
   }
+  assert.ok(html.includes('All Migration Reports'));
 });

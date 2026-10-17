@@ -212,7 +212,24 @@ expect_status 200 GET /pages/reports.html
 expect_status 200 GET /api/v1/session
 expect_status 200 GET '/api/reports/mine?page=0&size=20'
 expect_status 200 GET "/api/reports/$MIGRATION_ID"
-expect_status 200 GET "/api/reports/$MIGRATION_ID/files?page=0&size=20"
+expect_status 200 GET "/api/reports/$MIGRATION_ID/files?page=0&size=20&failedOnly=true"
+python3 - "$TEMP_DIR/response.json" <<'PY'
+import json
+from pathlib import Path
+import sys
+page = json.loads(Path(sys.argv[1]).read_text(encoding='utf-8'))
+if page.get('totalElements') != 0 or page.get('content') != []:
+    raise SystemExit('Successful fixture unexpectedly appeared in failed-only file results')
+PY
+expect_status 200 GET "/api/reports/$MIGRATION_ID/files?page=0&size=20&failedOnly=false"
+python3 - "$TEMP_DIR/response.json" <<'PY'
+import json
+from pathlib import Path
+import sys
+page = json.loads(Path(sys.argv[1]).read_text(encoding='utf-8'))
+if page.get('number') != 0 or page.get('totalElements') != 1 or len(page.get('content', [])) != 1:
+    raise SystemExit('All-file page did not preserve pagination totals')
+PY
 expect_status 200 GET "/api/reports/$MIGRATION_ID/timeline?page=0&size=20"
 
 echo "Waiting for the Gateway to report Transfer as unavailable..."
