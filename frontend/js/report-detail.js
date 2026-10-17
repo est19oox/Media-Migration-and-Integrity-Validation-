@@ -5,7 +5,7 @@
   const TERMINAL = new Set(['COMPLETED', 'PARTIALLY_COMPLETED', 'FAILED', 'INCOMPLETE']);
   const POLL_MS = 10_000;
   const FILE_SIZE = 20;
-  const EVENT_SIZE = 50;
+  const EVENT_SIZE = 20;
   const SAFE_EVENT_STATUSES = new Set([
     'STARTED',
     'ACCEPTED',
@@ -30,6 +30,10 @@
   let currentStatus = null;
   let filePage = 0;
   let filePages = 0;
+  let timelinePage = 0;
+  let timelinePages = 0;
+  let adminEventPage = 0;
+  let adminEventPages = 0;
   let failedOnly = true;
   let timer = null;
   let rendered = false;
@@ -178,6 +182,15 @@
       return item;
     });
     timeline.replaceChildren(...items);
+    timelinePage = payload.number;
+    timelinePages = payload.totalPages;
+    element('reportTimelineCount').textContent =
+      `${payload.totalElements} ${payload.totalElements === 1 ? 'event' : 'events'}`;
+    element('reportTimelinePage').textContent =
+      `Page ${timelinePage + 1} of ${Math.max(timelinePages, 1)}`;
+    element('reportTimelinePrevious').disabled = timelinePage === 0;
+    element('reportTimelineNext').disabled =
+      timelinePages === 0 || timelinePage + 1 >= timelinePages;
   }
 
   function timelineFromAdminEvents(payload) {
@@ -228,6 +241,15 @@
       return row;
     });
     adminRows.replaceChildren(...rows);
+    adminEventPage = payload.number;
+    adminEventPages = payload.totalPages;
+    element('adminEventCount').textContent =
+      `${payload.totalElements} ${payload.totalElements === 1 ? 'event' : 'events'}`;
+    element('adminEventPage').textContent =
+      `Page ${adminEventPage + 1} of ${Math.max(adminEventPages, 1)}`;
+    element('adminEventPrevious').disabled = adminEventPage === 0;
+    element('adminEventNext').disabled =
+      adminEventPages === 0 || adminEventPage + 1 >= adminEventPages;
   }
 
   function cancelPoll() {
@@ -246,24 +268,48 @@
     return `${root}/${id}/files?page=${requestedPage}&size=${FILE_SIZE}&failedOnly=${failedOnly}`;
   }
 
+  function timelineUrl(requestedPage) {
+    return profile.role === 'ADMIN'
+      ? `/api/admin/reports/${id}/events?page=${requestedPage}&size=${EVENT_SIZE}`
+      : `/api/reports/${id}/timeline?page=${requestedPage}&size=${EVENT_SIZE}`;
+  }
+
+  function adminEventsUrl(requestedPage) {
+    return `/api/admin/reports/${id}/events?page=${requestedPage}&size=${EVENT_SIZE}`;
+  }
+
   async function refresh(isPolling = false) {
     cancelPoll();
     try {
       const reportRoot = profile.role === 'ADMIN' ? '/api/admin/reports' : '/api/reports';
-      const tasks = [read(`${reportRoot}/${id}`), read(filesUrl(reportRoot, filePage))];
-      tasks.push(
+      const requestedTimelinePage = timelinePage;
+      const requestedAdminEventPage = adminEventPage;
+      const reportRequest = read(`${reportRoot}/${id}`);
+      const fileRequest = read(filesUrl(reportRoot, filePage));
+      const timelineRequest = read(timelineUrl(requestedTimelinePage));
+      const adminEventRequest =
         profile.role === 'ADMIN'
-          ? read(`/api/admin/reports/${id}/events?page=0&size=${EVENT_SIZE}`)
-          : read(`/api/reports/${id}/timeline?page=0&size=${EVENT_SIZE}`),
-      );
-      const [report, files, events] = await Promise.all(tasks);
+          ? requestedAdminEventPage === requestedTimelinePage
+            ? timelineRequest
+            : read(adminEventsUrl(requestedAdminEventPage))
+          : Promise.resolve(null);
+      const [report, files, events, adminEvents] = await Promise.all([
+        reportRequest,
+        fileRequest,
+        timelineRequest,
+        adminEventRequest,
+      ]);
       renderSummary(report);
       renderFiles(files);
       if (profile.role === 'ADMIN') {
-        renderTimeline(timelineFromAdminEvents(events));
-        renderAdminEvents(events);
+        if (timelinePage === requestedTimelinePage) {
+          renderTimeline(timelineFromAdminEvents(events));
+        }
+        if (adminEventPage === requestedAdminEventPage) {
+          renderAdminEvents(adminEvents);
+        }
       } else {
-        renderTimeline(events);
+        if (timelinePage === requestedTimelinePage) renderTimeline(events);
         adminSection.hidden = true;
         adminRows.replaceChildren();
       }
@@ -292,11 +338,46 @@
     }
   }
 
+  async function loadTimelinePage(nextPage) {
+    try {
+      const payload = await read(timelineUrl(nextPage));
+      renderTimeline(profile.role === 'ADMIN' ? timelineFromAdminEvents(payload) : payload);
+      statusMessage.textContent = '';
+    } catch (_) {
+      statusMessage.textContent =
+        'The requested timeline page is unavailable. Previously loaded data is still shown.';
+    }
+  }
+
+  async function loadAdminEventPage(nextPage) {
+    if (!profile || profile.role !== 'ADMIN') return;
+    try {
+      const payload = await read(adminEventsUrl(nextPage));
+      renderAdminEvents(payload);
+      statusMessage.textContent = '';
+    } catch (_) {
+      statusMessage.textContent =
+        'The requested administrator event page is unavailable. Previously loaded data is still shown.';
+    }
+  }
+
   element('reportFilesPrevious').addEventListener('click', () => {
     if (filePage > 0) loadFilePage(filePage - 1);
   });
   element('reportFilesNext').addEventListener('click', () => {
     if (filePage + 1 < filePages) loadFilePage(filePage + 1);
+  });
+  element('reportTimelinePrevious').addEventListener('click', () => {
+    if (timelinePage > 0) loadTimelinePage(timelinePage - 1);
+  });
+  element('reportTimelineNext').addEventListener('click', () => {
+    if (timelinePage + 1 < timelinePages) loadTimelinePage(timelinePage + 1);
+  });
+  element('adminEventPrevious').addEventListener('click', () => {
+    if (adminEventPage > 0) loadAdminEventPage(adminEventPage - 1);
+  });
+  element('adminEventNext').addEventListener('click', () => {
+    if (adminEventPage + 1 < adminEventPages) loadAdminEventPage(adminEventPage + 1);
   });
   fileScope.addEventListener('change', () => {
     if (!profile || profile.role !== 'ADMIN') return;
