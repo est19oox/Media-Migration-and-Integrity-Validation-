@@ -18,6 +18,7 @@ import mmiv.reporting.contract.EventType;
 import mmiv.reporting.report.MigrationReportDocument;
 import mmiv.reporting.report.MigrationReportRepository;
 import mmiv.reporting.report.MigrationSource;
+import mmiv.reporting.report.ReportChange;
 import org.bson.Document;
 import org.junit.jupiter.api.Test;
 import org.springframework.data.domain.PageImpl;
@@ -80,10 +81,19 @@ class UserTimelineResponseTest {
     AuditEventRepository events = mock(AuditEventRepository.class);
     MigrationReportDocument report =
         MigrationReportDocument.processing(MIGRATION_ID, Instant.parse("2026-10-11T10:00:00Z"));
-    report.recordStarted(
-        Instant.parse("2026-10-11T10:00:00Z"),
-        "alice",
-        new MigrationSource("MANIFEST", "root", "manifest.csv"));
+    report.apply(
+        new ReportChange(
+            ReportChange.Kind.STARTED,
+            Instant.parse("2026-10-11T10:00:00Z"),
+            null,
+            null,
+            "alice",
+            new MigrationSource("MANIFEST", "root", "manifest.csv"),
+            0,
+            null,
+            null,
+            null,
+            null));
     when(reports.findById(MIGRATION_ID.toString())).thenReturn(Optional.of(report));
 
     AuditEventDocument later =

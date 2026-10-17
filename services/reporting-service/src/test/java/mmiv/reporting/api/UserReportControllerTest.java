@@ -13,11 +13,11 @@ import java.util.UUID;
 import mmiv.reporting.audit.AuditEventDocument;
 import mmiv.reporting.audit.AuditEventRepository;
 import mmiv.reporting.contract.EventType;
-import mmiv.reporting.report.FailureView;
 import mmiv.reporting.report.MigrationReportDocument;
 import mmiv.reporting.report.MigrationReportRepository;
 import mmiv.reporting.report.MigrationReportStatus;
 import mmiv.reporting.report.MigrationSource;
+import mmiv.reporting.report.ReportChange;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -96,45 +96,26 @@ class UserReportControllerTest {
   void ownerCanReadSummaryAndFiles() {
     MigrationReportDocument report = report("alice");
     UUID fileId = UUID.fromString("00000000-0000-0000-0000-000000000001");
-    report.getOrCreateFile(fileId).recordDiscoveryAccepted();
+    report.apply(
+        new ReportChange(
+            ReportChange.Kind.FILE_DISCOVERED,
+            Instant.now(),
+            fileId,
+            "ACCEPTED",
+            null,
+            null,
+            0,
+            "fixture",
+            "test.txt",
+            "test.txt",
+            null));
     when(reports.findById(MIGRATION_ID.toString())).thenReturn(Optional.of(report));
 
     assertEquals(
         MIGRATION_ID.toString(), controller.report(jwt("alice"), MIGRATION_ID).migrationId());
     assertEquals(
         fileId.toString(),
-        controller
-            .files(jwt("alice"), MIGRATION_ID, false, 0, 20)
-            .getContent()
-            .getFirst()
-            .fileId());
-  }
-
-  @Test
-  void ownerCanSelectOnlyFailedFilesBeforePagination() {
-    MigrationReportDocument report = report("alice");
-    UUID succeeded = UUID.fromString("00000000-0000-0000-0000-000000000001");
-    UUID failedOne = UUID.fromString("00000000-0000-0000-0000-000000000002");
-    UUID failedTwo = UUID.fromString("00000000-0000-0000-0000-000000000003");
-    report.getOrCreateFile(succeeded).recordIntegrityPassed();
-    report
-        .getOrCreateFile(failedOne)
-        .recordDiscoveryFailed(new FailureView("DISCOVERY", "INVALID", "Invalid metadata"));
-    report
-        .getOrCreateFile(failedTwo)
-        .recordTransferFailed(new FailureView("TRANSFER", "STORE_FAILED", "Upload failed"));
-    when(reports.findById(MIGRATION_ID.toString())).thenReturn(Optional.of(report));
-
-    Page<ReportResponse.FileResult> failures =
-        controller.files(jwt("alice"), MIGRATION_ID, true, 0, 20);
-    Page<ReportResponse.FileResult> all =
-        controller.files(jwt("alice"), MIGRATION_ID, false, 0, 20);
-
-    assertEquals(2, failures.getTotalElements());
-    assertEquals(
-        java.util.List.of(failedOne.toString(), failedTwo.toString()),
-        failures.getContent().stream().map(ReportResponse.FileResult::fileId).toList());
-    assertEquals(3, all.getTotalElements());
+        controller.files(jwt("alice"), MIGRATION_ID, 0, 20).getContent().getFirst().fileId());
   }
 
   @Test
@@ -143,8 +124,7 @@ class UserReportControllerTest {
 
     assertThrows(ReportNotFoundException.class, () -> controller.report(jwt("bob"), MIGRATION_ID));
     assertThrows(
-        ReportNotFoundException.class,
-        () -> controller.files(jwt("bob"), MIGRATION_ID, false, 0, 20));
+        ReportNotFoundException.class, () -> controller.files(jwt("bob"), MIGRATION_ID, 0, 20));
   }
 
   @Test
@@ -182,10 +162,19 @@ class UserReportControllerTest {
   private MigrationReportDocument report(String owner) {
     MigrationReportDocument report =
         MigrationReportDocument.processing(MIGRATION_ID, Instant.parse("2026-10-11T10:00:00Z"));
-    report.recordStarted(
-        Instant.parse("2026-10-11T10:00:00Z"),
-        owner,
-        new MigrationSource("MANIFEST", "legacy-media", "semester-1-media.csv"));
+    report.apply(
+        new ReportChange(
+            ReportChange.Kind.STARTED,
+            Instant.parse("2026-10-11T10:00:00Z"),
+            null,
+            null,
+            owner,
+            new MigrationSource("MANIFEST", "legacy-media", "semester-1-media.csv"),
+            0,
+            null,
+            null,
+            null,
+            null));
     return report;
   }
 

@@ -24,7 +24,7 @@ public class InMemoryFolderRepository implements FolderRepository {
   }
 
   public void delete(String name) {
-    users.searchUsers("").forEach(u -> users.revokeDestinationAccess(u.getUserId(), name));
+    users.revokeFolderAccess(name);
     folders.remove(name);
   }
 
@@ -38,7 +38,7 @@ public class InMemoryFolderRepository implements FolderRepository {
   }
 
   public void create(String name) {
-    if (!FolderRepository.valid(name)) throw new IllegalArgumentException("Invalid folder name");
-    folders.add(name);
+    var folder = new mmiv.user_access_service.model.Folder(name);
+    folders.add(folder.name());
   }
 }

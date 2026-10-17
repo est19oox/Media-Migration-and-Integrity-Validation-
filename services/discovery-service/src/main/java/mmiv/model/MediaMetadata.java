@@ -58,4 +58,15 @@ public class MediaMetadata {
         + createdDate
         + '}';
   }
+
+  public static String extension(String fileName) {
+    int dot = fileName.lastIndexOf('.');
+    return dot == -1 || dot == fileName.length() - 1
+        ? "UNKNOWN"
+        : fileName.substring(dot + 1).toUpperCase();
+  }
+
+  public static boolean supported(String fileName, java.util.Collection<String> formats) {
+    return formats.stream().anyMatch(type -> type.equalsIgnoreCase(extension(fileName)));
+  }
 }

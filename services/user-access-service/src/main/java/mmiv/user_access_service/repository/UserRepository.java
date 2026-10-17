@@ -35,4 +35,9 @@ public interface UserRepository {
   boolean acceptAdminInvitation(String userId, String tokenHash, java.time.Instant now);
 
   void revokeDestinationAccess(String userId, String destination);
+
+  /** Remove references to a deleted folder through the User aggregate repository. */
+  default void revokeFolderAccess(String destination) {
+    searchUsers("").forEach(user -> revokeDestinationAccess(user.getUserId(), destination));
+  }
 }

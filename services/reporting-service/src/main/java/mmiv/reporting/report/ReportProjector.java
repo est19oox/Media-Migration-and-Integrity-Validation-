@@ -37,129 +37,60 @@ public class ReportProjector {
             .orElseGet(
                 () -> MigrationReportDocument.processing(event.migrationId(), event.occurredAt()));
 
-    report.recordEventOccurredAt(event.occurredAt());
-
-    applyEvent(report, event);
-
-    CalculatedReportState state = stateCalculator.calculate(report);
-
-    report.replaceSummary(state.summary());
-
-    if (state.terminal()) {
-      report.markCompleted(state.status(), report.getLatestEventAt());
-    }
+    report.apply(translate(event));
 
     repository.save(report);
     if (cleanup.isDeleted(event.migrationId()))
       repository.deleteById(event.migrationId().toString());
   }
 
-  private void applyEvent(MigrationReportDocument report, EventEnvelope event) {
-    switch (event.eventType()) {
-      case MIGRATION_STARTED -> applyMigrationStarted(report, event);
-
-      case FILE_DISCOVERY_COMPLETED -> applyDiscoveryEvent(report, event);
-
-      case MIGRATION_DISCOVERY_COMPLETED -> applyDiscoveryCompleted(report, event);
-
-      case FILE_TRANSFER_COMPLETED -> applyTransferEvent(report, event);
-
-      case INTEGRITY_VALIDATION_COMPLETED -> applyIntegrityEvent(report, event);
-    }
-  }
-
-  private void applyMigrationStarted(MigrationReportDocument report, EventEnvelope event) {
-    JsonNode source = event.data().path("source");
-    report.recordStarted(
+  /** Translation only: business transitions belong to MigrationReportDocument. */
+  private ReportChange translate(EventEnvelope event) {
+    var data = event.data();
+    var kind =
+        switch (event.eventType()) {
+          case MIGRATION_STARTED -> ReportChange.Kind.STARTED;
+          case MIGRATION_DISCOVERY_COMPLETED -> ReportChange.Kind.DISCOVERY_COMPLETED;
+          case FILE_DISCOVERY_COMPLETED -> ReportChange.Kind.FILE_DISCOVERED;
+          case FILE_TRANSFER_COMPLETED -> ReportChange.Kind.FILE_TRANSFERRED;
+          case INTEGRITY_VALIDATION_COMPLETED -> ReportChange.Kind.FILE_VALIDATED;
+        };
+    var source = data.path("source");
+    MigrationSource migrationSource =
+        kind == ReportChange.Kind.STARTED
+            ? new MigrationSource(
+                source.path("type").stringValue(),
+                source.path("rootId").stringValue(),
+                optionalText(source, "manifestName"))
+            : null;
+    String stage =
+        switch (kind) {
+          case FILE_TRANSFERRED -> "TRANSFER";
+          case FILE_VALIDATED -> "INTEGRITY";
+          default -> "DISCOVERY";
+        };
+    var failure = data.path("failure");
+    FailureView view =
+        data.has("failure")
+            ? new FailureView(
+                stage, failure.path("code").stringValue(), failure.path("message").stringValue())
+            : null;
+    return new ReportChange(
+        kind,
         event.occurredAt(),
-        event.data().path("initiatedBy").stringValue(),
-        new MigrationSource(
-            source.path("type").stringValue(),
-            source.path("rootId").stringValue(),
-            optionalText(source, "manifestName")));
+        event.fileId(),
+        optionalText(data, "status"),
+        optionalText(data, "initiatedBy"),
+        migrationSource,
+        data.has("totalFiles") ? data.path("totalFiles").longValue() : 0,
+        optionalText(data, "manifestMediaId"),
+        optionalText(data, "fileName"),
+        optionalText(data, "relativePath"),
+        view);
   }
 
-  private void applyDiscoveryCompleted(MigrationReportDocument report, EventEnvelope event) {
-    if ("FAILED".equals(statusOf(event.data()))) {
-      report.recordDiscoveryFailed(failureOf("DISCOVERY", event.data()));
-      return;
-    }
-
-    report.recordDiscoveryCompleted(event.data().path("totalFiles").longValue());
-  }
-
-  private void applyDiscoveryEvent(MigrationReportDocument report, EventEnvelope event) {
-    FileReportEntry file = report.getOrCreateFile(event.fileId());
-
-    file.recordDiscoveryMetadata(
-        optionalText(event.data(), "manifestMediaId"),
-        event.data().path("fileName").stringValue(),
-        optionalText(event.data(), "relativePath"));
-
-    String status = statusOf(event.data());
-
-    if ("ACCEPTED".equals(status)) {
-      file.recordDiscoveryAccepted();
-      return;
-    }
-
-    if ("REJECTED".equals(status) || "ERROR".equals(status)) {
-      file.recordDiscoveryFailed(status, failureOf("DISCOVERY", event.data()));
-      return;
-    }
-
-    throw new IllegalArgumentException("Unsupported discovery status: " + status);
-  }
-
-  private void applyTransferEvent(MigrationReportDocument report, EventEnvelope event) {
-    FileReportEntry file = report.getOrCreateFile(event.fileId());
-
-    String status = statusOf(event.data());
-
-    if ("STORED".equals(status)) {
-      file.recordTransferStored();
-      return;
-    }
-
-    if ("FAILED".equals(status)) {
-      file.recordTransferFailed(failureOf("TRANSFER", event.data()));
-      return;
-    }
-
-    throw new IllegalArgumentException("Unsupported transfer status: " + status);
-  }
-
-  private void applyIntegrityEvent(MigrationReportDocument report, EventEnvelope event) {
-    FileReportEntry file = report.getOrCreateFile(event.fileId());
-
-    String status = statusOf(event.data());
-
-    if ("PASSED".equals(status)) {
-      file.recordIntegrityPassed();
-      return;
-    }
-
-    if ("FAILED".equals(status) || "ERROR".equals(status)) {
-      file.recordIntegrityFailed(status, failureOf("INTEGRITY", event.data()));
-      return;
-    }
-
-    throw new IllegalArgumentException("Unsupported integrity status: " + status);
-  }
-
-  private FailureView failureOf(String stage, JsonNode data) {
-    JsonNode failure = data.path("failure");
-
-    return new FailureView(
-        stage, failure.path("code").stringValue(), failure.path("message").stringValue());
-  }
-
-  private String statusOf(JsonNode data) {
-    return data.path("status").stringValue();
-  }
-
-  private String optionalText(JsonNode data, String fieldName) {
-    JsonNode value = data.get(fieldName);
+  private String optionalText(JsonNode data, String field) {
+    var value = data.get(field);
     return value == null ? null : value.stringValue();
   }
 }

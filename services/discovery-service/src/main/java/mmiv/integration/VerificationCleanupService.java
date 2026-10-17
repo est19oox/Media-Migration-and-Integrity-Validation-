@@ -1,6 +1,7 @@
 package mmiv.integration;
 
 import java.util.*;
+import mmiv.model.MetadataPlan;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.oauth2.jwt.Jwt;

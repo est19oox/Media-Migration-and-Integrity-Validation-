@@ -1,6 +1,5 @@
 package mmiv.user_access_service.service;
 
-import java.nio.charset.StandardCharsets;
 import java.util.Set;
 import java.util.UUID;
 import mmiv.user_access_service.dto.SignupRequest;
@@ -22,13 +21,7 @@ public class RegistrationService {
   }
 
   public SignupResponse register(SignupRequest request) {
-    if (request == null
-        || request.username() == null
-        || !request.username().matches("[A-Za-z0-9_.-]{3,40}")
-        || request.password() == null
-        || request.password().isBlank()
-        || request.password().length() < 8
-        || request.password().getBytes(StandardCharsets.UTF_8).length > 72) {
+    if (request == null || !User.validSignup(request.username(), request.password())) {
       throw new InvalidSignupException();
     }
     if (users.findByUsername(request.username()).isPresent()) {

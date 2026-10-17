@@ -56,7 +56,11 @@ public class TransferSecurityConfig {
                 auth.dispatcherTypeMatchers(DispatcherType.ERROR)
                     .permitAll()
                     .requestMatchers(
-                        HttpMethod.GET, "/actuator/health", "/actuator/health/**", "/actuator/info")
+                        HttpMethod.GET,
+                        "/actuator/health",
+                        "/actuator/health/**",
+                        "/actuator/info",
+                        "/actuator/prometheus")
                     .permitAll()
                     .requestMatchers(
                         "/api/v1/transfers",

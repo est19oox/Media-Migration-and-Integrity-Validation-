@@ -321,7 +321,7 @@ elif operation == 'start-session':
     def test_user_access_scans_through_gateway_path(self):
         result = self.run_scan(DAST_SERVICE_NAME='user-access-service', DAST_PORT='8083',
                                DAST_PATH='/user-access/actuator/health',
-                               DAST_READY_PATH='/actuator/health',
+                               DAST_READY_PATH='/user-access/actuator/health',
                                DAST_ENDPOINT_BASE_PATH='/user-access',
                                TEST_CONTINUE_TO_SCAN='1')
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)

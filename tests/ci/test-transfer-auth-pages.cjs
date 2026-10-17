@@ -25,14 +25,13 @@ test('Transfer no longer proxies profile or reporting reads', () => {
   assert.doesNotMatch(config, /cookie-secure|mmiv\.reporting\.url/);
 });
 
-test('Transfer keeps file, folder and administrator mutation endpoints', () => {
+test('Transfer keeps storage operations and delegates account management', () => {
   const controller = source('src/main/java/mmiv/transfer/controller/PortalController.java');
   for (const mapping of [
     '@GetMapping("/files")',
     '@DeleteMapping("/files/{id}")',
     '@DeleteMapping("/folders")',
-    '@PostMapping("/admin/folders")',
-    '@PutMapping("/admin/users/{id}/permissions")',
-    '@DeleteMapping("/admin/users/{id}")'
+    '@PostMapping("/admin/folders")'
   ]) assert.ok(controller.includes(mapping), `missing retained mapping: ${mapping}`);
+  assert.doesNotMatch(controller, /Mapping\("\/admin\/users/);
 });

@@ -98,6 +98,14 @@ public class AuditEventDocument {
         null);
   }
 
+  public boolean hasSamePayload(String checksum) {
+    return payloadSha256.equals(checksum);
+  }
+
+  public boolean isApplied() {
+    return processingStatus == AuditProcessingStatus.APPLIED;
+  }
+
   public void markApplied(Instant appliedAt) {
     this.processingStatus = AuditProcessingStatus.APPLIED;
 

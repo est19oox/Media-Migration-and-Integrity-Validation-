@@ -5,7 +5,6 @@ import java.util.Objects;
 import java.util.Optional;
 import mmiv.reporting.audit.AuditEventDocument;
 import mmiv.reporting.audit.AuditEventRepository;
-import mmiv.reporting.audit.AuditProcessingStatus;
 import mmiv.reporting.contract.EventContractValidator;
 import mmiv.reporting.contract.ValidatedEvent;
 import mmiv.reporting.report.ReportProjector;
@@ -100,7 +99,7 @@ public class EventProcessor {
   private EventProcessingResult inspectExisting(AuditEventDocument existing, ValidatedEvent event) {
     assertSamePayload(existing, event);
 
-    if (existing.getProcessingStatus() == AuditProcessingStatus.APPLIED) {
+    if (existing.isApplied()) {
       return EventProcessingResult.DUPLICATE_APPLIED;
     }
 
@@ -108,7 +107,7 @@ public class EventProcessor {
   }
 
   private void assertSamePayload(AuditEventDocument existing, ValidatedEvent event) {
-    if (!existing.getPayloadSha256().equals(event.payloadSha256())) {
+    if (!existing.hasSamePayload(event.payloadSha256())) {
       throw new EventIntegrityConflictException(
           "eventId was reused with different content: " + existing.getId());
     }

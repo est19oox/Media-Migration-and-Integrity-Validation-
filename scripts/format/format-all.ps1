@@ -36,7 +36,7 @@ if ($hasTerraform) {
 
 Push-Location $root
 try {
-    & $prettier --write '**/*.html' '**/*.css' '**/*.js' '**/*.json' '**/*.md' '**/*.yml' '**/*.yaml'
+    & $prettier --write '**/*.html' '**/*.css' '**/*.js' '**/*.jsx' '**/*.json' '**/*.md' '**/*.yml' '**/*.yaml'
     if ($LASTEXITCODE -ne 0) { throw "Prettier failed with exit code $LASTEXITCODE." }
 } finally {
     Pop-Location

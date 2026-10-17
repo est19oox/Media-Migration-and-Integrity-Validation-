@@ -8,6 +8,9 @@ SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 ROOT=$(find_repository_root "${1:-.}")
 
 require_command mvn
+require_command npm
+# Gateway packages the common React build; no HTML lives in a service source tree.
+(cd "$ROOT/frontend" && npm ci && npm run build)
 
 if [ -d /opt/jdk-25 ]; then
     JAVA_HOME=/opt/jdk-25

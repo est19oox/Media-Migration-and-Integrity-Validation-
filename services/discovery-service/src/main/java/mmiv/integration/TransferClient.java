@@ -49,6 +49,9 @@ public class TransferClient {
           .body(Map.of("metadataId", metadataId))
           .retrieve()
           .body(Object.class);
+    } catch (org.springframework.web.client.HttpClientErrorException rejected) {
+      // Preserve caller/business status; a denied plan is not a backend outage.
+      throw new ResponseStatusException(rejected.getStatusCode(), "Transfer request rejected");
     } catch (RestClientException e) {
       throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Transfer service unavailable");
     }

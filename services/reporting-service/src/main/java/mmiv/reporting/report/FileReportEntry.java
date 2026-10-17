@@ -54,22 +54,21 @@ public class FileReportEntry {
         fileId.toString(), null, null, null, null, null, null, FileFinalStatus.PROCESSING, null);
   }
 
-  public void recordDiscoveryAccepted() {
+  void recordDiscoveryAccepted() {
     this.discoveryStatus = "ACCEPTED";
   }
 
-  public void recordDiscoveryMetadata(
-      String manifestMediaId, String fileName, String relativePath) {
+  void recordDiscoveryMetadata(String manifestMediaId, String fileName, String relativePath) {
     this.manifestMediaId = manifestMediaId;
     this.fileName = Objects.requireNonNull(fileName, "fileName must not be null");
     this.relativePath = relativePath;
   }
 
-  public void recordDiscoveryFailed(FailureView failure) {
+  void recordDiscoveryFailed(FailureView failure) {
     recordDiscoveryFailed("REJECTED", failure);
   }
 
-  public void recordDiscoveryFailed(String status, FailureView failure) {
+  void recordDiscoveryFailed(String status, FailureView failure) {
     if (!"REJECTED".equals(status) && !"ERROR".equals(status)) {
       throw new IllegalArgumentException("Unsupported discovery failure status: " + status);
     }
@@ -78,25 +77,25 @@ public class FileReportEntry {
     markFailed(failure);
   }
 
-  public void recordTransferStored() {
+  void recordTransferStored() {
     this.transferStatus = "STORED";
   }
 
-  public void recordTransferFailed(FailureView failure) {
+  void recordTransferFailed(FailureView failure) {
     this.transferStatus = "FAILED";
     markFailed(failure);
   }
 
-  public void recordIntegrityPassed() {
+  void recordIntegrityPassed() {
     this.integrityStatus = "PASSED";
     markSucceeded();
   }
 
-  public void recordIntegrityFailed(FailureView failure) {
+  void recordIntegrityFailed(FailureView failure) {
     recordIntegrityFailed("FAILED", failure);
   }
 
-  public void recordIntegrityFailed(String status, FailureView failure) {
+  void recordIntegrityFailed(String status, FailureView failure) {
     if (!"FAILED".equals(status) && !"ERROR".equals(status)) {
       throw new IllegalArgumentException("Unsupported integrity failure status: " + status);
     }
@@ -105,17 +104,17 @@ public class FileReportEntry {
     markFailed(failure);
   }
 
-  public void markProcessing() {
+  void markProcessing() {
     this.finalStatus = FileFinalStatus.PROCESSING;
     this.failure = null;
   }
 
-  public void markSucceeded() {
+  void markSucceeded() {
     this.finalStatus = FileFinalStatus.SUCCEEDED;
     this.failure = null;
   }
 
-  public void markFailed(FailureView failure) {
+  void markFailed(FailureView failure) {
     this.finalStatus = FileFinalStatus.FAILED;
 
     this.failure = Objects.requireNonNull(failure, "failure must not be null");

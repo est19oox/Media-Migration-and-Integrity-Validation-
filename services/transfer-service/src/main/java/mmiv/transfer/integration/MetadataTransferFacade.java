@@ -89,14 +89,15 @@ public class MetadataTransferFacade {
     try (@SuppressWarnings("unused")
         var folderScope = accessGuard.read(destinationId)) {
       var occupied = names.paths(destinationId);
-      var requested = new ArrayList<MetadataClient.AllocationFile>(files.size());
-      for (int i = 0; i < files.size(); i++) {
-        requested.add(
-            new MetadataClient.AllocationFile(
-                files.get(i).getOriginalFilename(), files.get(i).getSize(), relativePaths.get(i)));
-      }
-      var batch = metadata.allocateBatch(requested, destinationId, occupied);
-      var plans = batch.plans();
+      var plans = new java.util.ArrayList<MetadataClient.Plan>();
+      for (int i = 0; i < files.size(); i++)
+        plans.add(
+            metadata.allocate(
+                files.get(i).getOriginalFilename(),
+                files.get(i).getSize(),
+                destinationId,
+                relativePaths.get(i),
+                occupied));
       var results = new ArrayList<FolderUploadResponse.FileResult>();
       int succeeded = 0;
       for (int i = 0; i < files.size(); i++) {
@@ -123,11 +124,7 @@ public class MetadataTransferFacade {
         }
       }
       return new FolderUploadResponse(
-          destinationId + "/",
-          succeeded,
-          files.size() - succeeded,
-          List.copyOf(results),
-          batch.migrationId());
+          destinationId + "/", succeeded, files.size() - succeeded, List.copyOf(results));
     }
   }
 }

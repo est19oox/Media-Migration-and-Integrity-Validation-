@@ -9,7 +9,7 @@ const managerSource = readFileSync('frontend/js/file-manager.js', 'utf8');
 const homeSource = readFileSync('frontend/js/home.js', 'utf8');
 const activitySource = readFileSync('frontend/js/activity.js', 'utf8');
 const adminSource = readFileSync('frontend/js/admin.js', 'utf8');
-const signupHtml = readFileSync('frontend/pages/signup.html', 'utf8');
+const signupHtml = (readFileSync('frontend/pages/signup.html', 'utf8') + readFileSync('frontend/src/pages/signup.jsx', 'utf8').replaceAll('className=', 'class=').replaceAll('htmlFor=', 'for='));
 const gatewayPom = readFileSync('services/api-gateway/pom.xml', 'utf8');
 
 const TOKEN = 'a1b2c3d4'.repeat(8);
@@ -217,9 +217,9 @@ test('the login page does not log the invitation it carries', async () => {
 
 test('the signup scripts are loaded from the Gateway-owned frontend', () => {
   for (const asset of ['feedback.js', 'english-validation.js']) {
-    const browserPath = '../js/' + asset;
+    const browserPath = '/js/' + asset;
     assert.ok(
-      signupHtml.includes('"' + browserPath + '"'),
+      signupHtml.includes(browserPath),
       'signup no longer loads ' + browserPath,
     );
     assert.ok(existsSync('frontend/js/' + asset), 'missing frontend/js/' + asset);
@@ -227,7 +227,8 @@ test('the signup scripts are loaded from the Gateway-owned frontend', () => {
 });
 
 test('the Gateway packages the shared frontend JavaScript directory', () => {
-  assert.match(gatewayPom, /<include>js\/\*\*<\/include>/);
+  assert.ok(gatewayPom.includes('frontend/dist</directory>'));
+  assert.ok(readFileSync('frontend/vite.config.js', 'utf8').includes("['js', 'css', 'img', 'font', 'assets']"));
 });
 
 /* --------------------- uploads are offered only where allowed ---------------- */

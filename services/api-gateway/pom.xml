@@ -63,6 +63,8 @@
     </dependencies>
   </dependencyManagement>
   <dependencies>
+    <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-data-redis-reactive</artifactId></dependency>
+    <dependency><groupId>io.micrometer</groupId><artifactId>micrometer-registry-prometheus</artifactId></dependency>
     <dependency><groupId>io.github.resilience4j</groupId><artifactId>resilience4j-circuitbreaker</artifactId><version>2.3.0</version></dependency>
     <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-amqp</artifactId></dependency>
     <dependency>
@@ -105,9 +107,9 @@
             <resources><resource><directory>${project.basedir}/../../common/src/main/resources</directory></resource></resources></configuration>
         </execution>
         <execution><id>frontend</id><phase>generate-resources</phase><goals><goal>add-resource</goal></goals>
-          <configuration><resources><resource><directory>${project.basedir}/../../frontend</directory>
+          <configuration><resources><resource><directory>${project.basedir}/../../frontend/dist</directory>
             <targetPath>META-INF/resources</targetPath>
-            <includes><include>pages/**</include><include>css/**</include><include>js/**</include><include>img/**</include><include>font/**</include><include>assets/**</include></includes>
+
           </resource></resources></configuration>
         </execution></executions></plugin>
       <plugin><groupId>org.apache.maven.plugins</groupId><artifactId>maven-surefire-plugin</artifactId>

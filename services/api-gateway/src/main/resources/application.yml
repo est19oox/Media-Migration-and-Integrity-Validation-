@@ -36,6 +36,31 @@ spring:
               uri: lb://transfer-service
               predicates:
                 - Path=/api/v1/files,/api/v1/files/**
+            - id: account-user-options
+              uri: lb://user-access-service
+              predicates:
+                - Path=/api/v1/portal/admin/users
+                - Method=GET
+              filters:
+                - SetPath=/api/admin/user-options
+            - id: account-permissions
+              uri: lb://user-access-service
+              predicates:
+                - Path=/api/v1/portal/admin/users/*/permissions
+              filters:
+                - RewritePath=/api/v1/portal/admin/users/(?<id>[^/]+)/permissions, /api/admin/users/$\{id}/destinations
+            - id: account-administration
+              uri: lb://user-access-service
+              predicates:
+                - Path=/api/v1/portal/admin/users/**,/api/v1/portal/admin/invitations
+              filters:
+                - RewritePath=/api/v1/portal/admin/(?<rest>.*), /api/admin/$\{rest}
+            - id: account-invitation-accept
+              uri: lb://user-access-service
+              predicates:
+                - Path=/api/v1/portal/invitations/accept
+              filters:
+                - SetPath=/api/admin/invitations/accept
             - id: portal-api
               uri: lb://transfer-service
               predicates:
@@ -72,6 +97,42 @@ spring:
                 - Path=/invite.html
               filters:
                 - RedirectTo=302,/pages/invite.html
+            - id: shared-home-page
+              uri: no://op
+              predicates:
+                - Path=/home.html
+              filters:
+                - RedirectTo=302,/pages/home.html
+            - id: shared-admin-page
+              uri: no://op
+              predicates:
+                - Path=/admin.html
+              filters:
+                - RedirectTo=302,/pages/admin.html
+            - id: shared-files-page
+              uri: no://op
+              predicates:
+                - Path=/files.html
+              filters:
+                - RedirectTo=302,/pages/file-manager.html
+            - id: shared-upload-page
+              uri: no://op
+              predicates:
+                - Path=/upload.html
+              filters:
+                - RedirectTo=302,/pages/file-manager.html
+            - id: shared-logs-page
+              uri: no://op
+              predicates:
+                - Path=/logs.html
+              filters:
+                - RedirectTo=302,/pages/admin.html
+            - id: shared-history-page
+              uri: no://op
+              predicates:
+                - Path=/history.html
+              filters:
+                - RedirectTo=302,/pages/activity.html
             - id: integrity-native-api
               uri: lb://integrity-service
               predicates:
@@ -133,7 +194,7 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info
+        include: health,info,prometheus
   endpoint:
     health:
       probes:

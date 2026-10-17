@@ -7,6 +7,6 @@
     "prettier": "3.6.2"
   },
   "scripts": {
-    "format:check": "prettier --check \"**/*.html\" \"**/*.css\" \"**/*.js\" \"**/*.json\" \"**/*.md\" \"**/*.yml\" \"**/*.yaml\""
+    "format:check": "prettier --check \"**/*.html\" \"**/*.css\" \"**/*.js\" \"**/*.jsx\" \"**/*.json\" \"**/*.md\" \"**/*.yml\" \"**/*.yaml\""
   }
 }

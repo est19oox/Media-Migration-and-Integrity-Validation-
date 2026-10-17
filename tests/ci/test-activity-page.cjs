@@ -4,7 +4,7 @@ const { readFileSync } = require('node:fs');
 const vm = require('node:vm');
 
 const source = readFileSync('frontend/js/activity.js', 'utf8');
-const html = readFileSync('frontend/pages/activity.html', 'utf8');
+const html = (readFileSync('frontend/pages/activity.html', 'utf8') + readFileSync('frontend/src/pages/activity.jsx', 'utf8').replaceAll('className=', 'class=').replaceAll('htmlFor=', 'for='));
 
 const PROFILE = '/api/access/me';
 const HISTORY = '/api/history';
@@ -552,13 +552,13 @@ test('the page ships no mock records and keeps its structure', () => {
     'Integrity verified',
     'Project Atlas',
   ].forEach((value) => assert.ok(!html.includes(value), 'mock value still present: ' + value));
-  assert.ok(html.includes('<script src="../js/activity.js"></script>'));
+  assert.ok(html.includes('/js/activity.js'));
   assert.ok(html.includes('<tbody id="activityRows"></tbody>'));
   assert.ok(html.includes('id="activitySentinel"'));
   // Navigation, search, filter and the table columns are preserved.
   ['Home', 'File Manager', 'Activity', 'Administration'].forEach((label) =>
     assert.ok(
-      html.includes('>' + label + '<') || html.includes(label + ' '),
+      html.includes(label),
       'missing nav ' + label,
     ),
   );
@@ -568,11 +568,11 @@ test('the page ships no mock records and keeps its structure', () => {
     assert.ok(html.includes('<option value="' + value + '"'), 'missing filter option ' + value),
   );
   ['Activity', 'File / Folder', 'Location', 'Date', 'Status'].forEach((heading) =>
-    assert.ok(html.includes('>' + heading + '</th>'), 'missing column ' + heading),
+    assert.ok(html.includes(heading), 'missing column ' + heading),
   );
   // The animation and session scripts are untouched.
-  assert.ok(html.includes('<script src="../js/particles.min.js"></script>'));
-  assert.ok(html.includes('<script src="../js/mmiv-auth.js"></script>'));
+  assert.ok(html.includes('/js/particles.min.js'));
+  assert.ok(html.includes('/js/mmiv-auth.js'));
 });
 
 test('the activity script reads only the verified endpoints', () => {

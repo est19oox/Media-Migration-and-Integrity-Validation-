@@ -68,8 +68,19 @@ class MigrationTimeoutSchedulerTest {
   @Test
   void terminalReportIsNeverChangedEvenIfReturned() {
     MigrationReportDocument report = reportStartedAt(NOW.minus(Duration.ofMinutes(31)));
-    report.recordDiscoveryCompleted(0);
-    report.markCompleted(MigrationReportStatus.COMPLETED, NOW.minusSeconds(1));
+    report.apply(
+        new mmiv.reporting.report.ReportChange(
+            mmiv.reporting.report.ReportChange.Kind.DISCOVERY_COMPLETED,
+            report.getStartedAt(),
+            null,
+            "COMPLETED",
+            null,
+            null,
+            0,
+            null,
+            null,
+            null,
+            null));
 
     when(repository.findByStatusAndStartedAtBefore(
             eq(MigrationReportStatus.PROCESSING), any(Instant.class)))

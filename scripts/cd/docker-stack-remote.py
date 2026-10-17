@@ -397,7 +397,7 @@ def managed_messaging():
             atomic_write(target, content)
         if name.endswith(".js"):
             target.chmod(0o644)
-    for name in ('service-registry','api-gateway','transfer-service','integrity-service','user-access-service','reporting-service','discovery-service'):
+    for name in ('service-registry','api-gateway','transfer-service','integrity-service','integrity-service-2','user-access-service','reporting-service','discovery-service'):
         Path('/var/lib/mmiv/event-outbox/' + name).mkdir(parents=True, exist_ok=True, mode=0o700)
 
 
@@ -424,7 +424,7 @@ def config_for(state):
         port = item['port']
         service = {'image': item['image'], 'container_name': name, 'restart': 'unless-stopped',
                    'ports': [f'{"0.0.0.0" if name == "api-gateway" else "127.0.0.1"}:{port}:{port}'],
-                   'environment': {'MMIV_MEDIA_ROOT': '/media', 'AWS_REGION': state['AWS_REGION'],
+                   'environment': {'SERVER_PORT': str(port), 'MMIV_MEDIA_ROOT': '/media', 'AWS_REGION': state['AWS_REGION'],
                                    'MMIV_BUCKET_NAME': state['MMIV_BUCKET_NAME'],
                                    'EUREKA_DEFAULT_ZONE': 'http://service-registry:8761/eureka/'},
                    'volumes': [{'type': 'bind', 'source': '/var/lib/mmiv/media', 'target': '/media',
@@ -458,6 +458,8 @@ def config_for(state):
             if cookie_secure not in ('true', 'false'):
                 raise ValueError('JWT_COOKIE_SECURE must be true or false')
             service['environment']['JWT_COOKIE_SECURE'] = cookie_secure
+            service['environment']['SPRING_DATA_REDIS_HOST'] = 'redis'
+            service['environment']['SPRING_DATA_REDIS_TIMEOUT'] = '2s'
         if name == 'transfer-service':
             service['environment']['USER_ACCESS_JWT_ISSUER'] = state.get('USER_ACCESS_JWT_ISSUER', 'https://auth.mmiv.example')
             service['environment']['USER_ACCESS_JWK_SET_URI'] = 'http://user-access-service:8083/.well-known/jwks.json'
@@ -482,7 +484,7 @@ def config_for(state):
                  'target': '/run/mmiv-jwt/private.pem', 'read_only': True},
                 {'type': 'bind', 'source': directory + '/public.pem',
                  'target': '/run/mmiv-jwt/public.pem', 'read_only': True}])
-        if name == 'integrity-service':
+        if name in ('integrity-service', 'integrity-service-2'):
             service['env_file'].append({'path': ENVIRONMENT, 'format': 'raw'})
         service['healthcheck'] = {'test': ['CMD-SHELL',
             'wget -q --spider http://127.0.0.1:' + str(port) + '/actuator/health'],
@@ -495,6 +497,7 @@ def config_for(state):
         if name in ('user-access-service', 'discovery-service') and state.get('MANAGED_USER_ACCESS_ORACLE'):
             dependencies['oracle'] = {'condition': 'service_healthy'}
         if name == 'api-gateway':
+            dependencies['redis'] = {'condition': 'service_healthy'}
             dependencies.update({n: {'condition': 'service_healthy'} for n in state['services']
                                  if n != 'api-gateway'})
         if dependencies:
@@ -534,11 +537,34 @@ def config_for(state):
                      'target': '/docker-entrypoint-initdb.d/initialize-reporting.js', 'read_only': True}],
         'healthcheck': {'test': ['CMD-SHELL', "mongosh --quiet --username \"$$MONGO_INITDB_ROOT_USERNAME\" --password \"$$MONGO_INITDB_ROOT_PASSWORD\" --authenticationDatabase admin --eval 'quit(db.adminCommand({ping:1}).ok ? 0 : 1)'"],
                         'interval': '10s', 'timeout': '5s', 'retries': 30, 'start_period': '30s'}}
+    services['redis'] = {'image': 'redis:7.4.2-alpine@sha256:02419de7eddf55aa5bcf49efb74e88fa8d931b4d77c07eff8a6b2144472b6952', 'container_name': 'redis',
+        'restart': 'unless-stopped', 'networks': ['backend'], 'mem_limit': '128m', 'memswap_limit': '128m',
+        'command': ['redis-server', '--maxmemory', '64mb', '--maxmemory-policy', 'noeviction'],
+        'healthcheck': {'test': ['CMD', 'redis-cli', 'ping'], 'interval': '10s', 'timeout': '3s', 'retries': 10}}
+    monitoring = Path('/etc/mmiv/monitoring/prometheus.yml')
+    services['prometheus'] = {'image': 'prom/prometheus:v3.5.0@sha256:63805ebb8d2b3920190daf1cb14a60871b16fd38bed42b857a3182bc621f4996', 'container_name': 'prometheus',
+        'restart': 'unless-stopped', 'networks': ['backend'], 'ports': ['127.0.0.1:9090:9090'],
+        'mem_limit': '256m', 'memswap_limit': '256m',
+        'command': ['--config.file=/etc/prometheus/prometheus.yml', '--storage.tsdb.retention.time=7d',
+                    '--storage.tsdb.retention.size=512MB'],
+        'volumes': [{'type': 'bind', 'source': str(monitoring), 'target': '/etc/prometheus/prometheus.yml', 'read_only': True},
+                    {'type': 'volume', 'source': 'prometheus-data', 'target': '/prometheus'}]}
     config = {'services': services, 'networks': {'backend': {'external': True, 'name': 'mmiv-backend'}}}
-    config['volumes'] = {'rabbit-data': {'name': 'mmiv-rabbitmq-data'}, 'mongo-data': {'name': 'mmiv-reporting-data'}}
+    config['volumes'] = {'prometheus-data': {'name': 'mmiv-prometheus-data'}, 'rabbit-data': {'name': 'mmiv-rabbitmq-data'}, 'mongo-data': {'name': 'mmiv-reporting-data'}}
     if 'oracle' in services:
         config['volumes']['oracle-data'] = {'external': True, 'name': ORACLE_VOLUME}
     return config
+
+
+def managed_monitoring(state):
+    monitoring = Path('/etc/mmiv/monitoring/prometheus.yml')
+    scrape = {'global': {'scrape_interval': '10s'}, 'scrape_configs': [
+        {'job_name': name, 'metrics_path': '/actuator/prometheus',
+         'static_configs': [{'targets': [name + ':' + str(item['port'])],
+                             'labels': {'service': 'integrity-service' if name == 'integrity-service-2' else name}}]}
+        for name, item in state['services'].items() if name != 'api-gateway']}
+    atomic_write(monitoring, json.dumps(scrape, indent=2))
+    monitoring.chmod(0o644)
 
 
 def ensure_images(state, images):
@@ -593,7 +619,7 @@ def ready(name, state):
         address = current['NetworkSettings']['Networks']['mmiv-backend']['IPAddress']
         if not address:
             raise RuntimeError('Service has no shared-network address')
-        registered(name, address, item['port'])
+        registered('integrity-service' if name == 'integrity-service-2' else name, address, item['port'])
 
 
 def save(path, data):
@@ -635,7 +661,7 @@ def restore(state, directory, journal_path, journal):
                 command('docker', 'rm', '-f', name)
             recovery[name] = 'REMOVED_NEW_SERVICE'
         else:
-            force = [name] if name == 'integrity-service' and journal['environment_changed'] else []
+            force = [name] if name in ('integrity-service', 'integrity-service-2') and journal['environment_changed'] else []
             up(compose, [name], force, dependencies=False)
             healthy(state['services'][name]['port'])
             recovery[name] = 'RESTORED'
@@ -688,6 +714,7 @@ def reconcile(action, state):
             if not (Path('/etc/mmiv/user-access/versions/' + bundle['config_id']) / filename).is_file():
                 raise RuntimeError('User Access configuration bundle is incomplete')
     stage('initialize_messaging', managed_messaging)
+    stage('initialize_monitoring', managed_monitoring, state)
     desired = stage('build_compose_config', config_for, state)
     compose_existed = compose.exists()
     previous = json.loads(compose.read_text()) if compose_existed else {'services': {}, 'networks': desired['networks']}
@@ -710,16 +737,17 @@ def reconcile(action, state):
                            else '# Embedded H2 mode: no Oracle secrets required.\n')
     env_changed = ('integrity-service' in state['services'] and
                    (not environment.exists() or environment.read_text() != desired_environment))
-    if 'integrity-service' in desired['services'] and env_changed:
-        # Preserve Integrity's database mode. A config fingerprint lets Compose
-        # detect env-file updates without a second force-recreate invocation.
-        desired['services']['integrity-service']['labels'] = {
-            'mmiv.environment': hashlib.sha256(desired_environment.encode()).hexdigest()}
-    elif 'integrity-service' in desired['services'] and 'integrity-service' in previous['services']:
-        labels = previous['services']['integrity-service'].get('labels')
-        if labels:
-            desired['services']['integrity-service']['labels'] = labels
-    for infrastructure in ('rabbitmq', 'mongodb'):
+    for replica in ('integrity-service', 'integrity-service-2'):
+        if replica not in desired['services']:
+            continue
+        if env_changed:
+            desired['services'][replica]['labels'] = {
+                'mmiv.environment': hashlib.sha256(desired_environment.encode()).hexdigest()}
+        elif replica in previous['services']:
+            labels = previous['services'][replica].get('labels')
+            if labels:
+                desired['services'][replica]['labels'] = labels
+    for infrastructure in ('rabbitmq', 'mongodb', 'prometheus', 'redis'):
         previous['services'].setdefault(infrastructure, desired['services'][infrastructure])
     previous['volumes'] = desired['volumes']
     if 'oracle' in desired['services']:
@@ -733,7 +761,7 @@ def reconcile(action, state):
         previous['volumes'] = desired['volumes']
     changes = {name: {'changed': not container or previous['services'].get(name) != desired['services'][name]
                       or (container['Config'].get('Labels') or {}).get('com.docker.compose.project') != PROJECT
-                      or (name == 'integrity-service' and env_changed),
+                      or (name in ('integrity-service', 'integrity-service-2') and env_changed),
                       'previous': container is not None,
                       'previous_image': container['Config']['Image'] if container else None}
                for name, container in before.items()}
@@ -754,7 +782,7 @@ def reconcile(action, state):
         names = list(state['services'])
         journal['touched'].extend(names)
         save(journal_path, journal)
-        stage('compose_startup', up, compose, names + (['oracle'] if 'oracle' in desired['services'] else []))
+        stage('compose_startup', up, compose, ['prometheus'] + names + (['oracle'] if 'oracle' in desired['services'] else []))
         parallel(lambda name: stage('readiness_' + name, ready, name, state), names)
         result['READY'] = True
         save(directory / 'current-release.json', result)

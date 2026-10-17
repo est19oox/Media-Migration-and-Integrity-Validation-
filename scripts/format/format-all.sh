@@ -28,7 +28,7 @@ if [[ "$has_terraform" == true ]]; then
 fi
 
 cd "$ROOT"
-"$PRETTIER" --write '**/*.html' '**/*.css' '**/*.js' '**/*.json' '**/*.md' '**/*.yml' '**/*.yaml'
+"$PRETTIER" --write '**/*.html' '**/*.css' '**/*.js' '**/*.jsx' '**/*.json' '**/*.md' '**/*.yml' '**/*.yaml'
 
 for pom in "${service_poms[@]}"; do
     printf 'Formatting Java sources for %s\n' "$pom"

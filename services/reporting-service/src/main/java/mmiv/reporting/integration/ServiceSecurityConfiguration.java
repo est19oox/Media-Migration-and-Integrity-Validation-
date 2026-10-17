@@ -40,7 +40,11 @@ public class ServiceSecurityConfiguration {
             a ->
                 a.dispatcherTypeMatchers(jakarta.servlet.DispatcherType.ERROR)
                     .permitAll()
-                    .requestMatchers("/actuator/health", "/actuator/health/**", "/actuator/info")
+                    .requestMatchers(
+                        "/actuator/health",
+                        "/actuator/health/**",
+                        "/actuator/info",
+                        "/actuator/prometheus")
                     .permitAll()
                     .requestMatchers(
                         "/api/reports/**",

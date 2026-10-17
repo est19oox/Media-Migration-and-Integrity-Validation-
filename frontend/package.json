@@ -2,12 +2,17 @@
   "name": "mmiv-frontend",
   "private": true,
   "version": "1.0.0",
-  "description": "Local development server for the static MMIV frontend",
+  "description": "Shared React frontend with the team-maintained page controllers",
   "type": "module",
   "scripts": {
-    "dev": "vite"
+    "dev": "vite",
+    "build": "vite build"
   },
   "devDependencies": {
     "vite": "8.3.4"
+  },
+  "dependencies": {
+    "react": "19.2.0",
+    "react-dom": "19.2.0"
   }
 }

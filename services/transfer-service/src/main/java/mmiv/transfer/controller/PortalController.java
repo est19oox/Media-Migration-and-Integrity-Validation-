@@ -19,7 +19,7 @@ public class PortalController {
   private final String bucket;
 
   private final mmiv.transfer.service.FileMutationService mutations;
-  private final FolderAccessGuard guard;
+  private final mmiv.transfer.service.FolderCreationService creation;
 
   public PortalController(
       MetadataClient metadata,
@@ -27,24 +27,18 @@ public class PortalController {
       S3Client s3,
       @Value("${mmiv.s3.bucket}") String bucket,
       mmiv.transfer.service.FileMutationService mutations,
-      FolderAccessGuard guard) {
+      mmiv.transfer.service.FolderCreationService creation) {
     this.metadata = metadata;
     this.portal = portal;
     this.s3 = s3;
     this.bucket = bucket;
     this.mutations = mutations;
-    this.guard = guard;
+    this.creation = creation;
   }
 
   @ModelAttribute
   void noCache(jakarta.servlet.http.HttpServletResponse response) {
     response.setHeader("Cache-Control", "no-store");
-  }
-
-  @GetMapping("/admin/users")
-  public Object users(@RequestParam(defaultValue = "") String q) {
-    return portal.access(
-        HttpMethod.GET, "/api/admin/user-options?q=" + PortalClient.encode(q), null);
   }
 
   @GetMapping("/admin/folders")
@@ -54,69 +48,7 @@ public class PortalController {
 
   @PostMapping("/admin/folders")
   public Object create(@RequestBody Folder request) {
-    portal.admin();
-    String name = request.name();
-    if (name == null
-        || !name.matches("[A-Za-z0-9][A-Za-z0-9 _.-]{0,79}")
-        || name.endsWith(" ")
-        || name.endsWith(".")
-        || name.equals(bucket)
-        || name.equals("migrations")
-        || name.equals("upload")
-        || mmiv.transfer.service.FileMutationService.reserved(name))
-      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid folder name");
-    try (@SuppressWarnings("unused")
-        var scope = guard.write(name)) {
-      try {
-        s3.putObject(
-            PutObjectRequest.builder()
-                .bucket(bucket)
-                .key(name + "/")
-                .ifNoneMatch("*")
-                .contentType("application/x-directory")
-                .build(),
-            software.amazon.awssdk.core.sync.RequestBody.empty());
-      } catch (S3Exception e) {
-        if (e.statusCode() != 412)
-          throw new ResponseStatusException(
-              HttpStatus.BAD_GATEWAY, "Folder could not be created in storage");
-      }
-      return portal.access(HttpMethod.POST, "/api/admin/folders", request);
-    }
-  }
-
-  @PutMapping("/admin/users/{id}/permissions")
-  public Object grant(@PathVariable UUID id, @RequestBody Grant request) {
-    return portal.access(HttpMethod.PUT, "/api/admin/users/" + id + "/destinations", request);
-  }
-
-  @DeleteMapping("/admin/users/{id}/permissions")
-  public Object revoke(@PathVariable UUID id, @RequestParam String destination) {
-    return portal.access(
-        HttpMethod.DELETE,
-        "/api/admin/users/" + id + "/destinations?destination=" + PortalClient.encode(destination),
-        null);
-  }
-
-  @PostMapping("/admin/users/{id}/password-reset")
-  public Object reset(@PathVariable UUID id) {
-    return portal.access(HttpMethod.POST, "/api/admin/users/" + id + "/password-reset", null);
-  }
-
-  @DeleteMapping("/admin/users/{id}")
-  public void deleteUser(@PathVariable UUID id, jakarta.servlet.http.HttpServletResponse response) {
-    portal.access(HttpMethod.DELETE, "/api/admin/users/" + id, null);
-    response.setStatus(204);
-  }
-
-  @PostMapping("/admin/invitations")
-  public Object invite(@RequestBody Invite request) {
-    return portal.access(HttpMethod.POST, "/api/admin/invitations", request);
-  }
-
-  @PostMapping("/invitations/accept")
-  public Object accept(@RequestBody Acceptance request) {
-    return portal.access(HttpMethod.POST, "/api/admin/invitations/accept", request);
+    return creation.create(request.name());
   }
 
   @GetMapping("/files")
@@ -180,12 +112,6 @@ public class PortalController {
   }
 
   public record Folder(String name) {}
-
-  public record Grant(String destination, String permission) {}
-
-  public record Invite(String username) {}
-
-  public record Acceptance(String token) {}
 
   public record FileEntry(
       String fileId, String name, long sizeBytes, String modifiedAt, boolean canDelete) {}

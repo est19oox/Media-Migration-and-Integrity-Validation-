@@ -98,7 +98,7 @@ public class MigrationReportDocument {
     return files.stream().filter(file -> file.getFileId().equals(requestedId)).findFirst();
   }
 
-  public FileReportEntry getOrCreateFile(UUID fileId) {
+  FileReportEntry getOrCreateFile(UUID fileId) {
     Objects.requireNonNull(fileId, "fileId must not be null");
 
     return findFile(fileId)
@@ -111,7 +111,7 @@ public class MigrationReportDocument {
             });
   }
 
-  public void recordDiscoveryCompleted(long totalFiles) {
+  void recordDiscoveryCompleted(long totalFiles) {
     if (totalFiles < 0) {
       throw new IllegalArgumentException("totalFiles must not be negative");
     }
@@ -121,19 +121,19 @@ public class MigrationReportDocument {
     this.failure = null;
   }
 
-  public void recordDiscoveryFailed(FailureView failure) {
+  void recordDiscoveryFailed(FailureView failure) {
     this.discoveryFailed = true;
     this.expectedTotalFiles = null;
     this.failure = Objects.requireNonNull(failure, "failure must not be null");
   }
 
-  public void recordStarted(Instant startedAt, String initiatedBy, MigrationSource source) {
+  void recordStarted(Instant startedAt, String initiatedBy, MigrationSource source) {
     this.startedAt = Objects.requireNonNull(startedAt, "startedAt must not be null");
     this.initiatedBy = Objects.requireNonNull(initiatedBy, "initiatedBy must not be null");
     this.source = Objects.requireNonNull(source, "source must not be null");
   }
 
-  public void recordEventOccurredAt(Instant occurredAt) {
+  void recordEventOccurredAt(Instant occurredAt) {
     Objects.requireNonNull(occurredAt, "occurredAt must not be null");
     if (occurredAt.isAfter(latestEventAt)) {
       latestEventAt = occurredAt;
@@ -152,11 +152,11 @@ public class MigrationReportDocument {
     return expectedTotalFiles;
   }
 
-  public void replaceSummary(ReportSummary summary) {
+  void replaceSummary(ReportSummary summary) {
     this.summary = Objects.requireNonNull(summary, "summary must not be null");
   }
 
-  public void markCompleted(MigrationReportStatus status, Instant completedAt) {
+  void markCompleted(MigrationReportStatus status, Instant completedAt) {
     Objects.requireNonNull(status, "status must not be null");
 
     if (status != MigrationReportStatus.COMPLETED
@@ -170,7 +170,7 @@ public class MigrationReportDocument {
     this.completedAt = Objects.requireNonNull(completedAt, "completedAt must not be null");
   }
 
-  public void markIncomplete(Instant completedAt) {
+  void markIncomplete(Instant completedAt) {
     this.status = MigrationReportStatus.INCOMPLETE;
 
     this.completedAt = Objects.requireNonNull(completedAt, "completedAt must not be null");
@@ -190,6 +190,10 @@ public class MigrationReportDocument {
 
   public Instant getLatestEventAt() {
     return latestEventAt;
+  }
+
+  public boolean belongsTo(String subject) {
+    return subject != null && subject.equals(initiatedBy);
   }
 
   public String getInitiatedBy() {
@@ -214,5 +218,159 @@ public class MigrationReportDocument {
 
   public List<FileReportEntry> getFiles() {
     return List.copyOf(files);
+  }
+
+  public CalculatedReportState calculateState() {
+    List<FileReportEntry> files = getFiles();
+
+    long discoveryAccepted = countStatus(files, "ACCEPTED", Stage.DISCOVERY);
+
+    long discoveryFailed =
+        files.stream()
+            .filter(
+                file ->
+                    "REJECTED".equals(file.getDiscoveryStatus())
+                        || "ERROR".equals(file.getDiscoveryStatus()))
+            .count();
+
+    long transferStored = countStatus(files, "STORED", Stage.TRANSFER);
+
+    long transferFailed = countStatus(files, "FAILED", Stage.TRANSFER);
+
+    long integrityPassed = countStatus(files, "PASSED", Stage.INTEGRITY);
+
+    long integrityFailed =
+        files.stream()
+            .filter(
+                file ->
+                    "FAILED".equals(file.getIntegrityStatus())
+                        || "ERROR".equals(file.getIntegrityStatus()))
+            .count();
+
+    long successfulFiles =
+        files.stream().filter(file -> file.getFinalStatus() == FileFinalStatus.SUCCEEDED).count();
+
+    long failedFiles =
+        files.stream().filter(file -> file.getFinalStatus() == FileFinalStatus.FAILED).count();
+
+    long totalFiles = isDiscoveryCompleted() ? getExpectedTotalFiles() : files.size();
+
+    double successRate = totalFiles == 0 ? 0.0 : successfulFiles * 100.0 / totalFiles;
+
+    ReportSummary summary =
+        new ReportSummary(
+            totalFiles,
+            discoveryAccepted,
+            discoveryFailed,
+            transferStored,
+            transferFailed,
+            integrityPassed,
+            integrityFailed,
+            successfulFiles,
+            failedFiles,
+            successRate);
+
+    boolean terminal =
+        isDiscoveryFailed()
+            || isDiscoveryCompleted() && successfulFiles + failedFiles == totalFiles;
+
+    MigrationReportStatus status =
+        isDiscoveryFailed()
+            ? MigrationReportStatus.FAILED
+            : determineStatus(terminal, totalFiles, successfulFiles, failedFiles);
+
+    return new CalculatedReportState(summary, status, terminal);
+  }
+
+  private MigrationReportStatus determineStatus(
+      boolean terminal, long totalFiles, long successfulFiles, long failedFiles) {
+    if (!terminal) {
+      return MigrationReportStatus.PROCESSING;
+    }
+
+    if (totalFiles == 0 || successfulFiles == totalFiles) {
+      return MigrationReportStatus.COMPLETED;
+    }
+
+    if (failedFiles == totalFiles) {
+      return MigrationReportStatus.FAILED;
+    }
+
+    return MigrationReportStatus.PARTIALLY_COMPLETED;
+  }
+
+  private long countStatus(List<FileReportEntry> files, String expectedStatus, Stage stage) {
+    return files.stream()
+        .map(file -> statusFor(file, stage))
+        .filter(expectedStatus::equals)
+        .count();
+  }
+
+  private String statusFor(FileReportEntry file, Stage stage) {
+    return switch (stage) {
+      case DISCOVERY -> file.getDiscoveryStatus();
+
+      case TRANSFER -> file.getTransferStatus();
+
+      case INTEGRITY -> file.getIntegrityStatus();
+    };
+  }
+
+  private enum Stage {
+    DISCOVERY,
+    TRANSFER,
+    INTEGRITY
+  }
+
+  /** Apply a complete event atomically through the aggregate root. */
+  public void apply(ReportChange change) {
+    recordEventOccurredAt(change.occurredAt());
+    switch (change.kind()) {
+      case STARTED -> recordStarted(change.occurredAt(), change.initiatedBy(), change.source());
+      case DISCOVERY_COMPLETED -> {
+        if ("FAILED".equals(change.status())) recordDiscoveryFailed(change.failure());
+        else recordDiscoveryCompleted(change.totalFiles());
+      }
+      case FILE_DISCOVERED -> {
+        var file = getOrCreateFile(change.fileId());
+        file.recordDiscoveryMetadata(
+            change.manifestMediaId(), change.fileName(), change.relativePath());
+        switch (change.status()) {
+          case "ACCEPTED" -> file.recordDiscoveryAccepted();
+          case "REJECTED", "ERROR" -> file.recordDiscoveryFailed(change.status(), change.failure());
+          default ->
+              throw new IllegalArgumentException(
+                  "Unsupported discovery status: " + change.status());
+        }
+      }
+      case FILE_TRANSFERRED -> {
+        var file = getOrCreateFile(change.fileId());
+        switch (change.status()) {
+          case "STORED" -> file.recordTransferStored();
+          case "FAILED" -> file.recordTransferFailed(change.failure());
+          default ->
+              throw new IllegalArgumentException("Unsupported transfer status: " + change.status());
+        }
+      }
+      case FILE_VALIDATED -> {
+        var file = getOrCreateFile(change.fileId());
+        switch (change.status()) {
+          case "PASSED" -> file.recordIntegrityPassed();
+          case "FAILED", "ERROR" -> file.recordIntegrityFailed(change.status(), change.failure());
+          default ->
+              throw new IllegalArgumentException(
+                  "Unsupported integrity status: " + change.status());
+        }
+      }
+    }
+    var calculated = calculateState();
+    replaceSummary(calculated.summary());
+    if (calculated.terminal()) markCompleted(calculated.status(), latestEventAt);
+  }
+
+  public boolean timeOut(Instant now) {
+    if (status != MigrationReportStatus.PROCESSING) return false;
+    markIncomplete(now);
+    return true;
   }
 }

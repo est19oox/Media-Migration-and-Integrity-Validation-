@@ -43,7 +43,7 @@ let carouselList = [
 // 初始化輪播圖基礎佈局
 carouselList.forEach((item, index) => {
   document.querySelector('#media-list').innerHTML += `
-  <div 
+  <div
     class="media-list-item"
     data-index="${index}"
     data-serial="${item.serial}"
@@ -51,8 +51,8 @@ carouselList.forEach((item, index) => {
     data-desc="${item.desc}"
     data-thumbnail="${item.thumbnail}"
   >
-    <div 
-      class="media-list-item-img" 
+    <div
+      class="media-list-item-img"
       style="background-image: url(${item.thumbnail})"
       data-title="${item.title}"
     ></div>

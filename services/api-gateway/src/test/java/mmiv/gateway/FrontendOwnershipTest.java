@@ -83,7 +83,7 @@ class FrontendOwnershipTest {
         .expectStatus()
         .isOk()
         .expectBody(String.class)
-        .value(body -> assertTrue(body.contains("/js/home.js")));
+        .value(body -> assertTrue(body.contains("id=\"root\"") && body.contains("/assets/")));
   }
 
   @Test
@@ -91,12 +91,14 @@ class FrontendOwnershipTest {
     assertRedirect("/login.html", "/pages/login.html", false);
     assertRedirect("/signup.html", "/pages/signup.html", false);
     assertRedirect("/reset-password.html", "/pages/reset-password.html", false);
+    assertRedirect("/home.html", "/pages/home.html", true);
+    assertRedirect("/upload.html", "/pages/file-manager.html", true);
     assertRedirect("/invite.html", "/pages/invite.html", true);
   }
 
   @Test
   void legacyWorkspaceAndUnknownFrontendPagesAreAbsent() {
-    for (String path : new String[] {"/home.html", "/upload.html", "/pages/not-real.html"}) {
+    for (String path : new String[] {"/pages/not-real.html"}) {
       authenticated().get().uri(path).exchange().expectStatus().isNotFound();
     }
   }

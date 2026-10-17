@@ -17,6 +17,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 class ApplicationTest {
 
   @MockitoBean private mmiv.integration.MetadataPlanRepository metadataPlanRepository;
+  @MockitoBean private mmiv.repository.VerificationRunRepository verificationRunRepository;
 
   // Mock the metadata repository to avoid Oracle dependency.
   @MockitoBean private FileMetadataRepository fileMetadataRepository;

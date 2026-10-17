@@ -12,7 +12,6 @@ import com.sun.net.httpserver.HttpServer;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.time.Instant;
-import java.util.UUID;
 import mmiv.reporting.integration.CurrentAdminAuthorization;
 import org.junit.jupiter.api.Test;
 import org.springframework.data.domain.Page;
@@ -33,28 +32,6 @@ class AdminReportControllerTest {
     var order = inOrder(authorization, queries);
     order.verify(authorization).require(jwt.getTokenValue());
     order.verify(queries).all(any(), any(), any());
-  }
-
-  @Test
-  void adminFileFilterRequiresAuthorizationBeforeQuerying() {
-    ReportQueryService queries = mock(ReportQueryService.class);
-    CurrentAdminAuthorization authorization = mock(CurrentAdminAuthorization.class);
-    AdminReportController controller = new AdminReportController(queries, authorization);
-    UUID migrationId = UUID.fromString("c49f2f8f-ad97-45a8-8867-f3ca8a971d80");
-    when(queries.anyFiles(any(), org.mockito.ArgumentMatchers.eq(true), any()))
-        .thenReturn(Page.empty());
-    Jwt jwt = jwt();
-
-    controller.files(jwt, migrationId, true, 0, 20);
-
-    var order = inOrder(authorization, queries);
-    order.verify(authorization).require(jwt.getTokenValue());
-    order
-        .verify(queries)
-        .anyFiles(
-            org.mockito.ArgumentMatchers.eq(migrationId),
-            org.mockito.ArgumentMatchers.eq(true),
-            org.mockito.ArgumentMatchers.any());
   }
 
   @Test

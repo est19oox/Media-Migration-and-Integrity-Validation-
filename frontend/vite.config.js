@@ -1,3 +1,5 @@
+import { readdirSync, cpSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vite';
 
@@ -47,5 +49,24 @@ export default defineConfig({
       '/api': { target: gateway, changeOrigin: true },
     },
   },
-  plugins: [loginPageAlias()],
+  build: {
+    rollupOptions: {
+      input: Object.fromEntries(
+        readdirSync(resolve(root, 'pages'))
+          .filter((name) => name.endsWith('.html'))
+          .map((name) => [name.replace('.html', ''), resolve(root, 'pages', name)]),
+      ),
+    },
+  },
+  plugins: [
+    loginPageAlias(),
+    {
+      name: 'preserve-team-controller-assets',
+      closeBundle() {
+        for (const directory of ['js', 'css', 'img', 'font', 'assets']) {
+          cpSync(resolve(root, directory), resolve(root, 'dist', directory), { recursive: true });
+        }
+      },
+    },
+  ],
 });

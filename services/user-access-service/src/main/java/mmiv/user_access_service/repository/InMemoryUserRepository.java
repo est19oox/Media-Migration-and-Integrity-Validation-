@@ -3,7 +3,6 @@ package mmiv.user_access_service.repository;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
-import mmiv.user_access_service.model.DestinationAccess;
 import mmiv.user_access_service.model.Permission;
 import mmiv.user_access_service.model.User;
 import org.springframework.context.annotation.Profile;
@@ -37,17 +36,7 @@ public class InMemoryUserRepository implements UserRepository {
         || !"USER".equals(user.getRole())) return false;
     invitations.entrySet().removeIf(entry -> entry.getValue().userId().equals(userId));
     resets.entrySet().removeIf(entry -> entry.getValue().userId().equals(userId));
-    users.put(
-        userId,
-        new User(
-            userId,
-            user.getDestinationAccesses(),
-            user.getUsername(),
-            "ADMIN",
-            true,
-            user.getPermissions(),
-            user.getPasswordHash(),
-            user.getAuthVersion()));
+    users.put(userId, user.acceptAdministratorRole());
     return true;
   }
 
@@ -128,21 +117,7 @@ public class InMemoryUserRepository implements UserRepository {
       throw new IllegalArgumentException("Destination and permission are required");
     }
 
-    java.util.List<DestinationAccess> accesses =
-        new java.util.ArrayList<>(user.getDestinationAccesses());
-    accesses.removeIf(access -> destination.equals(access.getDestination()));
-    accesses.add(new DestinationAccess(destination, permission));
-    users.put(
-        userId,
-        new User(
-            userId,
-            accesses,
-            user.getUsername(),
-            user.getRole(),
-            user.isActive(),
-            user.getPermissions(),
-            user.getPasswordHash(),
-            user.getAuthVersion()));
+    users.put(userId, user.grant(destination, permission));
   }
 
   @Override
@@ -155,20 +130,12 @@ public class InMemoryUserRepository implements UserRepository {
       throw new IllegalArgumentException("Destination is required");
     }
 
-    java.util.List<DestinationAccess> accesses =
-        new java.util.ArrayList<>(user.getDestinationAccesses());
-    accesses.removeIf(access -> destination.equals(access.getDestination()));
-    users.put(
-        userId,
-        new User(
-            userId,
-            accesses,
-            user.getUsername(),
-            user.getRole(),
-            user.isActive(),
-            user.getPermissions(),
-            user.getPasswordHash(),
-            user.getAuthVersion()));
+    users.put(userId, user.revoke(destination));
+  }
+
+  @Override
+  public synchronized void revokeFolderAccess(String destination) {
+    users.replaceAll((id, user) -> user.revoke(destination));
   }
 
   private record Reset(String userId, String issuer, java.time.Instant expires) {}
@@ -178,12 +145,7 @@ public class InMemoryUserRepository implements UserRepository {
   private boolean managementAllowed(String actor, String target, boolean activeTarget) {
     var a = users.get(actor);
     var t = users.get(target);
-    return a != null
-        && a.isActive()
-        && "ADMIN".equals(a.getRole())
-        && t != null
-        && (!activeTarget || t.isActive())
-        && (actor.equals(target) || "USER".equals(t.getRole()));
+    return t != null && t.canBeManagedBy(a, activeTarget);
   }
 
   public synchronized boolean deleteAccount(String actor, String target) {
@@ -199,17 +161,7 @@ public class InMemoryUserRepository implements UserRepository {
                 ? new Reset(value.userId(), value.issuer(), java.time.Instant.EPOCH)
                 : value);
     var user = users.get(target);
-    users.put(
-        target,
-        new User(
-            target,
-            user.getDestinationAccesses(),
-            user.getUsername(),
-            user.getRole(),
-            false,
-            user.getPermissions(),
-            user.getPasswordHash(),
-            user.getAuthVersion() + 1));
+    users.put(target, user.deactivate());
     return true;
   }
 
@@ -233,17 +185,7 @@ public class InMemoryUserRepository implements UserRepository {
     String encoded = password.get();
     resets.entrySet().removeIf(e -> e.getValue().userId().equals(user.getUserId()));
     invitations.entrySet().removeIf(e -> e.getValue().userId().equals(user.getUserId()));
-    users.put(
-        user.getUserId(),
-        new User(
-            user.getUserId(),
-            user.getDestinationAccesses(),
-            user.getUsername(),
-            user.getRole(),
-            true,
-            user.getPermissions(),
-            encoded,
-            user.getAuthVersion() + 1));
+    users.put(user.getUserId(), user.resetPassword(encoded));
     return Optional.of(user.getUserId());
   }
 }

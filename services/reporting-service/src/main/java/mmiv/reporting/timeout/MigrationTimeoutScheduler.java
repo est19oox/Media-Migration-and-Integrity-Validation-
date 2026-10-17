@@ -31,11 +31,9 @@ public class MigrationTimeoutScheduler {
     Instant cutoff = now.minus(properties.getMigrationTimeout());
 
     repository.findByStatusAndStartedAtBefore(MigrationReportStatus.PROCESSING, cutoff).stream()
-        .filter(report -> report.getStatus() == MigrationReportStatus.PROCESSING)
         .forEach(
             report -> {
-              report.markIncomplete(now);
-              repository.save(report);
+              if (report.timeOut(now)) repository.save(report);
             });
   }
 }

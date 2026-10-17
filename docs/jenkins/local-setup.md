@@ -1,10 +1,8 @@
 # Local Jenkins Setup and Operating Contract
 
-[English](local-setup.md) | [简体中文](local-setup.zh-CN.md)
-
 ## Scope and prerequisites
 
-This is a reproducible, local development and demonstration Jenkins controller. It is not a production Jenkins deployment or the repository's authoritative hosted CI/CD path; GitHub Actions handles hosted validation and release automation. The Jenkins host needs Docker Desktop (or a compatible Linux Docker Engine), Docker Compose, internet access for the initial image and scanner downloads, and at least 6 GB free memory. Windows users need PowerShell 7 or Windows PowerShell 5.1; macOS and Linux users need a POSIX-compatible shell.
+This is a reproducible, local development and demonstration Jenkins controller. It is not a production Jenkins deployment. The Jenkins host needs Docker Desktop (or a compatible Linux Docker Engine), Docker Compose, internet access for the initial image and scanner downloads, and at least 6 GB free memory. Windows users need PowerShell 7 or Windows PowerShell 5.1; macOS and Linux users need a POSIX-compatible shell.
 
 Confirm that Docker Desktop is ready before starting:
 

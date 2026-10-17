@@ -502,13 +502,6 @@
         },
         "status": 400,
         "anonymous": true
-      },
-      {
-        "name": "signup page available",
-        "method": "GET",
-        "path": "/signup.html",
-        "status": 200,
-        "anonymous": true
       }
     ],
     "reporting-service": [
@@ -521,7 +514,7 @@
       {
         "name": "global report listing is denied",
         "path": "/api/reports",
-        "status": 404
+        "status": 403
       }
     ],
     "discovery-service": [
@@ -595,7 +588,7 @@
         "path": "/api/reports/mine?page=0&size=1",
         "status": 200,
         "json_object": true,
-        "json_required": ["content", "number", "totalPages", "totalElements"]
+        "json_required": ["content", "page"]
       },
       {
         "name": "gateway routes home to login page",

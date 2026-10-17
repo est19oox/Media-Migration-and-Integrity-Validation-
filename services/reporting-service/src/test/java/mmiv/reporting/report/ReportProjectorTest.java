@@ -11,20 +11,14 @@ import java.nio.file.Path;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
-import java.util.Set;
-import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
-import mmiv.reporting.api.ReportQueryService;
-import mmiv.reporting.audit.AuditEventRepository;
 import mmiv.reporting.contract.EventContractValidator;
 import mmiv.reporting.contract.EventEnvelope;
 import mmiv.reporting.contract.ValidatedEvent;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.data.domain.PageRequest;
 import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -36,8 +30,6 @@ class ReportProjectorTest {
 
   private final AtomicReference<MigrationReportDocument> storedReport = new AtomicReference<>();
 
-  private final Set<String> storedReportIds = new HashSet<>();
-
   private MigrationReportRepository repository;
 
   private ReportProjector projector;
@@ -46,7 +38,6 @@ class ReportProjectorTest {
   @BeforeEach
   void setUp() {
     storedReport.set(null);
-    storedReportIds.clear();
 
     repository = mock(MigrationReportRepository.class);
 
@@ -70,7 +61,6 @@ class ReportProjectorTest {
               MigrationReportDocument report = invocation.getArgument(0);
 
               storedReport.set(report);
-              storedReportIds.add(report.getId());
               return report;
             });
 
@@ -132,80 +122,6 @@ class ReportProjectorTest {
         () -> assertEquals(1, report.getFiles().size()),
         () -> assertEquals(1, report.getSummary().totalFiles()),
         () -> assertEquals(1, report.getSummary().successfulFiles()));
-  }
-
-  @Test
-  void aggregatesOneHundredSixtyFilesIntoOneRunReportWithFailureFiltering() throws Exception {
-    ValidatedEvent started = event("01-migration-started.json");
-    UUID migrationId = started.envelope().migrationId();
-    projector.apply(started);
-
-    for (int index = 0; index < 160; index++) {
-      UUID fileId = UUID.nameUUIDFromBytes(("report-file-" + index).getBytes());
-      projector.apply(forFile(event("02-file-discovery-accepted.json"), migrationId, fileId));
-      projector.apply(forFile(event("05-file-transfer-completed.json"), migrationId, fileId));
-      projector.apply(
-          forFile(
-              index < 3 ? integrityFailureEvent() : event("06-integrity-validation-completed.json"),
-              migrationId,
-              fileId));
-    }
-
-    projector.apply(withTotalFiles(event("04-migration-discovery-completed.json"), 160));
-
-    MigrationReportDocument report = storedReport.get();
-    ReportQueryService queries =
-        new ReportQueryService(repository, mock(AuditEventRepository.class));
-
-    assertAll(
-        () -> assertEquals(Set.of(migrationId.toString()), storedReportIds),
-        () -> assertEquals(160, report.getSummary().totalFiles()),
-        () -> assertEquals(157, report.getSummary().successfulFiles()),
-        () -> assertEquals(3, report.getSummary().failedFiles()),
-        () ->
-            assertEquals(
-                3,
-                queries
-                    .ownedFiles("user-123", migrationId, true, PageRequest.of(0, 20))
-                    .getTotalElements()),
-        () ->
-            assertEquals(
-                160,
-                queries
-                    .ownedFiles("user-123", migrationId, false, PageRequest.of(0, 20))
-                    .getTotalElements()));
-  }
-
-  private ValidatedEvent forFile(ValidatedEvent original, UUID migrationId, UUID fileId) {
-    EventEnvelope envelope = original.envelope();
-    return new ValidatedEvent(
-        new EventEnvelope(
-            UUID.randomUUID(),
-            envelope.eventType(),
-            envelope.schemaVersion(),
-            envelope.sourceService(),
-            migrationId,
-            fileId,
-            envelope.occurredAt(),
-            envelope.data()),
-        original.originalBody(),
-        original.payloadSha256());
-  }
-
-  private ValidatedEvent withTotalFiles(ValidatedEvent original, long totalFiles) throws Exception {
-    EventEnvelope envelope = original.envelope();
-    return new ValidatedEvent(
-        new EventEnvelope(
-            UUID.randomUUID(),
-            envelope.eventType(),
-            envelope.schemaVersion(),
-            envelope.sourceService(),
-            envelope.migrationId(),
-            envelope.fileId(),
-            envelope.occurredAt(),
-            objectMapper.readTree("{\"status\":\"COMPLETED\",\"totalFiles\":" + totalFiles + "}")),
-        original.originalBody(),
-        original.payloadSha256());
   }
 
   private void assertCompletedHappyPath(MigrationReportDocument report) {

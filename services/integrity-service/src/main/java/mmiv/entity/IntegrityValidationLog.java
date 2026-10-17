@@ -36,75 +36,71 @@ public class IntegrityValidationLog {
   @Column(name = "VALIDATED_AT", nullable = false)
   private LocalDateTime validatedAt;
 
-  public Long getValidationId() {
-    return validationId;
+  /** Start a validation aggregate before performing external checksum I/O. */
+  public static IntegrityValidationLog start(String bucket, String key, String checksum) {
+    var validation = new IntegrityValidationLog();
+    validation.bucketName = bucket;
+    validation.objectKey = key;
+    validation.sourceChecksum = checksum;
+    validation.algorithm = "SHA-256";
+    return validation;
   }
 
-  public void setValidationId(Long validationId) {
-    this.validationId = validationId;
+  public void compareWith(String destination, LocalDateTime now) {
+    requirePending();
+    destinationChecksum = destination;
+    validationStatus = sourceChecksum.equalsIgnoreCase(destination) ? "PASSED" : "FAILED";
+    validatedAt = java.util.Objects.requireNonNull(now);
+  }
+
+  public void fail(String message, LocalDateTime now) {
+    requirePending();
+    validationStatus = "ERROR";
+    errorMessage = message;
+    validatedAt = java.util.Objects.requireNonNull(now);
+  }
+
+  public boolean passed() {
+    return "PASSED".equals(validationStatus);
+  }
+
+  private void requirePending() {
+    if (validationStatus != null) throw new IllegalStateException("Validation is already finished");
+  }
+
+  public Long getValidationId() {
+    return validationId;
   }
 
   public String getBucketName() {
     return bucketName;
   }
 
-  public void setBucketName(String bucketName) {
-    this.bucketName = bucketName;
-  }
-
   public String getObjectKey() {
     return objectKey;
-  }
-
-  public void setObjectKey(String objectKey) {
-    this.objectKey = objectKey;
   }
 
   public String getSourceChecksum() {
     return sourceChecksum;
   }
 
-  public void setSourceChecksum(String sourceChecksum) {
-    this.sourceChecksum = sourceChecksum;
-  }
-
   public String getDestinationChecksum() {
     return destinationChecksum;
-  }
-
-  public void setDestinationChecksum(String destinationChecksum) {
-    this.destinationChecksum = destinationChecksum;
   }
 
   public String getAlgorithm() {
     return algorithm;
   }
 
-  public void setAlgorithm(String algorithm) {
-    this.algorithm = algorithm;
-  }
-
   public String getValidationStatus() {
     return validationStatus;
-  }
-
-  public void setValidationStatus(String validationStatus) {
-    this.validationStatus = validationStatus;
   }
 
   public String getErrorMessage() {
     return errorMessage;
   }
 
-  public void setErrorMessage(String errorMessage) {
-    this.errorMessage = errorMessage;
-  }
-
   public LocalDateTime getValidatedAt() {
     return validatedAt;
-  }
-
-  public void setValidatedAt(LocalDateTime validatedAt) {
-    this.validatedAt = validatedAt;
   }
 }
