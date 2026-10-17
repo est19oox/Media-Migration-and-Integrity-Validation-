@@ -250,10 +250,7 @@
     cancelPoll();
     try {
       const reportRoot = profile.role === 'ADMIN' ? '/api/admin/reports' : '/api/reports';
-      const tasks = [
-        read(`${reportRoot}/${id}`),
-        read(filesUrl(reportRoot, filePage)),
-      ];
+      const tasks = [read(`${reportRoot}/${id}`), read(filesUrl(reportRoot, filePage))];
       tasks.push(
         profile.role === 'ADMIN'
           ? read(`/api/admin/reports/${id}/events?page=0&size=${EVENT_SIZE}`)

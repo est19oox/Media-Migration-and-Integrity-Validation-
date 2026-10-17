@@ -253,17 +253,14 @@ class GatewayRoutingTest {
   @Test
   void exposesUserAccessHealthAndJwksWithoutAuthentication() {
     for (String path :
-      new String[] {
-        "/user-access/actuator/health",
-        "/user-access/.well-known/jwks.json"
-      }) {
+        new String[] {"/user-access/actuator/health", "/user-access/.well-known/jwks.json"}) {
       http.get()
-        .uri(path)
-        .exchange()
-        .expectStatus()
-        .isOk()
-        .expectHeader()
-        .valueEquals("X-Test-Backend", "A");
+          .uri(path)
+          .exchange()
+          .expectStatus()
+          .isOk()
+          .expectHeader()
+          .valueEquals("X-Test-Backend", "A");
     }
   }
 
