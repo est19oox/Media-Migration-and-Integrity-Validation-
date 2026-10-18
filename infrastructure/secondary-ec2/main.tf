@@ -35,7 +35,11 @@ data "aws_instance" "primary" {
 }
 
 data "aws_vpc" "mmiv" {
-  id = data.aws_instance.primary.vpc_id
+  id = data.aws_instance.primary.subnet_id != "" ? data.aws_subnet.primary_instance_subnet.vpc_id : null
+}
+
+data "aws_subnet" "primary_instance_subnet" {
+  id = data.aws_instance.primary.subnet_id
 }
 
 data "aws_internet_gateway" "mmiv" {
