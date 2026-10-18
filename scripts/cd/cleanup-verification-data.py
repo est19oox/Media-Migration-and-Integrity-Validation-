@@ -10,6 +10,21 @@ from urllib.error import HTTPError, URLError
 import uuid
 
 
+def safe_downstream_error(error):
+    """Keep useful Spring error fields without persisting arbitrary response data or credentials."""
+    try:
+        payload=json.loads(error.read(8192).decode('utf-8','replace'))
+    except (UnicodeError,json.JSONDecodeError,AttributeError):
+        return None
+    if not isinstance(payload,dict):return None
+    result={}
+    for key in ('status','error','message','path'):
+        value=payload.get(key)
+        if isinstance(value,(str,int,bool)):
+            result[key]=value[:500] if isinstance(value,str) else value
+    return result or None
+
+
 def cleanup(base, auth_file, run, report):
     parsed=urlsplit(base)
     if parsed.scheme!='http' or parsed.hostname!='127.0.0.1' or not parsed.port or parsed.path or parsed.username or parsed.password or parsed.query or parsed.fragment:
@@ -33,6 +48,8 @@ def cleanup(base, auth_file, run, report):
                     return
             except HTTPError as error:
                 evidence['httpStatus']=error.code
+                detail=safe_downstream_error(error)
+                if detail:evidence['downstreamError']=detail
                 if error.code not in (500,502,503,504) or attempt==2:
                     raise ValueError('Verification data cleanup failed: HTTP '+str(error.code)) from None
             except (URLError,TimeoutError,OSError):
