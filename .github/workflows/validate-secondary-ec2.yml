@@ -1,0 +1,36 @@
+name: Validate Isolated Secondary EC2
+
+on:
+  push:
+    branches:
+      - feature/secondary-ec2-isolated
+    paths:
+      - 'infrastructure/secondary-ec2/**'
+      - '.github/workflows/validate-secondary-ec2.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: infrastructure/secondary-ec2
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.15.8
+      - name: Terraform format
+        run: terraform fmt -check
+      - name: Initialize without AWS state access
+        run: terraform init -backend=false -input=false
+      - name: Validate
+        run: terraform validate -no-color
+      - name: Confirm isolated backend
+        run: |
+          grep -q 'key          = "secondary-ec2/terraform.tfstate"' main.tf
+          grep -q 'prevent_destroy = true' main.tf
+          echo "Isolated backend and destroy protection configured."
