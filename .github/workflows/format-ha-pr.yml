@@ -1,7 +1,12 @@
-name: Apply Pinned Prettier Formatting (Manual)
+name: Apply Pinned Prettier Formatting
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - feature/secondary-ec2-isolated
+    paths:
+      - '.github/workflows/format-ha-pr.yml'
 
 permissions:
   contents: write
