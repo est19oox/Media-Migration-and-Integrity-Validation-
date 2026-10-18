@@ -28,7 +28,7 @@ if [[ "$has_terraform" == true ]]; then
 fi
 
 cd "$ROOT"
-"$PRETTIER" --check '**/*.html' '**/*.css' '**/*.js' '**/*.json' '**/*.md' '**/*.yml' '**/*.yaml'
+"$PRETTIER" --check '**/*.html' '**/*.css' '**/*.js' '**/*.jsx' '**/*.json' '**/*.md' '**/*.yml' '**/*.yaml'
 
 for pom in "${service_poms[@]}"; do
     printf 'Checking Java formatting for %s\n' "$pom"

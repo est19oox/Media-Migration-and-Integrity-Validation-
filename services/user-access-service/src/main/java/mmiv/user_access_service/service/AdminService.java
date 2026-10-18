@@ -106,7 +106,7 @@ public class AdminService {
                       new ResponseStatusException(
                           HttpStatus.FORBIDDEN, "Administrator access required"));
       // JWT role claims may be stale. Current database role and active status govern every request.
-      if (!actor.isActive() || !"ADMIN".equals(actor.getRole()))
+      if (!actor.isAdministrator())
         throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Administrator access required");
       return operation.get();
     } catch (DataAccessException error) {
@@ -125,9 +125,7 @@ public class AdminService {
                   .findByUsername(username)
                   .orElseThrow(
                       () -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
-          if (!user.isActive()
-              || !"USER".equals(user.getRole())
-              || user.getUsername().matches("mmiv_ci_[0-9a-f]{32}"))
+          if (!user.canReceiveInvitation())
             throw new ResponseStatusException(
                 HttpStatus.CONFLICT, "Invitation requires an active ordinary user");
           byte[] bytes = new byte[32];
@@ -156,8 +154,7 @@ public class AdminService {
                   () ->
                       new ResponseStatusException(
                           HttpStatus.FORBIDDEN, "Invalid or expired invitation"));
-      if (!user.isActive()
-          || user.getUsername().matches("mmiv_ci_[0-9a-f]{32}")
+      if (!user.canAcceptInvitation()
           || !users.acceptAdminInvitation(
               user.getUserId(), tokenHash(token), java.time.Instant.now()))
         throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Invalid or expired invitation");
@@ -177,7 +174,7 @@ public class AdminService {
           User target = target(id);
           if (!target.isActive())
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Account is inactive");
-          if ("ADMIN".equals(target.getRole()) && !id.equals(jwt.getSubject()))
+          if (target.isOtherAdministrator(jwt.getSubject()))
             throw new ResponseStatusException(
                 HttpStatus.FORBIDDEN, "You cannot reset another administrator's password");
           byte[] bytes = new byte[32];
@@ -197,7 +194,7 @@ public class AdminService {
         jwt,
         () -> {
           User target = target(id);
-          if ("ADMIN".equals(target.getRole()) && !id.equals(jwt.getSubject()))
+          if (target.isOtherAdministrator(jwt.getSubject()))
             throw new ResponseStatusException(
                 HttpStatus.FORBIDDEN, "You cannot delete another administrator");
           if (!users.deleteAccount(jwt.getSubject(), id))
@@ -241,12 +238,11 @@ public class AdminService {
     return authorized(
         jwt,
         () -> {
-          if (!mmiv.user_access_service.repository.FolderRepository.valid(name)
-              || mmiv.user_access_service.repository.FolderRepository.verification(name)
-              || bucket.equals(name))
+          if (!mmiv.user_access_service.model.Folder.validAdministratorFolder(name, bucket))
             throw new ResponseStatusException(
                 HttpStatus.BAD_REQUEST,
-                "Use a folder name of up to 80 letters, numbers, spaces, dots, underscores or hyphens");
+                "Use a folder name of up to 80 letters, numbers, spaces, dots, underscores or"
+                    + " hyphens");
           folders.create(name);
           events.audit("ADMIN_FOLDER_CREATED", Map.of("actorId", jwt.getSubject(), "folder", name));
           return folders.list();

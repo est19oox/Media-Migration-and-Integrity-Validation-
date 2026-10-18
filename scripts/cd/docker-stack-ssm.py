@@ -10,6 +10,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import zlib
 
 import re
 import yaml
@@ -18,13 +19,13 @@ REMOTE_TIMEOUT = 3600
 RESULT_TIMEOUT = REMOTE_TIMEOUT + 50
 PORTS = {'service-registry': '8761', 'api-gateway': '8080', 'transfer-service': '8081',
          'integrity-service': '8082', 'user-access-service': '8083',
-         'reporting-service': '8084', 'discovery-service': '8085'}
+         'reporting-service': '8084', 'discovery-service': '8085', 'integrity-service-2': '8086'}
 ROOT = Path(__file__).resolve().parents[2]
 
 
 def expected_services():
     jobs = yaml.safe_load((ROOT / '.github/workflows/cicd.yml').read_text())['jobs']
-    return {service['name'] for service in jobs['build-images']['strategy']['matrix']['service']}
+    return {service['name'] for service in jobs['build-images']['strategy']['matrix']['service']} | {'integrity-service-2'}
 
 
 def validate(state, instance, commit):
@@ -36,7 +37,7 @@ def validate(state, instance, commit):
     for name, service in state['services'].items():
         if (name not in PORTS or service['port'] != PORTS[name]
                 or not service['image'].startswith(state['ECR_REGISTRY'] + '/')
-                or not service['image'].endswith(':' + name + '-' + commit)):
+                or not service['image'].endswith(':' + ('integrity-service' if name == 'integrity-service-2' else name) + '-' + commit)):
             raise ValueError('Release image or port does not match: ' + name)
     return state
 
@@ -53,6 +54,8 @@ def prepare(directory, instance, commit, release_id):
             raise ValueError('Images must come from the same registry')
         registry = image['ECR_REGISTRY']
         images[name] = {'image': image['SERVICE_IMAGE'], 'port': image['SERVICE_PORT']}
+    if 'integrity-service' in images:
+        images['integrity-service-2'] = {**images['integrity-service'], 'port': PORTS['integrity-service-2']}
     state = {'INSTANCE_ID': instance, 'GITHUB_SHA': commit, 'RELEASE_ID': release_id,
              'ECR_REGISTRY': registry, 'AWS_REGION': os.getenv('AWS_REGION', 'ap-southeast-1'),
              'MMIV_BUCKET_NAME': os.getenv('MMIV_BUCKET_NAME', 'media-migration-dev-landing'),
@@ -73,8 +76,12 @@ def aws(*args):
 
 def lifecycle(action, state):
     source = Path(__file__).with_name('docker-stack-remote.py').read_bytes()
-    encoded = base64.b64encode(source).decode()
-    launch = 'import base64; exec(compile(base64.b64decode(' + repr(encoded) + "), '<docker-lifecycle>', 'exec'))"
+    encoded = base64.b64encode(zlib.compress(source, 9)).decode()
+    dashboard = (ROOT / 'infrastructure/monitoring/grafana/dashboards/integrity-validation.json').read_bytes()
+    encoded_dashboard = base64.b64encode(zlib.compress(dashboard, 9)).decode()
+    launch = ('import base64,zlib; INTEGRITY_DASHBOARD_JSON = zlib.decompress(base64.b64decode('
+              + repr(encoded_dashboard) + ')).decode(); exec(compile(zlib.decompress(base64.b64decode('
+              + repr(encoded) + ")), '<docker-lifecycle>', 'exec'))")
     shell = 'python3 -c ' + shlex.quote(launch) + ' ' + shlex.quote(action) + ' ' + shlex.quote(json.dumps(state))
     # Temporary file contains only image/config identities, never Oracle secrets.
     with tempfile.TemporaryDirectory() as directory:

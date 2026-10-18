@@ -43,6 +43,10 @@ with open(directory + '/docker-calls.jsonl', 'a') as calls:
 if args[:2] == ['image', 'inspect']:
     sys.exit(0)
 if args[0] == 'create':
+    if '--env-file' in args:
+        with open(args[args.index('--env-file') + 1]) as auth:
+            configured = 'ZAP_AUTH_HEADER_VALUE=Bearer ' in auth.read()
+        open(directory + '/zap-auth-configured', 'w').write(str(configured))
     print('fake-zap-container')
     sys.exit(0)
 if args[0] == 'start':
@@ -113,9 +117,14 @@ os.execv({sys.executable!r}, [{sys.executable!r}] + sys.argv[1:])
         self.tool('curl', f'''#!{sys.executable}
 import os, sys, urllib.request
 open(os.environ['TEST_DIRECTORY'] + '/curl-called', 'w').write(sys.argv[-1])
+if os.environ.get('TEST_TARGET_UNAUTHORIZED') and '/api/reports/mine' in sys.argv[-1]:
+    sys.exit(22)
 try:
     with urllib.request.urlopen(sys.argv[-1], timeout=1) as response:
-        sys.stdout.buffer.write(response.read())
+        if '--write-out' in sys.argv:
+            print(302 if os.environ.get('TEST_TARGET_REDIRECT') else response.status, end='')
+        elif '--output' not in sys.argv:
+            sys.stdout.buffer.write(response.read())
 except Exception:
     sys.exit(1)
 ''')
@@ -320,8 +329,8 @@ elif operation == 'start-session':
 
     def test_user_access_scans_through_gateway_path(self):
         result = self.run_scan(DAST_SERVICE_NAME='user-access-service', DAST_PORT='8083',
-                               DAST_PATH='/user-access/actuator/health',
-                               DAST_READY_PATH='/actuator/health',
+                               DAST_PATH='/user-access/.well-known/jwks.json',
+                               DAST_READY_PATH='/user-access/actuator/health',
                                DAST_ENDPOINT_BASE_PATH='/user-access',
                                TEST_CONTINUE_TO_SCAN='1')
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
@@ -330,7 +339,24 @@ elif operation == 'start-session':
         self.assertIn(f'http://127.0.0.1:{self.selected_port()}/user-access', args)
         create = next(call for call in self.docker_calls() if call[0] == 'create')
         self.assertEqual(create[create.index('-t') + 1],
-                         f'http://127.0.0.1:{self.selected_port()}/user-access/actuator/health')
+                         f'http://127.0.0.1:{self.selected_port()}/user-access/.well-known/jwks.json')
+
+    def test_baseline_rejects_unreachable_service_target_before_zap(self):
+        result = self.run_scan(DAST_SERVICE_NAME='reporting-service', DAST_PORT='8084',
+                               DAST_PATH='/api/reports/mine', DAST_READY_PATH='/actuator/health',
+                               TEST_TARGET_UNAUTHORIZED='1', TEST_CONTINUE_TO_SCAN='1')
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn('DAST target did not return success', result.stderr)
+        self.assertFalse((self.directory / 'functional-args.json').exists())
+        self.assertFalse(any(call[0] == 'create' for call in self.docker_calls()))
+
+    def test_baseline_rejects_login_redirect_as_scan_coverage(self):
+        result = self.run_scan(DAST_SERVICE_NAME='reporting-service', DAST_PORT='8084',
+                               DAST_PATH='/api/reports/mine', DAST_READY_PATH='/actuator/health',
+                               TEST_TARGET_REDIRECT='1', TEST_CONTINUE_TO_SCAN='1')
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn('DAST target did not return success', result.stderr)
+        self.assertFalse(any(call[0] == 'create' for call in self.docker_calls()))
 
     def test_stubborn_plugin_child_is_killed_and_releases_its_listener(self):
         result = self.run_scan(TEST_STUBBORN_CHILD='1')
@@ -354,6 +380,7 @@ elif operation == 'start-session':
         container = create[create.index('--name') + 1]
         self.assertIn(['rm', '-f', '-v', container], calls)
         self.assertTrue((self.directory / 'zap-container-removed').exists())
+        self.assertEqual((self.directory / 'zap-auth-configured').read_text(), 'True')
         self.assertTrue((self.directory / 'report/zap-report.json').exists())
         self.assertTrue((self.directory / 'report/zap-report.html').exists())
 

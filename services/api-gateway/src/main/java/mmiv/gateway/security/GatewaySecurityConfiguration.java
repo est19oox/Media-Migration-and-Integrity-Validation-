@@ -32,10 +32,26 @@ import reactor.core.publisher.Mono;
 @Configuration
 public class GatewaySecurityConfiguration {
   @Bean
+  @org.springframework.cloud.client.loadbalancer.LoadBalanced
+  @org.springframework.beans.factory.annotation.Qualifier("eurekaWebClientBuilder")
+  org.springframework.web.reactive.function.client.WebClient.Builder eurekaWebClientBuilder() {
+    return org.springframework.web.reactive.function.client.WebClient.builder();
+  }
+
+  @Bean
   ReactiveJwtDecoder gatewayJwtDecoder(
-      @Value("${mmiv.auth.jwk-set-uri}") String jwks, @Value("${mmiv.auth.issuer}") String issuer) {
+      @Value("${mmiv.auth.jwk-set-uri}") String jwks,
+      @Value("${mmiv.auth.issuer}") String issuer,
+      @org.springframework.beans.factory.annotation.Qualifier("eurekaWebClientBuilder")
+          org.springframework.web.reactive.function.client.WebClient.Builder eurekaBuilder) {
     NimbusReactiveJwtDecoder decoder =
-        NimbusReactiveJwtDecoder.withJwkSetUri(jwks).jwsAlgorithm(SignatureAlgorithm.RS256).build();
+        NimbusReactiveJwtDecoder.withJwkSetUri(jwks)
+            .webClient(
+                mmiv.resilience.EurekaHttpClients.isDirect(jwks)
+                    ? org.springframework.web.reactive.function.client.WebClient.create()
+                    : eurekaBuilder.build())
+            .jwsAlgorithm(SignatureAlgorithm.RS256)
+            .build();
     decoder.setJwtValidator(
         new DelegatingOAuth2TokenValidator<>(
             JwtValidators.createDefaultWithIssuer(issuer),
@@ -115,6 +131,12 @@ public class GatewaySecurityConfiguration {
                       if (!methodRequiresCsrf.isMatch()) {
                         return ServerWebExchangeMatcher.MatchResult.notMatch();
                       }
+                      // Public credential endpoints do not act on the existing session.
+                      // A password reset invalidates that session while its cookie may
+                      // still be present in the browser.
+                      if (isPublicAuthPost(exchange)) {
+                        return ServerWebExchangeMatcher.MatchResult.notMatch();
+                      }
                       boolean cookiePresent =
                           exchange.getRequest().getCookies().getFirst("MMIV_SESSION") != null;
                       boolean explicitBearer =
@@ -137,12 +159,12 @@ public class GatewaySecurityConfiguration {
                 exchanges
                     .pathMatchers(
                         HttpMethod.GET,
-                      "/actuator/health",
-                      "/actuator/health/**",
-                      "/actuator/info",
-                      "/user-access/actuator/health",
-                      "/user-access/actuator/health/**",
-                      "/user-access/.well-known/jwks.json")
+                        "/actuator/health",
+                        "/actuator/health/**",
+                        "/actuator/info",
+                        "/user-access/actuator/health",
+                        "/user-access/actuator/health/**",
+                        "/user-access/.well-known/jwks.json")
                     .permitAll()
                     .pathMatchers(
                         HttpMethod.GET,
@@ -183,5 +205,13 @@ public class GatewaySecurityConfiguration {
   private static boolean isHtmlPage(ServerWebExchange exchange) {
     String path = exchange.getRequest().getPath().pathWithinApplication().value();
     return "/".equals(path) || path.endsWith(".html");
+  }
+
+  static boolean isPublicAuthPost(ServerWebExchange exchange) {
+    if (exchange.getRequest().getMethod() != HttpMethod.POST) return false;
+    String path = exchange.getRequest().getPath().pathWithinApplication().value();
+    return path.equals("/user-access/api/auth/login")
+        || path.equals("/user-access/api/auth/signup")
+        || path.equals("/user-access/api/auth/password-reset");
   }
 }

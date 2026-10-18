@@ -1,0 +1,32 @@
+{
+  "passed": true,
+  "services": [
+    "service-registry",
+    "user-access-service",
+    "discovery-service",
+    "integrity-service",
+    "transfer-service",
+    "reporting-service",
+    "api-gateway"
+  ],
+  "reportStatus": "COMPLETED",
+  "checks": [
+    "folder-browser",
+    "folder-permissions",
+    "shared-cookie-session",
+    "scoped-dashboard",
+    "verification-data-cleanup",
+    "default-admin",
+    "admin-invitations",
+    "admin-permission-management",
+    "login-redirects",
+    "permission-denial",
+    "assigned-destination",
+    "integrity",
+    "report",
+    "revocation",
+    "all-service-logs",
+    "broker-recovery",
+    "account-cleanup"
+  ]
+}

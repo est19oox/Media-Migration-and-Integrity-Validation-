@@ -1,6 +1,5 @@
 package mmiv.user_access_service.controller;
 
-import java.nio.charset.StandardCharsets;
 import java.util.*;
 import mmiv.events.EventPublisher;
 import mmiv.user_access_service.repository.UserRepository;
@@ -29,10 +28,7 @@ public class PasswordResetController {
   public ResponseEntity<?> reset(@RequestBody Reset request) {
     if (request.token() == null || !request.token().matches("[0-9a-f]{64}"))
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid or expired reset link");
-    if (request.password() == null
-        || request.password().isBlank()
-        || request.password().length() < 8
-        || request.password().getBytes(StandardCharsets.UTF_8).length > 72)
+    if (!mmiv.user_access_service.model.User.validPassword(request.password()))
       throw new ResponseStatusException(
           HttpStatus.BAD_REQUEST, "Use at least 8 characters and no more than 72 UTF-8 bytes");
     String id =

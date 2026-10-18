@@ -17,6 +17,27 @@ ROOT = Path(__file__).resolve().parents[2]
 ROLE = ROOT / 'infrastructure/ansible/roles/microservice'
 
 class DeploymentConfigurationTest(unittest.TestCase):
+    def test_integrity_scrape_targets_have_distinct_replica_labels(self):
+        monitoring = yaml.safe_load((ROOT / 'infrastructure/monitoring/prometheus.yml').read_text())
+        targets = {job['job_name']: job['static_configs'][0] for job in monitoring['scrape_configs']}
+        self.assertEqual(targets['integrity-service']['labels']['replica'], 'integrity-service')
+        self.assertEqual(targets['integrity-service-2']['labels']['replica'], 'integrity-service-2')
+        dashboard = json.loads((ROOT / 'infrastructure/monitoring/grafana/dashboards/integrity-validation.json').read_text())
+        self.assertTrue(any('mmiv_integrity_validation_seconds_bucket' in panel['targets'][0]['expr']
+                            for panel in dashboard['panels']))
+
+    def test_every_eureka_client_registers_and_reports_health(self):
+        for service in ['api-gateway', 'transfer-service', 'integrity-service',
+                        'user-access-service', 'reporting-service', 'discovery-service']:
+            config = yaml.safe_load(
+                (ROOT / 'services' / service / 'src/main/resources/application.yml').read_text())
+            client = config['eureka']['client']
+            self.assertTrue(client['register-with-eureka'], service)
+            self.assertTrue(client['fetch-registry'], service)
+            self.assertTrue(client['healthcheck']['enabled'], service)
+        discovery_application = (ROOT / 'services/discovery-service/src/main/java/mmiv/Application.java').read_text()
+        self.assertIn('@EnableDiscoveryClient', discovery_application)
+
     def test_remote_stack_assigns_browser_auth_and_public_binding_to_gateway(self):
         if 'fcntl' not in sys.modules:
             sys.modules['fcntl'] = SimpleNamespace(LOCK_EX=1, LOCK_NB=2, LOCK_UN=8,
@@ -26,21 +47,42 @@ class DeploymentConfigurationTest(unittest.TestCase):
         remote = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(remote)
         names = ['service-registry', 'api-gateway', 'transfer-service', 'integrity-service',
-                 'user-access-service', 'reporting-service', 'discovery-service']
+                 'integrity-service-2', 'user-access-service', 'reporting-service', 'discovery-service']
         state = {'AWS_REGION': 'ap-southeast-1', 'MMIV_BUCKET_NAME': 'test',
                  'MMIV_LOG_QUEUE_URL': 'https://sqs.example/queue',
                  'USER_ACCESS_JWT_ISSUER': 'https://auth.mmiv.example',
                  'USER_ACCESS_CONFIG_ID': 'a' * 64,
                  'services': {name: {'image': 'example/' + name, 'port': port}
-                              for name, port in zip(names, [8761, 8080, 8081, 8082, 8083, 8084, 8085])}}
+                              for name, port in zip(names, [8761, 8080, 8081, 8082, 9082, 8083, 8084, 8085])}}
         with patch.object(remote, 'managed_access', return_value=False):
             services = remote.config_for(state)['services']
         gateway = services['api-gateway']
         self.assertEqual(gateway['ports'], ['0.0.0.0:8080:8080'])
         self.assertEqual(gateway['environment']['JWT_COOKIE_SECURE'], 'false')
         self.assertIn('USER_ACCESS_JWK_SET_URI', gateway['environment'])
+        for name in names:
+            environment = services[name]['environment']
+            self.assertNotIn('EUREKA_INSTANCE_INSTANCE_ID', environment)
+            self.assertNotIn('EUREKA_INSTANCE_HOSTNAME', environment)
+            self.assertNotIn('EUREKA_INSTANCE_PREFER_IP_ADDRESS', environment)
         self.assertNotIn('JWT_COOKIE_SECURE', services['transfer-service']['environment'])
-        self.assertNotIn('REPORTING_URL', services['transfer-service']['environment'])
+        dependency_keys = {'METADATA_URL', 'USER_ACCESS_URL', 'TRANSFER_URL', 'REPORTING_URL'}
+        expected_dependencies = {
+            'service-registry': set(),
+            'api-gateway': set(),
+            'transfer-service': {'METADATA_URL', 'USER_ACCESS_URL'},
+            'integrity-service': {'METADATA_URL'},
+            'integrity-service-2': {'METADATA_URL'},
+            'user-access-service': set(),
+            'reporting-service': {'METADATA_URL', 'USER_ACCESS_URL'},
+            'discovery-service': {'USER_ACCESS_URL', 'TRANSFER_URL', 'REPORTING_URL'}}
+        for name, expected in expected_dependencies.items():
+            self.assertEqual(dependency_keys & services[name]['environment'].keys(), expected, name)
+        self.assertNotIn('USER_ACCESS_JWK_SET_URI', services['service-registry']['environment'])
+        self.assertNotIn('USER_ACCESS_JWK_SET_URI', services['user-access-service']['environment'])
+        for name in {'api-gateway', 'transfer-service', 'integrity-service',
+                     'integrity-service-2', 'reporting-service', 'discovery-service'}:
+            self.assertIn('USER_ACCESS_JWK_SET_URI', services[name]['environment'], name)
         for name in set(services) - {'api-gateway'}:
             for binding in services[name].get('ports', []):
                 self.assertTrue(binding.startswith('127.0.0.1:'), name)
@@ -89,9 +131,12 @@ class DeploymentConfigurationTest(unittest.TestCase):
         workflow = yaml.safe_load((ROOT / '.github/workflows/cicd.yml').read_text())
         services = ['service-registry', 'api-gateway', 'integrity-service'] + [s['name'] for s in
             workflow['jobs']['build-images']['strategy']['matrix']['service']]
+        self.assertNotIn('/actuator/health',
+                         [case['path'] for case in config.get('common', [])],
+                         'Gateway health cannot prove a backend service is healthy')
         for service in services:
             self.assertIn(service, config['services'])
-            self.assertTrue(config['common'] + config['services'][service])
+            self.assertTrue(config['services'][service], service)
 
     def test_ec2_adoption(self):
         with tempfile.TemporaryDirectory() as temporary:

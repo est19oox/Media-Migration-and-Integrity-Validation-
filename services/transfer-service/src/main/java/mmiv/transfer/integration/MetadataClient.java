@@ -1,11 +1,9 @@
 package mmiv.transfer.integration;
 
-import java.net.http.HttpClient;
 import java.time.Duration;
 import java.util.*;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
-import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
@@ -22,26 +20,13 @@ public class MetadataClient {
   private final String metadataBase;
 
   public MetadataClient(
-      @Value("${mmiv.metadata.url:http://discovery-service:8085}") String url,
-      @Value("${mmiv.access.url:http://user-access-service:8083}") String accessUrl,
+      @Value("${mmiv.metadata.url:http://discovery-service}") String url,
+      @Value("${mmiv.access.url:http://user-access-service}") String accessUrl,
       @Value("${mmiv.s3.bucket}") String bucket,
-      @Value("${mmiv.metadata.destination-id:${mmiv.s3.bucket}}") String destination) {
-    var factory =
-        new JdkClientHttpRequestFactory(
-            HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(3)).build());
-    factory.setReadTimeout(Duration.ofSeconds(10));
-    metadata =
-        RestClient.builder()
-            .requestInterceptor(mmiv.resilience.DependencyCircuits.http("metadata", url))
-            .baseUrl(url)
-            .requestFactory(factory)
-            .build();
-    access =
-        RestClient.builder()
-            .requestInterceptor(mmiv.resilience.DependencyCircuits.http("user-access", accessUrl))
-            .baseUrl(accessUrl)
-            .requestFactory(factory)
-            .build();
+      @Value("${mmiv.metadata.destination-id:${mmiv.s3.bucket}}") String destination,
+      mmiv.resilience.EurekaHttpClients.EurekaRestClientFactory clients) {
+    metadata = clients.create("metadata", url, Duration.ofSeconds(10));
+    access = clients.create("user-access", accessUrl, Duration.ofSeconds(10));
     this.bucket = bucket;
     this.destination = destination;
     this.metadataBase = url;
@@ -226,63 +211,6 @@ public class MetadataClient {
                 .body(Plan.class));
   }
 
-  public BatchAllocation allocateBatch(
-      List<AllocationFile> files, String destinationId, Set<String> occupied) {
-    if (files == null || files.isEmpty()) {
-      throw new IllegalArgumentException("files are required");
-    }
-    var payload = new LinkedHashMap<String, Object>();
-    payload.put("destinationId", destinationId);
-    payload.put("occupiedPaths", occupied == null ? Set.of() : occupied);
-    payload.put("files", files);
-    try {
-      BatchAllocation batch =
-          metadata
-              .post()
-              .uri("/api/metadata/allocations/batch")
-              .headers(
-                  headers -> {
-                    headers.setBearerAuth(currentJwt().getTokenValue());
-                    if (org.springframework.web.context.request.RequestContextHolder
-                            .getRequestAttributes()
-                        instanceof
-                        org.springframework.web.context.request.ServletRequestAttributes
-                            attributes) {
-                      String run = attributes.getRequest().getHeader("X-MMIV-Verification-Run");
-                      if (run != null) {
-                        headers.set("X-MMIV-Verification-Run", UUID.fromString(run).toString());
-                      }
-                    }
-                  })
-              .body(payload)
-              .retrieve()
-              .body(BatchAllocation.class);
-      if (batch == null
-          || batch.migrationId() == null
-          || batch.plans() == null
-          || batch.plans().size() != files.size()) {
-        throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Invalid metadata assignment");
-      }
-      Set<UUID> metadataIds = new HashSet<>();
-      Set<UUID> fileIds = new HashSet<>();
-      for (Plan plan : batch.plans()) {
-        validatePlan(plan);
-        if (!batch.migrationId().equals(plan.migrationId())
-            || !Objects.equals(destinationId, plan.destinationId())
-            || !metadataIds.add(plan.metadataId())
-            || !fileIds.add(plan.fileId())) {
-          throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Invalid metadata assignment");
-        }
-      }
-      return new BatchAllocation(batch.migrationId(), List.copyOf(batch.plans()));
-    } catch (HttpClientErrorException e) {
-      throw new ResponseStatusException(e.getStatusCode(), "Metadata assignment rejected");
-    } catch (RestClientException e) {
-      throw new ResponseStatusException(
-          HttpStatus.SERVICE_UNAVAILABLE, "Metadata service unavailable");
-    }
-  }
-
   public List<Plan> verificationPlans(UUID run) {
     try {
       var response =
@@ -386,7 +314,25 @@ public class MetadataClient {
   private Plan request(java.util.function.Supplier<Plan> action) {
     try {
       var p = action.get();
-      validatePlan(p);
+      if (p == null
+          || p.metadataId() == null
+          || !p.metadataId().equals(p.migrationId())
+          || p.fileId() == null
+          || !currentJwt().getSubject().equals(p.ownerId())
+          || !bucket.equals(p.bucket())
+          || p.destinationId() == null
+          || !p.destinationId().matches("[A-Za-z0-9][A-Za-z0-9 _.-]{0,79}")
+          || p.fileName() == null
+          || !p.fileName().matches("[\\p{L}\\p{N}._ ()-]{1,200}")
+          || p.objectPath() == null
+          || p.objectPath().startsWith("/")
+          || p.objectPath().contains("\\")
+          || java.util.Arrays.stream(p.objectPath().split("/", -1))
+              .anyMatch(part -> part.isBlank() || part.equals(".") || part.equals(".."))
+          || !p.objectPath().substring(p.objectPath().lastIndexOf('/') + 1).equals(p.fileName())
+          || !(p.destinationId() + "/migrations/" + p.metadataId() + "/" + p.objectPath())
+              .equals(p.destinationKey()))
+        throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Invalid metadata assignment");
       return p;
     } catch (HttpClientErrorException e) {
       throw new ResponseStatusException(e.getStatusCode(), "Metadata assignment rejected");
@@ -395,37 +341,6 @@ public class MetadataClient {
           HttpStatus.SERVICE_UNAVAILABLE, "Metadata service unavailable");
     }
   }
-
-  private void validatePlan(Plan p) {
-    if (p == null
-        || p.metadataId() == null
-        || p.migrationId() == null
-        || p.fileId() == null
-        || !currentJwt().getSubject().equals(p.ownerId())
-        || !bucket.equals(p.bucket())
-        || p.destinationId() == null
-        || !p.destinationId().matches("[A-Za-z0-9][A-Za-z0-9 _.-]{0,79}")
-        || p.fileName() == null
-        || !p.fileName().matches("[\\p{L}\\p{N}._ ()-]{1,200}")
-        || p.objectPath() == null
-        || p.objectPath().startsWith("/")
-        || p.objectPath().contains("\\")
-        || java.util.Arrays.stream(p.objectPath().split("/", -1))
-            .anyMatch(part -> part.isBlank() || part.equals(".") || part.equals(".."))
-        || !p.objectPath().substring(p.objectPath().lastIndexOf('/') + 1).equals(p.fileName())
-        || !(p.destinationId() + "/migrations/" + p.metadataId() + "/" + p.objectPath())
-            .equals(p.destinationKey()))
-      throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Invalid metadata assignment");
-  }
-
-  public record AllocationFile(String fileName, long sizeBytes, String relativePath) {
-    public AllocationFile {
-      Objects.requireNonNull(fileName, "fileName must not be null");
-      Objects.requireNonNull(relativePath, "relativePath must not be null");
-    }
-  }
-
-  public record BatchAllocation(UUID migrationId, List<Plan> plans) {}
 
   public record Decision(boolean authorised, String reason) {}
 

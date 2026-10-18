@@ -40,11 +40,62 @@ class StackLifecycleTest(unittest.TestCase):
                                    for n, p in ssm.PORTS.items() if n in
                                    ('service-registry', 'transfer-service', 'integrity-service', 'api-gateway')}}
         self.addCleanup(patch.stopall)
+        patch.object(remote, 'INTEGRITY_DASHBOARD_JSON',
+                     (ROOT / 'infrastructure/monitoring/grafana/dashboards/integrity-validation.json').read_text(),
+                     create=True).start()
         patch.object(remote, 'Path', side_effect=lambda path: self.root / str(path).lstrip('/')).start()
         patch.object(remote, 'command', side_effect=self.command).start()
         patch.object(remote, 'healthy').start()
         patch.object(remote, 'registered').start()
         patch.object(remote.subprocess, 'run', return_value=SimpleNamespace(returncode=0)).start()
+
+    def test_integrity_replica_has_independent_port_outbox_and_shared_discovery_name(self):
+        self.state['services']['integrity-service-2'] = {
+            'image': self.state['services']['integrity-service']['image'], 'port': '8086'}
+        config = remote.config_for(self.state)['services']
+        replica = config['integrity-service-2']
+        self.assertEqual(replica['image'], config['integrity-service']['image'])
+        self.assertEqual(replica['environment']['SERVER_PORT'], '8086')
+        self.assertIn('127.0.0.1:8086:8086', replica['ports'])
+        self.assertIn({'path': remote.ENVIRONMENT, 'format': 'raw'}, replica['env_file'])
+        self.assertTrue(any(v['source'].endswith('/integrity-service-2') for v in replica['volumes']))
+        with patch.object(remote, 'inspect', return_value={
+                'NetworkSettings': {'Networks': {'mmiv-backend': {'IPAddress': '172.20.0.9'}}}}):
+            remote.ready('integrity-service-2', self.state)
+        remote.registered.assert_called_with(
+            'integrity-service', '172.20.0.9', '8086')
+
+    def test_rollback_checks_the_restored_container_address(self):
+        legacy = remote.config_for(self.state)['services']['transfer-service']
+        with patch.object(remote, 'inspect', return_value={
+                'NetworkSettings': {'Networks': {'mmiv-backend': {'IPAddress': '172.20.0.8'}}}}):
+            remote.ready('transfer-service', self.state, legacy)
+        remote.registered.assert_called_with('transfer-service', '172.20.0.8', '8081')
+
+    def test_registration_failure_collects_safe_container_diagnostics(self):
+        failure = RuntimeError('Service registration or Gateway routes did not become ready')
+        failure.readiness_observation = {'service': 'transfer-service'}
+        with patch.object(remote, 'inspect', return_value={
+                'NetworkSettings': {'Networks': {'mmiv-backend': {'IPAddress': '172.20.0.8'}}}}), \
+                patch.object(remote, 'registered', side_effect=failure), \
+                patch.object(remote, 'eureka_diagnostics', return_value={
+                    'registry_http_reachable': False,
+                    'eureka_log_signals': {'registry_unreachable': True}}):
+            with self.assertRaises(RuntimeError) as result:
+                remote.ready('transfer-service', self.state)
+        self.assertFalse(result.exception.readiness_observation['registry_http_reachable'])
+        self.assertTrue(result.exception.readiness_observation[
+            'eureka_log_signals']['registry_unreachable'])
+
+    def test_eureka_diagnostics_identifies_registry_load_balancer_loop(self):
+        def response(*args, **kwargs):
+            output = ('No instances available for service-registry password=private-value'
+                      if args[-1] == 'integrity-service' else '')
+            return subprocess.CompletedProcess(args, 0, output, '')
+        with patch.object(remote, 'command', side_effect=response):
+            detail = remote.eureka_diagnostics('integrity-service')
+        self.assertIn('registry_through_load_balancer', detail['client_error_kinds'])
+        self.assertNotIn('private-value', json.dumps(detail))
 
     def command(self, *args, check=True, timeout=120):
         self.calls.append(args)
@@ -155,7 +206,11 @@ class StackLifecycleTest(unittest.TestCase):
         self.assertIn('MMIV_BOOTSTRAP_ADMIN_USERNAME=admin', bootstrap_environment)
         self.assertIn({'path': '/etc/mmiv/managed-oracle/bootstrap-admin.env', 'format': 'raw'}, self.configs['user-access-service']['env_file'])
         self.assertNotIn('MMIV_BOOTSTRAP_ADMIN_PASSWORD', environment)
-        self.assertNotIn('oracle', self.configs['integrity-service'].get('depends_on', {}))
+        self.assertIn('oracle', self.configs['integrity-service'].get('depends_on', {}))
+        self.assertIn({'path': '/etc/mmiv/managed-oracle/integrity.env', 'format': 'raw'},
+                      self.configs['integrity-service']['env_file'])
+        self.assertIn('ORACLE_USER=DISCOVERY', (secrets_dir / 'discovery.env').read_text())
+        self.assertIn('INTEGRITY_DB_USERNAME=INTEGRITY_SERVICE', (secrets_dir / 'integrity.env').read_text())
         self.assertEqual((self.root / 'etc/mmiv/integrity.env').read_text(),
                          '# Embedded H2 mode: no Oracle secrets required.\n')
         self.assertTrue(all((secrets_dir / n).stat().st_mode & 0o777 == 0o600
@@ -194,7 +249,8 @@ class StackLifecycleTest(unittest.TestCase):
         hook = directory / 'startup.sh'
         hook.write_text(remote.ORACLE_STARTUP.replace('/opt/oracle/oradata/mmiv-app-user-ready', str(marker)))
         env = {**os.environ, 'PATH': str(directory) + os.pathsep + os.environ['PATH'],
-               'APP_USER_PASSWORD': 'test-password', 'TEST_LOGIN_EXIT': '1',
+               'APP_USER_PASSWORD': 'test-password', 'DISCOVERY_USER_PASSWORD': 'test-discovery',
+               'INTEGRITY_USER_PASSWORD': 'test-integrity', 'TEST_LOGIN_EXIT': '1',
                'TEST_SCHEMA_EXIT': '0', 'SQL_CAPTURE': str(directory / 'captured.sql')}
         for exit_code in ('1', '0'):
             env['TEST_LOGIN_EXIT'] = exit_code
@@ -242,7 +298,7 @@ class StackLifecycleTest(unittest.TestCase):
         with patch.object(remote, 'registered', side_effect=RuntimeError('not registered')):
             failed = remote.run('deploy', dict(self.state))
         self.assertTrue(failed['ROLLED_BACK'])
-        self.assertEqual(set(self.containers), {'oracle', 'rabbitmq'})
+        self.assertEqual(set(self.containers), {'oracle', 'rabbitmq', 'prometheus', 'redis'})
         self.assertEqual(self.volumes, {remote.ORACLE_VOLUME})
         self.state['RELEASE_ID'] = 'retry-2'
         self.assertTrue(remote.run('deploy', dict(self.state))['READY'])
@@ -316,7 +372,7 @@ class StackLifecycleTest(unittest.TestCase):
         self.assertTrue(result['READY'])
         launches = [c for c in self.calls if c[:2] == ('docker', 'compose') and 'up' in c]
         self.assertEqual(len(launches), 1)
-        self.assertEqual(set(self.configs['api-gateway']['depends_on']), (set(self.state['services']) - {'api-gateway'}) | {'rabbitmq'})
+        self.assertEqual(set(self.configs['api-gateway']['depends_on']), (set(self.state['services']) - {'api-gateway'}) | {'rabbitmq', 'redis'})
         service = self.configs['user-access-service']
         keys = [v for v in service['volumes'] if v['target'].startswith('/run/mmiv-jwt')]
         self.assertEqual(len(keys), 2)
@@ -357,7 +413,7 @@ class StackLifecycleTest(unittest.TestCase):
         groups = [[n for n in c if n in self.state['services']] for c in launches]
         self.assertEqual(len(groups), 1)
         self.assertEqual(set(groups[0]), set(self.state['services']))
-        self.assertEqual(set(self.configs['api-gateway']['depends_on']), (set(self.state['services']) - {'api-gateway'}) | {'rabbitmq'})
+        self.assertEqual(set(self.configs['api-gateway']['depends_on']), (set(self.state['services']) - {'api-gateway'}) | {'rabbitmq', 'redis'})
         self.assertEqual(list(self.configs)[-1], 'api-gateway')
         self.assertTrue(all(c[c.index('-p') + 1] == 'mmiv-stack' for c in launches))
         self.assertEqual(sum(c[:3] == ('aws', 'ecr', 'get-login-password') for c in self.calls), 1)
@@ -420,7 +476,7 @@ class StackLifecycleTest(unittest.TestCase):
             result = remote.run('deploy', dict(self.state))
         self.assertTrue(result['ROLLED_BACK'])
         self.assertTrue(all(c['Config']['Image'].endswith('-first') for n,c in self.containers.items() if n in self.state['services']))
-        self.assertEqual(list(result['recovery'])[0], 'api-gateway')
+        self.assertEqual(list(result['recovery'])[0], 'service-registry')
 
     def test_oracle_env_update_recreates_only_integrity_and_restores_secret(self):
         staged = self.root / ('etc/mmiv/next-integrity-' + self.state['RELEASE_ID'] + '.env')
@@ -547,17 +603,20 @@ class RemoteReadinessTest(unittest.TestCase):
                 patch.object(remote.time, 'sleep') as sleep:
             with self.assertRaises(RuntimeError):
                 remote.registered('transfer-service')
-            self.assertEqual(sleep.call_count, 29)
+            self.assertEqual(sleep.call_count, 59)
 
 
     def test_stale_up_entry_does_not_satisfy_current_container_readiness(self):
         response = {'application': {'instance': [
-            {'status': 'UP', 'ipAddr': '172.20.0.2', 'port': {'$': 8081}},
-            {'status': 'DOWN', 'ipAddr': '172.20.0.3', 'port': {'$': 8081}}]}}
+            {'instanceId': 'transfer-service:old:8081', 'status': 'UP',
+             'ipAddr': '172.20.0.2', 'port': {'$': 8081}},
+            {'instanceId': 'transfer-service:8081', 'status': 'DOWN',
+             'ipAddr': '172.20.0.3', 'port': {'$': 8081}}]}}
         with patch.object(remote, 'urlopen', side_effect=lambda *a, **k: io.BytesIO(json.dumps(response).encode())), \
                 patch.object(remote.time, 'sleep'):
-            with self.assertRaises(RuntimeError):
+            with self.assertRaises(RuntimeError) as failure:
                 remote.registered('transfer-service', '172.20.0.3', '8081')
+            self.assertEqual(failure.exception.readiness_observation['registered_instances'][1]['status'], 'DOWN')
         response['application']['instance'][1]['status'] = 'UP'
         with patch.object(remote, 'urlopen', side_effect=lambda *a, **k: io.BytesIO(json.dumps(response).encode())):
             remote.registered('transfer-service', '172.20.0.3', '8081')
@@ -629,11 +688,18 @@ class RunnerAndBarrierTest(unittest.TestCase):
                 patch.object(ssm, 'lifecycle') as restore:
             self.assertEqual(verification.verify(self.state(), Path(directory)), 1)
             self.assertEqual(names[-1], 'api-gateway')
-            self.assertEqual(set(names), ssm.expected_services())
+            self.assertEqual(set(names), ssm.expected_services() - {'integrity-service-2'})
+            self.assertEqual(names.count('integrity-service'), 2)
             user_access = environments['user-access-service']
-            self.assertEqual(user_access['DAST_PATH'], '/user-access/actuator/health')
-            self.assertEqual(user_access['DAST_READY_PATH'], '/actuator/health')
+            self.assertEqual(user_access['DAST_PATH'], '/user-access/.well-known/jwks.json')
+            self.assertEqual(user_access['DAST_READY_PATH'], '/user-access/actuator/health')
             self.assertEqual(user_access['DAST_ENDPOINT_BASE_PATH'], '/user-access')
+            discovery = environments['discovery-service']
+            self.assertEqual(discovery['DAST_PATH'],
+                             '/api/metadata/verification/' + discovery['MMIV_VERIFICATION_RUN_ID'] + '/plans')
+            self.assertEqual(environments['reporting-service']['DAST_PATH'], '/api/reports/mine')
+            self.assertEqual(environments['integrity-service']['DAST_PATH'], '/integrity/actuator/health')
+            self.assertEqual(environments['transfer-service']['DAST_SCAN_MODE'], 'api')
             restore.assert_not_called()
 
     def test_generated_account_cleanup_runs_after_success_and_failure(self):

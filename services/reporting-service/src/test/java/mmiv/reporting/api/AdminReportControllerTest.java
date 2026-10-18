@@ -12,7 +12,6 @@ import com.sun.net.httpserver.HttpServer;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.time.Instant;
-import java.util.UUID;
 import mmiv.reporting.integration.CurrentAdminAuthorization;
 import org.junit.jupiter.api.Test;
 import org.springframework.data.domain.Page;
@@ -20,6 +19,11 @@ import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.server.ResponseStatusException;
 
 class AdminReportControllerTest {
+  private static mmiv.resilience.EurekaHttpClients.EurekaRestClientFactory clients() {
+    return new mmiv.resilience.EurekaHttpClients.EurekaRestClientFactory(
+        org.springframework.web.client.RestClient.builder());
+  }
+
   @Test
   void adminListRequiresSuccessfulCurrentAdminCheck() {
     ReportQueryService queries = mock(ReportQueryService.class);
@@ -36,28 +40,6 @@ class AdminReportControllerTest {
   }
 
   @Test
-  void adminFileFilterRequiresAuthorizationBeforeQuerying() {
-    ReportQueryService queries = mock(ReportQueryService.class);
-    CurrentAdminAuthorization authorization = mock(CurrentAdminAuthorization.class);
-    AdminReportController controller = new AdminReportController(queries, authorization);
-    UUID migrationId = UUID.fromString("c49f2f8f-ad97-45a8-8867-f3ca8a971d80");
-    when(queries.anyFiles(any(), org.mockito.ArgumentMatchers.eq(true), any()))
-        .thenReturn(Page.empty());
-    Jwt jwt = jwt();
-
-    controller.files(jwt, migrationId, true, 0, 20);
-
-    var order = inOrder(authorization, queries);
-    order.verify(authorization).require(jwt.getTokenValue());
-    order
-        .verify(queries)
-        .anyFiles(
-            org.mockito.ArgumentMatchers.eq(migrationId),
-            org.mockito.ArgumentMatchers.eq(true),
-            org.mockito.ArgumentMatchers.any());
-  }
-
-  @Test
   void staleAdminClaimFailsWhenUserAccessReturns403() throws Exception {
     HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
     server.createContext(
@@ -69,7 +51,8 @@ class AdminReportControllerTest {
     server.start();
     try {
       CurrentAdminAuthorization authorization =
-          new CurrentAdminAuthorization("http://127.0.0.1:" + server.getAddress().getPort());
+          new CurrentAdminAuthorization(
+              "http://127.0.0.1:" + server.getAddress().getPort(), clients());
 
       ResponseStatusException failure =
           assertThrows(ResponseStatusException.class, () -> authorization.require("stale-token"));
@@ -87,7 +70,7 @@ class AdminReportControllerTest {
       unusedPort = socket.getLocalPort();
     }
     CurrentAdminAuthorization authorization =
-        new CurrentAdminAuthorization("http://127.0.0.1:" + unusedPort);
+        new CurrentAdminAuthorization("http://127.0.0.1:" + unusedPort, clients());
 
     ResponseStatusException failure =
         assertThrows(ResponseStatusException.class, () -> authorization.require("valid-token"));

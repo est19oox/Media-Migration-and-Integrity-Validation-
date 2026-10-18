@@ -2,6 +2,7 @@
 target/
 *.class
 node_modules/
+frontend/dist/
 
 # Terraform generated and local files
 **/.terraform/

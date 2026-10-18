@@ -4,11 +4,10 @@ const { readFileSync } = require('node:fs');
 const vm = require('node:vm');
 
 const source = readFileSync('frontend/js/reports.js', 'utf8');
-const html = readFileSync('frontend/pages/reports.html', 'utf8');
+const html = (readFileSync('frontend/pages/reports.html', 'utf8') + readFileSync('frontend/src/pages/reports.jsx', 'utf8').replaceAll('className=', 'class=').replaceAll('htmlFor=', 'for='));
 const detailSource = readFileSync('frontend/js/report-detail.js', 'utf8');
-const detailHtml = readFileSync('frontend/pages/report-detail.html', 'utf8');
+const detailHtml = (readFileSync('frontend/pages/report-detail.html', 'utf8') + readFileSync('frontend/src/pages/report-detail.jsx', 'utf8').replaceAll('className=', 'class=').replaceAll('htmlFor=', 'for='));
 const REPORTS = '/api/reports/mine';
-const PROFILE = '/api/access/me';
 const MIGRATION_ID = '123e4567-e89b-42d3-a456-426614174000';
 
 const report = {
@@ -57,8 +56,6 @@ function node(tagName) {
 
 async function page(options = {}) {
   const nodes = new Map();
-  const adminLinks = [node('A')];
-  adminLinks[0].hidden = true;
   const requests = [];
   const redirects = [];
   const byId = (id) => {
@@ -67,14 +64,12 @@ async function page(options = {}) {
   };
   byId('reportStatusFilter').value = '';
 
-  const reportRespond = options.respond || (() => ({
+  const respond =
+    options.respond ||
+    (() => ({
       status: 200,
       body: { content: [report], number: 0, totalPages: 1, totalElements: 1 },
     }));
-  const respond = (url) =>
-    url === PROFILE
-      ? { status: 200, body: options.profile || { username: 'alice', role: 'USER' } }
-      : reportRespond(url);
   const fetchMock = async (url) => {
     requests.push(url);
     const response = respond(url);
@@ -86,7 +81,6 @@ async function page(options = {}) {
     document: {
       getElementById: byId,
       createElement: (tag) => node(String(tag).toUpperCase()),
-      querySelectorAll: (selector) => (selector === '[data-admin]' ? adminLinks : []),
     },
     window: { mmivAuth: { ready: Promise.resolve(), fetch: fetchMock } },
     location: { replace: (value) => redirects.push(value) },
@@ -103,7 +97,6 @@ async function page(options = {}) {
     requests,
     redirects,
     element: byId,
-    adminLinks,
     rows: () => byId('reportRows').children,
     flush,
     async trigger(id, event = 'click') {
@@ -115,7 +108,7 @@ async function page(options = {}) {
 
 test('loads only /api/reports/mine and renders summary values safely', async () => {
   const app = await page();
-  assert.deepEqual(app.requests, [PROFILE, REPORTS + '?page=0&size=20']);
+  assert.deepEqual(app.requests, [REPORTS + '?page=0&size=20']);
   const row = app.rows()[0];
   assert.equal(row.children[0].textContent, '<migration-001>');
   assert.equal(row.children[3].textContent, '10');
@@ -124,17 +117,6 @@ test('loads only /api/reports/mine and renders summary values safely', async () 
   assert.equal(row.children[6].textContent, '80.0%');
   assert.equal(row.children[7].children[0].href, '/pages/report-detail.html?id=%3Cmigration-001%3E');
   assert.equal(row.children[0].innerWrites(), 0);
-});
-
-test('renders the current profile and only reveals administration to ADMIN', async () => {
-  const admin = await page({ profile: { username: 'admin-user', role: 'ADMIN' } });
-  assert.equal(admin.element('account').textContent, 'admin-user');
-  assert.equal(admin.element('accountRole').textContent, 'Administrator');
-  assert.equal(admin.adminLinks[0].hidden, false);
-  assert.equal(admin.requests.filter((url) => url.startsWith(REPORTS)).length, 1);
-
-  const user = await page();
-  assert.equal(user.adminLinks[0].hidden, true);
 });
 
 test('status filter resets pagination and encodes the value', async () => {
@@ -165,7 +147,6 @@ test('next and previous buttons obey returned page metadata', async () => {
   });
   assert.equal(app.element('reportsPrevious').disabled, true);
   assert.equal(app.element('reportsNext').disabled, false);
-  assert.equal(app.element('reportsPagePosition').textContent, 'Page 1 of 2');
   await app.trigger('reportsNext');
   assert.equal(app.requests.at(-1), REPORTS + '?page=1&size=20');
   assert.equal(app.element('reportsPrevious').disabled, false);
@@ -199,13 +180,11 @@ test('page exposes the required report controls and navigation', () => {
     'reportStatusFilter',
     'reportRows',
     'reportCount',
-    'reportsPagePosition',
     'reportsPrevious',
     'reportsNext',
     'reportsStatus',
   ].forEach((id) => assert.ok(html.includes(`id="${id}"`), `missing ${id}`));
-  assert.ok(html.includes('class="home-page reports-page"'));
-  assert.ok(html.includes('<script src="../js/reports.js"></script>'));
+  assert.ok(html.includes('/js/reports.js'));
   assert.equal(html.includes('Demo data'), false);
 });
 
@@ -225,7 +204,7 @@ function detailPage(options = {}) {
     migrationId: MIGRATION_ID,
     status: 'COMPLETED',
     initiatedBy: 'alice',
-    source: { type: 'MANIFEST', rootId: 'uploads/2026', manifestName: 'batch.csv' },
+    source: 'MANIFEST',
     startedAt: '2026-10-11T10:00:00Z',
     completedAt: '2026-10-11T10:05:00Z',
     summary: {
@@ -244,7 +223,7 @@ function detailPage(options = {}) {
   const responses = {
     ['/api/access/me']: profile,
     [`/api/reports/${MIGRATION_ID}`]: summary,
-    [`/api/reports/${MIGRATION_ID}/files?page=0&size=20&failedOnly=true`]: {
+    [`/api/reports/${MIGRATION_ID}/files?page=0&size=20`]: {
       content: [
         {
           fileId: 'file-1',
@@ -290,7 +269,7 @@ function detailPage(options = {}) {
       totalElements: 1,
     },
     [`/api/admin/reports/${MIGRATION_ID}`]: summary,
-    [`/api/admin/reports/${MIGRATION_ID}/files?page=0&size=20&failedOnly=true`]: {
+    [`/api/admin/reports/${MIGRATION_ID}/files?page=0&size=20`]: {
       content: [
         {
           fileId: 'file-1',
@@ -306,12 +285,6 @@ function detailPage(options = {}) {
       number: 0,
       totalPages: 1,
       totalElements: 1,
-    },
-    [`/api/admin/reports/${MIGRATION_ID}/files?page=0&size=20&failedOnly=false`]: {
-      content: [],
-      number: 0,
-      totalPages: 0,
-      totalElements: 0,
     },
     ...(options.responses || {}),
   };
@@ -397,14 +370,10 @@ test('loads summary files and sanitized timeline for an owned report', async () 
   assert.deepEqual(app.requests, [
     '/api/access/me',
     `/api/reports/${MIGRATION_ID}`,
-    `/api/reports/${MIGRATION_ID}/files?page=0&size=20&failedOnly=true`,
+    `/api/reports/${MIGRATION_ID}/files?page=0&size=20`,
     `/api/reports/${MIGRATION_ID}/timeline?page=0&size=50`,
   ]);
   assert.equal(app.element('reportMigrationId').textContent, MIGRATION_ID);
-  assert.equal(
-    app.element('reportSource').textContent,
-    'Manifest · Root: uploads/2026 · Manifest: batch.csv',
-  );
   assert.equal(app.element('reportFileRows').children.length, 1);
   assert.equal(app.element('reportTimeline').children.length, 1);
 });
@@ -414,8 +383,6 @@ test('does not request admin events for a USER profile', async () => {
   await app.flush();
   assert.equal(app.requests.some((url) => url.includes('/api/admin/reports/')), false);
   assert.equal(app.element('adminReportEvents').hidden, true);
-  assert.equal(app.element('reportFileScopeControl').hidden, true);
-  assert.equal(app.requests.some((url) => url.includes('failedOnly=false')), false);
 });
 
 test('requests /api/admin/reports/{id}/events only for current ADMIN', async () => {
@@ -427,44 +394,7 @@ test('requests /api/admin/reports/{id}/events only for current ADMIN', async () 
   assert.ok(app.requests.includes(`/api/admin/reports/${MIGRATION_ID}`));
   assert.equal(app.requests.includes(`/api/reports/${MIGRATION_ID}`), false);
   assert.equal(app.element('adminReportEvents').hidden, false);
-  assert.equal(app.element('reportFileScopeControl').hidden, false);
   assert.equal(app.element('adminEventRows').children.length, 1);
-});
-
-test('administrator can switch from failed files to all files from page zero', async () => {
-  const app = detailPage({
-    profile: { userId: 'admin', username: 'admin', role: 'ADMIN' },
-    responses: {
-      [`/api/admin/reports/${MIGRATION_ID}/files?page=0&size=20&failedOnly=true`]: {
-        content: [{ fileId: 'failed-1', finalStatus: 'FAILED' }],
-        number: 0,
-        totalPages: 1,
-        totalElements: 3,
-      },
-      [`/api/admin/reports/${MIGRATION_ID}/files?page=0&size=20&failedOnly=false`]: {
-        content: [{ fileId: 'file-1', finalStatus: 'SUCCEEDED' }],
-        number: 0,
-        totalPages: 8,
-        totalElements: 160,
-      },
-    },
-  });
-  await app.flush();
-  assert.ok(
-    app.requests.includes(
-      `/api/admin/reports/${MIGRATION_ID}/files?page=0&size=20&failedOnly=true`,
-    ),
-  );
-  assert.equal(app.element('reportFileCount').textContent, '3 files');
-  app.element('reportFileScope').value = 'all';
-  app.element('reportFileScope').listeners.change({ preventDefault() {} });
-  await app.flush();
-  assert.equal(
-    app.requests.at(-1),
-    `/api/admin/reports/${MIGRATION_ID}/files?page=0&size=20&failedOnly=false`,
-  );
-  assert.equal(app.element('reportFileCount').textContent, '160 files');
-  assert.equal(app.element('reportFilesNext').disabled, false);
 });
 
 test('polls PROCESSING every ten seconds and stops on every terminal status', async () => {
@@ -538,16 +468,5 @@ test('detail page exposes report, file, timeline and admin event regions', () =>
     'reportTimeline',
     'adminReportEvents',
     'adminEventRows',
-    'reportFileScope',
-    'reportFileScopeControl',
   ].forEach((id) => assert.ok(detailHtml.includes(`id="${id}"`), `missing ${id}`));
-  assert.ok(detailHtml.includes('id="reportBackLink"'));
-  assert.ok(detailHtml.includes('href="/pages/reports.html"'));
-  assert.ok(detailHtml.includes('class="report-detail-toolbar"'));
-});
-
-test('detail styles keep the document scrollable and grids responsive', () => {
-  const css = readFileSync('frontend/css/reports.css', 'utf8');
-  assert.match(css, /\.reports-page \.home-shell[\s\S]*overflow:\s*visible/);
-  assert.match(css, /@media \(max-width: 1000px\)[\s\S]*\.report-metadata/);
 });

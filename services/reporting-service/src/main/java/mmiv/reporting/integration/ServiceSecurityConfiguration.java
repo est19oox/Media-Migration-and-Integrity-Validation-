@@ -15,11 +15,19 @@ import org.springframework.security.web.SecurityFilterChain;
 public class ServiceSecurityConfiguration {
   @Bean
   public JwtDecoder metadataJwtDecoder(
-      @Value("${mmiv.auth.jwk-set-uri:http://user-access-service:8083/.well-known/jwks.json}")
+      @Value("${mmiv.auth.jwk-set-uri:http://user-access-service/.well-known/jwks.json}")
           String jwks,
-      @Value("${mmiv.auth.issuer:https://auth.mmiv.example}") String issuer) {
+      @Value("${mmiv.auth.issuer:https://auth.mmiv.example}") String issuer,
+      @org.springframework.beans.factory.annotation.Qualifier("eurekaRestTemplate")
+          org.springframework.web.client.RestTemplate eureka) {
     var decoder =
-        NimbusJwtDecoder.withJwkSetUri(jwks).jwsAlgorithm(SignatureAlgorithm.RS256).build();
+        NimbusJwtDecoder.withJwkSetUri(jwks)
+            .restOperations(
+                mmiv.resilience.EurekaHttpClients.isDirect(jwks)
+                    ? new org.springframework.web.client.RestTemplate()
+                    : eureka)
+            .jwsAlgorithm(SignatureAlgorithm.RS256)
+            .build();
     decoder.setJwtValidator(
         new DelegatingOAuth2TokenValidator<>(
             JwtValidators.createDefaultWithIssuer(issuer),
@@ -40,7 +48,11 @@ public class ServiceSecurityConfiguration {
             a ->
                 a.dispatcherTypeMatchers(jakarta.servlet.DispatcherType.ERROR)
                     .permitAll()
-                    .requestMatchers("/actuator/health", "/actuator/health/**", "/actuator/info")
+                    .requestMatchers(
+                        "/actuator/health",
+                        "/actuator/health/**",
+                        "/actuator/info",
+                        "/actuator/prometheus")
                     .permitAll()
                     .requestMatchers(
                         "/api/reports/**",

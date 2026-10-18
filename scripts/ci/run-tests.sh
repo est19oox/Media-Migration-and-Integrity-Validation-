@@ -8,6 +8,9 @@ SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 ROOT=$(find_repository_root "${1:-.}")
 
 require_command mvn
+require_command npm
+# Gateway packages the common React build; no HTML lives in a service source tree.
+(cd "$ROOT/frontend" && npm ci && npm run build)
 
 if [ -d /opt/jdk-25 ]; then
     JAVA_HOME=/opt/jdk-25
@@ -15,6 +18,9 @@ if [ -d /opt/jdk-25 ]; then
     PATH="$JAVA_HOME/bin:$PATH"
     export PATH
 fi
+
+# Services consume these pinned artifacts instead of compiling shared source trees.
+mvn --batch-mode -f "$ROOT/common/pom.xml" clean install
 
 # This is part of the endpoint evidence contract used by CD.
 require_command python3

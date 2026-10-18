@@ -10,14 +10,23 @@ import org.springframework.stereotype.Repository;
 @Profile("!test")
 public class OracleFolderRepository implements FolderRepository, InitializingBean {
   private final JdbcTemplate jdbc;
+  private final UserRepository users;
+
+  @org.springframework.beans.factory.annotation.Autowired
+  public OracleFolderRepository(JdbcTemplate jdbc, UserRepository users) {
+    this.jdbc = jdbc;
+    this.users = users;
+  }
 
   public OracleFolderRepository(JdbcTemplate jdbc) {
-    this.jdbc = jdbc;
+    this(jdbc, new OracleUserRepository(jdbc));
   }
 
   public void afterPropertiesSet() {
     jdbc.execute(
-        "DECLARE BEGIN EXECUTE IMMEDIATE 'CREATE TABLE MMIV_FOLDERS (NAME VARCHAR2(80) PRIMARY KEY, CREATED_AT TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL)'; EXCEPTION WHEN OTHERS THEN IF SQLCODE != -955 THEN RAISE; END IF; END;");
+        "DECLARE BEGIN EXECUTE IMMEDIATE 'CREATE TABLE MMIV_FOLDERS (NAME VARCHAR2(80) PRIMARY KEY,"
+            + " CREATED_AT TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL)'; EXCEPTION WHEN OTHERS THEN IF"
+            + " SQLCODE != -955 THEN RAISE; END IF; END;");
   }
 
   public List<String> list() {
@@ -35,7 +44,7 @@ public class OracleFolderRepository implements FolderRepository, InitializingBea
   @org.springframework.transaction.annotation.Transactional
   public void delete(String name) {
     if (!lock(name)) return;
-    jdbc.update("DELETE FROM USER_DESTINATION_ACCESS WHERE DESTINATION=?", name);
+    users.revokeFolderAccess(name);
     jdbc.update("DELETE FROM MMIV_FOLDERS WHERE NAME=?", name);
   }
 
@@ -49,7 +58,8 @@ public class OracleFolderRepository implements FolderRepository, InitializingBea
             owner)
         != 0) return false;
     if (jdbc.queryForObject(
-            "SELECT COUNT(*) FROM USER_DESTINATION_ACCESS WHERE DESTINATION=? AND USER_ID=? AND PERMISSION='WRITE'",
+            "SELECT COUNT(*) FROM USER_DESTINATION_ACCESS WHERE DESTINATION=? AND USER_ID=? AND"
+                + " PERMISSION='WRITE'",
             Integer.class,
             name,
             owner)
@@ -65,9 +75,10 @@ public class OracleFolderRepository implements FolderRepository, InitializingBea
   }
 
   public void create(String name) {
-    if (!FolderRepository.valid(name)) throw new IllegalArgumentException("Invalid folder name");
+    var folder = new mmiv.user_access_service.model.Folder(name);
     jdbc.update(
-        "MERGE INTO MMIV_FOLDERS t USING (SELECT ? NAME FROM dual) s ON (t.NAME=s.NAME) WHEN NOT MATCHED THEN INSERT (NAME) VALUES (s.NAME)",
-        name);
+        "MERGE INTO MMIV_FOLDERS t USING (SELECT ? NAME FROM dual) s ON (t.NAME=s.NAME) WHEN NOT"
+            + " MATCHED THEN INSERT (NAME) VALUES (s.NAME)",
+        folder.name());
   }
 }

@@ -1,12 +1,10 @@
 package mmiv.integration;
 
-import java.net.http.HttpClient;
 import java.time.Duration;
 import java.util.*;
 import mmiv.dto.ValidationRequest;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
-import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.*;
@@ -17,17 +15,9 @@ public class IntegrityMetadataGuard {
   private final RestClient client;
 
   public IntegrityMetadataGuard(
-      @Value("${mmiv.metadata.url:http://discovery-service:8085}") String url) {
-    var factory =
-        new JdkClientHttpRequestFactory(
-            HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(3)).build());
-    factory.setReadTimeout(Duration.ofSeconds(10));
-    client =
-        RestClient.builder()
-            .requestInterceptor(mmiv.resilience.DependencyCircuits.http("metadata", url))
-            .baseUrl(url)
-            .requestFactory(factory)
-            .build();
+      @Value("${mmiv.metadata.url:http://discovery-service}") String url,
+      mmiv.resilience.EurekaHttpClients.EurekaRestClientFactory clients) {
+    client = clients.create("metadata", url, Duration.ofSeconds(10));
   }
 
   public Plan require(

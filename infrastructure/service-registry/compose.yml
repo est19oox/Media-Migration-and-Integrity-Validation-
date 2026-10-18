@@ -22,6 +22,10 @@ services:
         condition: service_started
       discovery-service:
         condition: service_started
+      redis:
+        condition: service_healthy
+      integrity-service-2:
+        condition: service_started
     environment:
       EUREKA_DEFAULT_ZONE: http://service-registry:8761/eureka/
       AWS_REGION: ${AWS_REGION:-ap-southeast-1}
@@ -34,11 +38,12 @@ services:
       SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:?Set RABBITMQ_PASSWORD}
       MMIV_EVENTS_ENABLED: 'true'
       MMIV_EVENTS_OUTBOX_DIRECTORY: /var/lib/mmiv/event-outbox
-      METADATA_URL: http://discovery-service:8085
-      USER_ACCESS_URL: http://user-access-service:8083
-      USER_ACCESS_JWK_SET_URI: http://user-access-service:8083/.well-known/jwks.json
+      METADATA_URL: http://discovery-service
+      USER_ACCESS_URL: http://user-access-service
+      USER_ACCESS_JWK_SET_URI: http://user-access-service/.well-known/jwks.json
       USER_ACCESS_JWT_ISSUER: ${USER_ACCESS_JWT_ISSUER:-https://auth.mmiv.example}
       JWT_COOKIE_SECURE: ${JWT_COOKIE_SECURE:-false}
+      SPRING_DATA_REDIS_HOST: redis
     volumes:
     - api-gateway-events:/var/lib/mmiv/event-outbox
   service-registry:
@@ -67,9 +72,9 @@ services:
       SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:?Set RABBITMQ_PASSWORD}
       MMIV_EVENTS_ENABLED: 'true'
       MMIV_EVENTS_OUTBOX_DIRECTORY: /var/lib/mmiv/event-outbox
-      METADATA_URL: http://discovery-service:8085
-      USER_ACCESS_URL: http://user-access-service:8083
-      USER_ACCESS_JWK_SET_URI: http://user-access-service:8083/.well-known/jwks.json
+      METADATA_URL: http://discovery-service
+      USER_ACCESS_URL: http://user-access-service
+      USER_ACCESS_JWK_SET_URI: http://user-access-service/.well-known/jwks.json
       USER_ACCESS_JWT_ISSUER: ${USER_ACCESS_JWT_ISSUER:-https://auth.mmiv.example}
     volumes:
     - service-registry-events:/var/lib/mmiv/event-outbox
@@ -97,14 +102,14 @@ services:
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
       AWS_SESSION_TOKEN: ${AWS_SESSION_TOKEN:-}
       USER_ACCESS_JWT_ISSUER: ${USER_ACCESS_JWT_ISSUER:-https://auth.mmiv.example}
-      USER_ACCESS_JWK_SET_URI: http://user-access-service:8083/.well-known/jwks.json
+      USER_ACCESS_JWK_SET_URI: http://user-access-service/.well-known/jwks.json
       SPRING_RABBITMQ_HOST: rabbitmq
       SPRING_RABBITMQ_USERNAME: mmiv
       SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:?Set RABBITMQ_PASSWORD}
       MMIV_EVENTS_ENABLED: 'true'
       MMIV_EVENTS_OUTBOX_DIRECTORY: /var/lib/mmiv/event-outbox
-      METADATA_URL: http://discovery-service:8085
-      USER_ACCESS_URL: http://user-access-service:8083
+      METADATA_URL: http://discovery-service
+      USER_ACCESS_URL: http://user-access-service
     volumes:
     - transfer-service-events:/var/lib/mmiv/event-outbox
     - ${DISCOVERY_MEDIA_PATH:-../../media}:/media:ro
@@ -122,17 +127,17 @@ services:
     environment:
       EUREKA_DEFAULT_ZONE: http://service-registry:8761/eureka/
       DB_URL: ${DB_URL:?Set DB_URL}
-      DB_USERNAME: ${DB_USERNAME:?Set DB_USERNAME}
-      DB_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD}
+      DB_USERNAME: ${DISCOVERY_DB_USERNAME:?Set DISCOVERY_DB_USERNAME to the Discovery schema user}
+      DB_PASSWORD: ${DISCOVERY_DB_PASSWORD:?Set DISCOVERY_DB_PASSWORD}
       DISCOVERY_ROOT: ${DISCOVERY_ROOT:-/media}
       SPRING_RABBITMQ_HOST: rabbitmq
       SPRING_RABBITMQ_USERNAME: mmiv
       SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:?Set RABBITMQ_PASSWORD}
       MMIV_EVENTS_ENABLED: 'true'
       MMIV_EVENTS_OUTBOX_DIRECTORY: /var/lib/mmiv/event-outbox
-      METADATA_URL: http://discovery-service:8085
-      USER_ACCESS_URL: http://user-access-service:8083
-      USER_ACCESS_JWK_SET_URI: http://user-access-service:8083/.well-known/jwks.json
+      METADATA_URL: http://discovery-service
+      USER_ACCESS_URL: http://user-access-service
+      USER_ACCESS_JWK_SET_URI: http://user-access-service/.well-known/jwks.json
       USER_ACCESS_JWT_ISSUER: ${USER_ACCESS_JWT_ISSUER:-https://auth.mmiv.example}
       MMIV_BUCKET_NAME: ${MMIV_BUCKET_NAME:-media-migration-dev-landing}
     ports:
@@ -158,9 +163,9 @@ services:
       SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:?Set RABBITMQ_PASSWORD}
       MMIV_EVENTS_ENABLED: 'true'
       MMIV_EVENTS_OUTBOX_DIRECTORY: /var/lib/mmiv/event-outbox
-      METADATA_URL: http://discovery-service:8085
-      USER_ACCESS_URL: http://user-access-service:8083
-      USER_ACCESS_JWK_SET_URI: http://user-access-service:8083/.well-known/jwks.json
+      METADATA_URL: http://discovery-service
+      USER_ACCESS_URL: http://user-access-service
+      USER_ACCESS_JWK_SET_URI: http://user-access-service/.well-known/jwks.json
       USER_ACCESS_JWT_ISSUER: ${USER_ACCESS_JWT_ISSUER:-https://auth.mmiv.example}
     ports:
     - 127.0.0.1:8083:8083
@@ -191,9 +196,9 @@ services:
       SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:?Set RABBITMQ_PASSWORD}
       MMIV_EVENTS_ENABLED: 'true'
       MMIV_EVENTS_OUTBOX_DIRECTORY: /var/lib/mmiv/event-outbox
-      METADATA_URL: http://discovery-service:8085
-      USER_ACCESS_URL: http://user-access-service:8083
-      USER_ACCESS_JWK_SET_URI: http://user-access-service:8083/.well-known/jwks.json
+      METADATA_URL: http://discovery-service
+      USER_ACCESS_URL: http://user-access-service
+      USER_ACCESS_JWK_SET_URI: http://user-access-service/.well-known/jwks.json
       USER_ACCESS_JWT_ISSUER: ${USER_ACCESS_JWT_ISSUER:-https://auth.mmiv.example}
       MONGODB_URI: mongodb://mmiv:${MONGODB_PASSWORD:?Set MONGODB_PASSWORD}@mongodb:27017/mmiv_reporting?authSource=admin
     ports:
@@ -223,9 +228,9 @@ services:
       SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:?Set RABBITMQ_PASSWORD}
       MMIV_EVENTS_ENABLED: 'true'
       MMIV_EVENTS_OUTBOX_DIRECTORY: /var/lib/mmiv/event-outbox
-      METADATA_URL: http://discovery-service:8085
-      USER_ACCESS_URL: http://user-access-service:8083
-      USER_ACCESS_JWK_SET_URI: http://user-access-service:8083/.well-known/jwks.json
+      METADATA_URL: http://discovery-service
+      USER_ACCESS_URL: http://user-access-service
+      USER_ACCESS_JWK_SET_URI: http://user-access-service/.well-known/jwks.json
       USER_ACCESS_JWT_ISSUER: ${USER_ACCESS_JWT_ISSUER:-https://auth.mmiv.example}
     ports:
     - 127.0.0.1:8082:8082
@@ -273,6 +278,90 @@ services:
       timeout: 5s
       retries: 30
       start_period: 30s
+  redis:
+    image: redis:7.4.2-alpine@sha256:02419de7eddf55aa5bcf49efb74e88fa8d931b4d77c07eff8a6b2144472b6952
+    restart: unless-stopped
+    networks:
+    - registry
+    mem_limit: 128m
+    command:
+    - redis-server
+    - --maxmemory
+    - 64mb
+    - --maxmemory-policy
+    - noeviction
+    healthcheck:
+      test:
+      - CMD
+      - redis-cli
+      - ping
+      interval: 10s
+      timeout: 3s
+      retries: 10
+  integrity-service-2:
+    build:
+      context: ../../services/integrity-service
+    restart: unless-stopped
+    networks:
+    - registry
+    depends_on:
+      service-registry:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      EUREKA_DEFAULT_ZONE: http://service-registry:8761/eureka/
+      AWS_REGION: ${AWS_REGION:-ap-southeast-1}
+      MMIV_BUCKET_NAME: ${MMIV_BUCKET_NAME:-media-migration-dev-landing}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      AWS_SESSION_TOKEN: ${AWS_SESSION_TOKEN:-}
+      SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_USERNAME: mmiv
+      SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:?Set RABBITMQ_PASSWORD}
+      MMIV_EVENTS_ENABLED: 'true'
+      MMIV_EVENTS_OUTBOX_DIRECTORY: /var/lib/mmiv/event-outbox
+      METADATA_URL: http://discovery-service
+      USER_ACCESS_URL: http://user-access-service
+      USER_ACCESS_JWK_SET_URI: http://user-access-service/.well-known/jwks.json
+      USER_ACCESS_JWT_ISSUER: ${USER_ACCESS_JWT_ISSUER:-https://auth.mmiv.example}
+      SERVER_PORT: '8086'
+    ports:
+    - 127.0.0.1:8086:8086
+    volumes:
+    - integrity-service-2-events:/var/lib/mmiv/event-outbox
+  prometheus:
+    image: prom/prometheus:v3.5.0@sha256:63805ebb8d2b3920190daf1cb14a60871b16fd38bed42b857a3182bc621f4996
+    restart: unless-stopped
+    networks:
+    - registry
+    ports:
+    - 127.0.0.1:9090:9090
+    mem_limit: 256m
+    command:
+    - --config.file=/etc/prometheus/prometheus.yml
+    - --storage.tsdb.retention.time=7d
+    - --storage.tsdb.retention.size=512MB
+    volumes:
+    - ../monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    - prometheus-data:/prometheus
+  grafana:
+    image: grafana/grafana:12.2.0
+    restart: unless-stopped
+    networks:
+    - registry
+    depends_on:
+    - prometheus
+    ports:
+    - 127.0.0.1:3000:3000
+    mem_limit: 256m
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: 'true'
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_AUTH_DISABLE_LOGIN_FORM: 'true'
+    volumes:
+    - ../monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+    - ../monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
 networks:
   registry: null
 volumes:
@@ -285,3 +374,5 @@ volumes:
   integrity-service-events: {}
   rabbit-data: {}
   mongo-data: {}
+  integrity-service-2-events: {}
+  prometheus-data: {}

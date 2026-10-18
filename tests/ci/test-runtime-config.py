@@ -15,9 +15,11 @@ spec.loader.exec_module(runtime)
 
 class RuntimeConfigTest(unittest.TestCase):
     def test_deployed_gateway_probe_uses_gateway_owned_login_page(self):
-        source = (ROOT / 'scripts/cd/verify-deployed-services.py').read_text()
-        self.assertIn("'/pages/login.html' if name == 'api-gateway'", source)
-        self.assertNotIn("'/upload.html' if name == 'api-gateway'", source)
+        path = ROOT / 'scripts/cd/verify-deployed-services.py'
+        spec = importlib.util.spec_from_file_location('verify_deployed_services', path)
+        verification = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(verification)
+        self.assertEqual(verification.scan_path('api-gateway', 'test-run'), '/pages/login.html')
 
     def test_default_uses_managed_oracle_without_github_secrets(self):
         self.assertEqual(runtime.values({}, 'deployment'), {
@@ -27,7 +29,9 @@ class RuntimeConfigTest(unittest.TestCase):
         private = subprocess.run(['openssl', 'genpkey', '-algorithm', 'RSA', '-pkeyopt', 'rsa_keygen_bits:2048'],
                                  capture_output=True, text=True, check=True).stdout
         return {'userAccess': {'dbUrl': 'jdbc:oracle:thin:@//db:1521/FREEPDB1',
-                               'dbUsername': 'USER_ACCESS', 'dbPassword': 'test-$-password', 'jwtPrivateKey': private}}
+                               'dbUsername': 'USER_ACCESS', 'dbPassword': 'test-$-password', 'jwtPrivateKey': private},
+                'discovery': {'dbUrl': 'jdbc:oracle:thin:@//db:1521/FREEPDB1',
+                              'dbUsername': 'DISCOVERY', 'dbPassword': 'test-discovery-password'}}
 
     def test_one_bundle_derives_public_key_and_preserves_password(self):
         config = self.config()

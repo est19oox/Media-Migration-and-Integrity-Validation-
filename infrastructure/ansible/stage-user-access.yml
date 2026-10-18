@@ -14,9 +14,13 @@
       ORACLE_PASSWORD: "{{ lookup('env', 'USER_ACCESS_DB_PASSWORD') }}"
       JWT_ISSUER: "{{ lookup('env', 'USER_ACCESS_JWT_ISSUER') }}"
       JWT_KEY_ID: "{{ lookup('env', 'USER_ACCESS_JWT_KEY_ID') }}"
+    discovery_settings:
+      ORACLE_JDBC_URL: "{{ lookup('env', 'DISCOVERY_DB_URL') }}"
+      ORACLE_USER: "{{ lookup('env', 'DISCOVERY_DB_USERNAME') }}"
+      ORACLE_PASSWORD: "{{ lookup('env', 'DISCOVERY_DB_PASSWORD') }}"
     private_key: "{{ lookup('env', 'USER_ACCESS_JWT_PRIVATE_KEY') | trim }}"
     public_key: "{{ lookup('env', 'USER_ACCESS_JWT_PUBLIC_KEY') | trim }}"
-    config_id: "{{ {'settings': access_settings, 'private': private_key, 'public': public_key} | to_json(sort_keys=True) | hash('sha256') }}"
+    config_id: "{{ {'settings': access_settings, 'discovery': discovery_settings, 'private': private_key, 'public': public_key} | to_json(sort_keys=True) | hash('sha256') }}"
     config_directory: "{{ mmiv_configuration_directory }}/user-access/versions/{{ config_id }}"
   tasks:
     - name: Require a safe release identifier
@@ -28,7 +32,7 @@
           - item.value | length > 0
           - "'\n' not in item.value"
           - "'\r' not in item.value"
-      loop: "{{ access_settings | dict2items }}"
+      loop: "{{ (access_settings | dict2items) + (discovery_settings | dict2items) }}"
       no_log: true
     - name: Require PKCS8 private and X509 public PEM keys
       ansible.builtin.assert:
@@ -64,6 +68,18 @@
           {% endfor %}
           JWT_PRIVATE_KEY_PATH=file:/run/mmiv-jwt/private.pem
           JWT_PUBLIC_KEY_PATH=file:/run/mmiv-jwt/public.pem
+      no_log: true
+    - name: Stage separate Discovery database settings
+      ansible.builtin.copy:
+        dest: "{{ config_directory }}/discovery.env"
+        owner: "{{ mmiv_configuration_owner }}"
+        group: "{{ mmiv_configuration_group }}"
+        mode: '0600'
+        force: false
+        content: |
+          {% for name, value in discovery_settings.items() %}
+          {{ name }}={{ value }}
+          {% endfor %}
       no_log: true
     - name: Stage signing keys without overwriting previous bundles
       ansible.builtin.copy:

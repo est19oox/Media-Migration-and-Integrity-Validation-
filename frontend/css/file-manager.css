@@ -389,6 +389,29 @@
   font-size: 21px;
 }
 
+.folder-open,
+.breadcrumb-link {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.folder-open:hover,
+.breadcrumb-link:hover {
+  color: var(--fm-primary);
+  text-decoration: underline;
+}
+
+.folder-open:focus-visible,
+.breadcrumb-link:focus-visible {
+  outline: 2px solid var(--fm-primary);
+  outline-offset: 3px;
+}
+
 .pdf-type {
   background: #ffe9e8;
   color: #c94e4e;

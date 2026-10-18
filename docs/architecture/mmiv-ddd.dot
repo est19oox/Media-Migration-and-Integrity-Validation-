@@ -1,0 +1,74 @@
+digraph MMIV {
+  graph [label="MMIV — DDD bounded contexts and service communication", labelloc=t,
+         fontsize=24, fontname="DejaVu Sans", rankdir=LR, splines=polyline,
+         nodesep=0.45, ranksep=0.8, pad=0.3, bgcolor=white];
+  node [shape=box, style="rounded,filled", fontname="DejaVu Sans", fontsize=12,
+        color="#26415f", fillcolor="#eaf2ff", margin="0.15,0.11"];
+  edge [fontname="DejaVu Sans", fontsize=10, color="#43627e", arrowsize=0.7];
+
+  browser [label="Browser / React", fillcolor="#e3f6f2"];
+  gateway [label="API Gateway\nJWT, CSRF, routing", fillcolor="#e3f6f2"];
+  eureka [label="Eureka\nservice discovery", fillcolor="#f0eaff"];
+
+  subgraph cluster_user {
+    label="User Access bounded context"; style="rounded,filled"; color="#9dc8a7";
+    fillcolor="#f0fbf2";
+    user [label="User Access\nAggregates: User, Folder"];
+    user_db [label="Oracle: USER_ACCESS", shape=cylinder, fillcolor="#fff1df"];
+    user -> user_db [label="owns"];
+  }
+  subgraph cluster_metadata {
+    label="Metadata / Discovery bounded context"; style="rounded,filled";
+    color="#9bc5e4"; fillcolor="#eff8ff";
+    metadata [label="Discovery\nAggregates: MetadataPlan, VerificationRun\nMigrationFileInventory, MediaMetadata"];
+    metadata_db [label="Oracle: DISCOVERY", shape=cylinder, fillcolor="#fff1df"];
+    metadata -> metadata_db [label="owns"];
+  }
+  subgraph cluster_transfer {
+    label="Transfer bounded context"; style="rounded,filled"; color="#e9bf84";
+    fillcolor="#fff7eb";
+    transfer [label="Transfer\nAggregates: Transfer, StoredFile, StoredFolder\nrequest-scoped / S3-backed"];
+  }
+  subgraph cluster_integrity {
+    label="Integrity bounded context — 2 replicas"; style="rounded,filled";
+    color="#e5a4a4"; fillcolor="#fff1f1";
+    integrity [label="Integrity × 2\nAggregate: IntegrityValidationLog"];
+    integrity_db [label="Oracle: INTEGRITY_SERVICE", shape=cylinder, fillcolor="#fff1df"];
+    integrity -> integrity_db [label="owns"];
+  }
+  subgraph cluster_reporting {
+    label="Reporting bounded context"; style="rounded,filled";
+    color="#c3afe0"; fillcolor="#f7f0ff";
+    reporting [label="Reporting\nAggregates: MigrationReportDocument\nAuditEventDocument"];
+    mongo [label="MongoDB: reporting", shape=cylinder, fillcolor="#fff1df"];
+    reporting -> mongo [label="owns"];
+  }
+
+  s3 [label="Amazon S3\nmedia objects", shape=cylinder, fillcolor="#fff1df"];
+  rabbit [label="RabbitMQ\nversioned events + logs", fillcolor="#fff0eb"];
+  prometheus [label="Prometheus\nper-instance metrics", fillcolor="#f0eaff"];
+  grafana [label="Grafana\ndashboards", fillcolor="#f0eaff"];
+
+  browser -> gateway [label="HTTPS"];
+  gateway -> user [label="REST / lb://"];
+  gateway -> metadata [label="REST / lb://"];
+  gateway -> transfer [label="REST / lb://"];
+  gateway -> reporting [label="REST / lb://"];
+  metadata -> user [label="permission check (REST)", constraint=false];
+  transfer -> metadata [label="assigned destination (REST)", constraint=false];
+  transfer -> user [label="current grant (REST)", constraint=false];
+  transfer -> integrity [label="validate (REST + ACL)"];
+  integrity -> metadata [label="resolve plan (REST)", constraint=false];
+  transfer -> s3 [label="write / read"];
+  integrity -> s3 [label="read to validate"];
+  user -> rabbit [color="#b6603d"];
+  metadata -> rabbit [color="#b6603d"];
+  transfer -> rabbit [color="#b6603d"];
+  integrity -> rabbit [color="#b6603d"];
+  rabbit -> reporting [label="consume", color="#b6603d"];
+  eureka -> gateway [style=dashed, label="service lookup", constraint=false];
+  eureka -> transfer [style=dashed, constraint=false];
+  prometheus -> integrity [style=dashed, label="scrape both", constraint=false];
+  prometheus -> gateway [style=dashed, constraint=false];
+  grafana -> prometheus [label="query", constraint=false];
+}

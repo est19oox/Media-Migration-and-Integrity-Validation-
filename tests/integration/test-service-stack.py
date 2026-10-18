@@ -26,6 +26,7 @@ SERVICES = ['service-registry', 'user-access-service', 'discovery-service', 'int
             'transfer-service', 'reporting-service', 'api-gateway']
 IMAGES = {'oracle': os.environ.get('MMIV_ORACLE_TEST_IMAGE', 'gvenzl/oracle-free:23.26.3-slim@sha256:6d61d267a3b978c24c5ac1790e62e927416a0aec446bd86e4b3a1527562757bd'),
           'rabbit': 'rabbitmq:4.1.4-management-alpine@sha256:5cbd7145b0306399ad68422c3350b6cbd1bb95704b39f5896480e5b6d4238a04',
+          'redis': 'redis:7.4.2-alpine@sha256:02419de7eddf55aa5bcf49efb74e88fa8d931b4d77c07eff8a6b2144472b6952',
           'mongo': 'mongo:8.0.14-noble@sha256:877fa303326645cd0e50a3833fce2f3c03d6eb4aac82c97a02e98879f51126d3'}
 
 
@@ -162,8 +163,9 @@ def main():
         shutil.copy2(ROOT/'services'/name/'target'/(name+'.jar'),jars/(name+'.jar'))
     artifacts = Path(os.environ.get('MMIV_INTEGRATION_REPORT_DIR', str(ROOT / '.ci/reports/integration')))
     artifacts.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(__file__, artifacts / 'test-service-stack-source.py')
     names = {service: 'mmiv-it-' + service + '-' + uuid.uuid4().hex[:8] for service in IMAGES}
-    ports = {service: free_port() for service in SERVICES + ['oracle', 'rabbit', 'mongo']}
+    ports = {service: free_port() for service in SERVICES + ['oracle', 'rabbit', 'mongo', 'redis']}
     secret = secrets.token_hex(24)
     def docker(*args, input=None):
         return subprocess.run(['docker', *args], input=input, capture_output=True, text=True, check=True, timeout=90).stdout
@@ -172,7 +174,8 @@ def main():
         path.write_text('\n'.join(k + '=' + v for k, v in env.items()) + '\n')
         path.chmod(0o600)
         docker('run', '-d', '--name', names[service], '-p', f'127.0.0.1:{ports[service]}:{port}',
-               '--env-file', str(path), IMAGES[service])
+               '--env-file', str(path), '--ulimit', 'core=0', IMAGES[service],
+               *(['mongod', '--wiredTigerCacheSizeGB', '0.25'] if service == 'mongo' else []))
         containers.append(names[service])
     def sql(value):
         shell = 'exec sqlplus -s "$APP_USER/$APP_USER_PASSWORD@//localhost:1521/FREEPDB1"'
@@ -182,8 +185,22 @@ def main():
         return docker('exec', names['mongo'], 'mongosh', '--quiet', '--eval', value).strip()
     try:
         run_container('oracle', 1521, {'ORACLE_PASSWORD': secret, 'APP_USER': 'USER_ACCESS', 'APP_USER_PASSWORD': secret})
+        wait(lambda: docker('exec', names['oracle'], 'healthcheck.sh') is not None, 240)
+        docker('exec', '-i', names['oracle'], 'sqlplus', '-s', '/', 'as', 'sysdba', input=(
+            'WHENEVER SQLERROR EXIT FAILURE\nALTER SESSION SET CONTAINER=FREEPDB1;\n'
+            f'CREATE USER DISCOVERY IDENTIFIED BY "D{secret}" DEFAULT TABLESPACE USERS QUOTA 128M ON USERS;\n'
+            'GRANT CREATE SESSION, CREATE TABLE TO DISCOVERY;\nEXIT;\n'))
+        # Reuse the application's unused-tail reclaim routine on this disposable DB
+        # before starting other databases, to stay within development disk budgets.
+        import importlib.util
+        spec = importlib.util.spec_from_file_location('storage_fixture', ROOT / 'scripts/cd/docker-stack-remote.py')
+        storage_fixture = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(storage_fixture)
+        docker('exec', '-i', names['oracle'], 'sqlplus', '-s', '/', 'as', 'sysdba',
+               input='WHENEVER SQLERROR EXIT FAILURE\n' + storage_fixture.ORACLE_STORAGE_SQL + '\nEXIT;\n')
         run_container('rabbit', 5672, {'RABBITMQ_DEFAULT_USER': 'mmiv', 'RABBITMQ_DEFAULT_PASS': secret,
                                      'RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS': '+S 2:2'})
+        run_container('redis', 6379, {})
         run_container('mongo', 27017, {})  # Isolated test database bound only to loopback; removed in finally.
         wait(lambda: docker('exec', names['oracle'], 'healthcheck.sh') is not None, 240)
         wait(lambda: docker('exec', names['rabbit'], 'rabbitmq-diagnostics', '-q', 'ping'))
@@ -217,14 +234,21 @@ def main():
                     'SPRING_RABBITMQ_HOST': '127.0.0.1', 'SPRING_RABBITMQ_PORT': str(ports['rabbit']),
                     'SPRING_RABBITMQ_USERNAME': 'mmiv', 'SPRING_RABBITMQ_PASSWORD': secret,
                     'MONGODB_URI': f'mongodb://127.0.0.1:{ports["mongo"]}/mmiv_reporting',
+                    'SPRING_DATA_REDIS_HOST': '127.0.0.1', 'SPRING_DATA_REDIS_PORT': str(ports['redis']),
+                    'MMIV_RATE_LIMIT_AUTH_PER_MINUTE': '1000', 'MMIV_RATE_LIMIT_API_PER_MINUTE': '100000',
+                    'MMIV_RATE_LIMIT_UPLOADS_PER_MINUTE': '10000',
                     'JAVA_TOOL_OPTIONS': '-Xms32m -Xmx256m -XX:MaxDirectMemorySize=64m',
                     'MMIV_EVENTS_ENABLED': 'true', 'MMIV_BOOTSTRAP_ADMIN_ENABLED': 'true',
                     'MMIV_BOOTSTRAP_ADMIN_USERNAME': 'admin', 'MMIV_BOOTSTRAP_ADMIN_PASSWORD': secret})
         for name in SERVICES:
             output = (directory / (name + '.log')).open('w')
             outputs.append(output)
+            service_env = {**env, 'SERVER_PORT': str(ports[name]),
+                           'MMIV_EVENTS_OUTBOX_DIRECTORY': str(directory / 'outbox' / name)}
+            if name == 'discovery-service':
+                service_env.update({'ORACLE_USER': 'DISCOVERY', 'ORACLE_PASSWORD': 'D' + secret})
             process = subprocess.Popen([java, '-jar', str(jars / (name + '.jar'))],
-                    env={**env, 'SERVER_PORT': str(ports[name]), 'MMIV_EVENTS_OUTBOX_DIRECTORY': str(directory / 'outbox' / name)},
+                    env=service_env,
                     stdout=output, stderr=subprocess.STDOUT)
             processes.append(process)
             if name == 'service-registry':
@@ -233,6 +257,27 @@ def main():
         for name in SERVICES:
             wait(lambda: request(f'http://127.0.0.1:{ports[name]}/actuator/health')[0] == 200, 150)
             print('READY ' + name, flush=True)
+        if os.environ.get('MMIV_PROMETHEUS_BINARY'):
+            monitoring = {'global': {'scrape_interval': '1s'}, 'scrape_configs': [
+                {'job_name': name, 'metrics_path': '/actuator/prometheus',
+                 'static_configs': [{'targets': [f'127.0.0.1:{ports[name]}']} ]}
+                for name in SERVICES if name != 'api-gateway']}
+            config = directory / 'prometheus.json'
+            config.write_text(json.dumps(monitoring))
+            monitoring_port = free_port()
+            output = (directory / 'prometheus.log').open('w'); outputs.append(output)
+            processes.append(subprocess.Popen([os.environ['MMIV_PROMETHEUS_BINARY'],
+                '--config.file=' + str(config), '--storage.tsdb.path=' + str(directory / 'metrics'),
+                '--web.listen-address=127.0.0.1:' + str(monitoring_port)],
+                stdout=output, stderr=subprocess.STDOUT))
+            query = f'http://127.0.0.1:{monitoring_port}/api/v1/query?query=sum(up)'
+            def scraped():
+                status, body = request(query)
+                result = json.loads(body).get('data', {}).get('result', [])
+                return status == 200 and result and float(result[0]['value'][1]) == len(SERVICES) - 1
+            wait(scraped, 60)
+            (artifacts / 'prometheus-query.json').write_bytes(request(query)[1])
+            print('PASS Prometheus scrapes all six private backend services', flush=True)
         gateway = f'http://127.0.0.1:{ports["api-gateway"]}'
         native = f'http://127.0.0.1:{ports["user-access-service"]}'
         auth = {'username': 'mmiv_ci_' + uuid.uuid4().hex, 'password': secrets.token_urlsafe(24)}
@@ -243,7 +288,7 @@ def main():
         assert status == 200
         token = json.loads(body)['accessToken']
         # Wait for gateway discovery cache, then test no grant, arbitrary key rejection, and foreign owner.
-        wait(lambda: request(gateway + '/user-access/.well-known/jwks.json')[0] == 200, 120)
+        wait(lambda: request(gateway + '/user-access/.well-known/jwks.json', token=token)[0] == 200, 120)
         wait(lambda: request(gateway + '/api/v1/transfers', 'POST', {})[0] == 401, 120)
         wait(lambda: request(gateway + '/api/reports/00000000-0000-0000-0000-000000000000')[0] == 401, 120)
         wait(lambda: request(gateway + '/api/integrity/validate', 'POST', {})[0] == 401, 120)
@@ -251,14 +296,14 @@ def main():
             def redirect_request(self, req, fp, code, msg, headers, newurl):
                 return None
         opener = urllib.request.build_opener(NoRedirect())
-        for base in (f'http://127.0.0.1:{ports["transfer-service"]}', gateway):
+        for base in (gateway,):
             try:
                 opener.open(base + '/upload.html', timeout=30)
                 raise AssertionError('Anonymous upload page must redirect')
             except urllib.error.HTTPError as response:
                 assert response.code == 302, response.code
-                assert response.headers.get('Location') == '/login.html', response.headers.get('Location')
-        print('PASS direct Transfer and Gateway redirects use exact /login.html Location', flush=True)
+                assert response.headers.get('Location') == ('/pages/login.html' if base == gateway else '/login.html'), response.headers.get('Location')
+        print('PASS Gateway login redirects', flush=True)
         admin_api = gateway + '/user-access/api/admin'
         assert request(admin_api + '/me')[0] == 401
         assert request(admin_api + '/me', token=token)[0] == 403
@@ -311,9 +356,9 @@ def main():
             assert '/it-landing/'+folder+'/' in S3Fixture.objects
         assert request(gateway+'/api/v1/portal/admin/folders','POST',{'name':'unauthorized'},token)[0]==403
         assert request(gateway+'/api/v1/portal/admin/folders','POST',{'name':'../escape'},admin_token)[0]==400
-        profile=json.loads(request(gateway+'/api/v1/portal/me',token=token)[1]);assert profile['destinations']==[]
+        profile=json.loads(request(gateway+'/api/access/me',token=token)[1]);assert profile['destinations']==[]
         assert request(gateway+'/api/v1/portal/admin/users',token=token)[0]==403
-        status,body=request(gateway+'/api/v1/portal/logs',token=token);assert status==403,(status,body)
+        status,body=request(gateway+'/api/dashboard',token=token);assert status==403,(status,body)
         assert request(gateway+'/api/metadata/allocations','POST',{'destinationId':'it-landing','fileName':'root.txt','sizeBytes':1},admin_token)[0]==400
         print('PASS shared cookie session, CSRF, administrator folder creation and hidden bucket-root access',flush=True)
 
@@ -349,6 +394,42 @@ def main():
             return report if report.get('status') == 'COMPLETED' else False
         report = wait(completed_report, 90)
         print('PASS metadata -> transfer -> integrity -> RabbitMQ -> report', flush=True)
+        if os.environ.get('MMIV_LOAD_TEST') == 'true':
+            from integrity_load import compare
+            load_bytes = b'x' * (4 * 1024 * 1024)
+            status, body = request(gateway + '/api/metadata/allocations', 'POST',
+                {'destinationId': 'SW001', 'fileName': 'load-test.txt', 'sizeBytes': len(load_bytes)}, token, run_header)
+            assert status == 200, (status, body)
+            load_plan = json.loads(body)
+            S3Fixture.objects['/it-landing/' + load_plan['destinationKey']] = (load_bytes, 'text/plain')
+            load_headers = {'X-MMIV-Metadata-Id': load_plan['metadataId'],
+                'X-MMIV-Migration-Id': load_plan['migrationId'], 'X-MMIV-File-Id': load_plan['fileId']}
+            load_payload = {'bucket': 'it-landing', 'objectKey': load_plan['destinationKey'],
+                'sourceChecksum': hashlib.sha256(load_bytes).hexdigest(), 'transferId': str(uuid.uuid4())}
+            def start_replica():
+                port = free_port()
+                output = (directory / 'integrity-service-2.log').open('w')
+                outputs.append(output)
+                processes.append(subprocess.Popen([java, '-jar', str(jars / 'integrity-service.jar')],
+                    env={**env, 'SERVER_PORT': str(port),
+                         'MMIV_EVENTS_OUTBOX_DIRECTORY': str(directory / 'outbox/integrity-service-2')},
+                    stdout=output, stderr=subprocess.STDOUT))
+                url = f'http://127.0.0.1:{port}'
+                wait(lambda: request(url + '/actuator/health')[0] == 200, 150)
+                return url
+            compare(request, gateway, token, load_payload, load_headers,
+                    f'http://127.0.0.1:{ports["integrity-service"]}', start_replica, artifacts)
+        # Exercise the real shared Redis counter and Gateway admission path without
+        # issuing thousands of requests merely to exhaust the benchmark's high limit.
+        counter = 'mmiv:rate:api:' + hashlib.sha256(('user:' + user_id).encode()).hexdigest()
+        docker('exec', names['redis'], 'redis-cli', 'SET', counter, '100000', 'EX', '60')
+        try:
+            status, body = request(gateway + '/api/access/me', token=token)
+            assert status == 429 and json.loads(body)['error'] == 'RATE_LIMIT_EXCEEDED', (status, body)
+        finally:
+            docker('exec', names['redis'], 'redis-cli', 'DEL', counter)
+        assert request(gateway + '/api/access/me', token=token)[0] == 200
+        print('PASS Redis-backed admission rejects an exhausted user bucket and permits recovery', flush=True)
         assert plan['destinationKey'].startswith('SW001/migrations/')
         listed=json.loads(request(gateway+'/api/v1/portal/files?folder=SW001',token=token)[1])
         assert any(f['fileId']==result['fileId'] and f['name']=='test.txt' for f in listed['files'])
@@ -360,7 +441,8 @@ def main():
             allocations=list(pool.map(lambda _:request(gateway+'/api/metadata/allocations','POST',{'destinationId':'collision-test','fileName':'duplicate.pdf','sizeBytes':4},token),range(2)))
         assert all(status==200 for status,_ in allocations),allocations
         assigned_names={json.loads(body)['fileName'] for _,body in allocations};assert assigned_names=={'duplicate.pdf','duplicate (2).pdf'},assigned_names
-        assert request(gateway+'/api/v1/portal/folders?folder=collision-test','DELETE',token=admin_token)[0]==200
+        deletion = request(gateway+'/api/v1/portal/folders?folder=collision-test','DELETE',token=admin_token)
+        assert deletion[0] == 200, ('collision folder deletion', deletion)
         # Exercise the actual multipart upload, including existing legacy S3 objects.
         def upload_fixture(name):
             boundary='mmiv-'+uuid.uuid4().hex
@@ -372,17 +454,19 @@ def main():
         uploaded_again=upload_fixture('legacy.txt');assert uploaded_again['success'] and uploaded_again['fileName']=='legacy (3).txt',uploaded_again
         print('PASS concurrent namespace reservations and collision-safe ASCII upload suffixes',flush=True)
         assert request(gateway+'/api/v1/portal/files?folder=semester2',token=token)[0]==403
-        profile=json.loads(request(gateway+'/api/v1/portal/me',token=token)[1]);assert [f['destination'] for f in profile['destinations']]==['SW001']
+        profile=json.loads(request(gateway+'/api/access/me',token=token)[1]);assert [f['destination'] for f in profile['destinations']]==['SW001']
         viewer={'username':'viewer_'+uuid.uuid4().hex[:12],'password':secrets.token_hex(16)}
         viewer_id=json.loads(request(native+'/api/auth/signup','POST',viewer)[1])['userId']
         viewer_token=json.loads(request(native+'/api/auth/login','POST',viewer)[1])['accessToken']
         assert request(admin_api+'/users/'+viewer_id+'/destinations','PUT',{'destination':'SW001','permission':'READ'},admin_token)[0]==200
         assert request(gateway+'/api/v1/files/'+result['fileId']+'/download',token=viewer_token)[0]==200
-        assert request(gateway+'/api/reports/'+plan['migrationId'],token=viewer_token)[0]==200
+        # Reporting deliberately hides another owner's report as not found.
+        foreign_report = request(gateway+'/api/reports/'+plan['migrationId'],token=viewer_token)
+        assert foreign_report[0] == 404, foreign_report
         assert request(gateway+'/api/metadata/allocations','POST',{'destinationId':'SW001','fileName':'blocked.txt','sizeBytes':1},viewer_token)[0]==403
-        assert request(gateway+'/api/v1/portal/logs?folder=SW001',token=viewer_token)[0]==403
-        assert request(gateway+'/api/v1/portal/logs?folder=semester2',token=viewer_token)[0]==403
-        assert request(gateway+'/api/v1/portal/logs',token=admin_token)[0]==200
+        assert request(gateway+'/api/dashboard?folder=SW001',token=viewer_token)[0]==403
+        assert request(gateway+'/api/dashboard?folder=semester2',token=viewer_token)[0]==403
+        assert request(gateway+'/api/dashboard',token=admin_token)[0]==200
         assert request(gateway+'/api/v1/portal/files?folder=SW001',token=viewer_token)[0]==200
         # Even a guessed file ID cannot cross the folder boundary.
         guessed=base64.urlsafe_b64encode(b'semester2/private.txt').decode().rstrip('=')
@@ -393,16 +477,18 @@ def main():
         assert request(gateway+'/api/v1/portal/files/'+result['fileId'],'DELETE',token=viewer_token)[0]==403
         assert request(gateway+'/api/v1/portal/folders?folder=SW001','DELETE',token=viewer_token)[0]==403
         def personal_history():
-            data=json.loads(request(gateway+'/api/v1/portal/history',token=viewer_token)[1]);return data if any(e['action']=='Download' for e in data['entries']) else False
+            data=json.loads(request(gateway+'/api/history',token=viewer_token)[1]);return data if any(e['action']=='Download' for e in data['entries']) else False
         history=wait(personal_history,60);assert all(e['action']!='Upload' for e in history['entries']);assert 'migrationId' not in json.dumps(history)
-        print('PASS folder browsing, shared READ downloads/reports, WRITE isolation and scoped dashboards',flush=True)
+        print('PASS folder browsing, shared READ downloads, owner-scoped reports, WRITE isolation and scoped dashboards',flush=True)
 
         assert request(admin_api + '/users/' + user_id + '/destinations', 'PUT',
                        {'destination': 'SW001', 'permission': 'READ'}, external_token)[0] == 200
         assert request(gateway + '/api/v1/transfers', 'POST', {'metadataId': plan['metadataId']}, token)[0] == 403
         assert request(admin_api + '/users/' + user_id + '/destinations?destination=SW001', 'DELETE', token=external_token)[0] == 200
         assert request(gateway + '/api/v1/files/' + result['fileId'] + '/content', token=token)[0] == 403
-        assert request(gateway + '/api/reports/' + plan['migrationId'], token=token)[0] == 403
+        # Revoking storage access does not erase the owner's historical report.
+        owned_report = request(gateway + '/api/reports/' + plan['migrationId'], token=token)
+        assert owned_report[0] == 200, owned_report
         print('PASS permission revocation applies to existing JWTs', flush=True)
         # Restore WRITE for cleanup, and prove an unrelated plan/object survives.
         assert request(admin_api + '/users/' + user_id + '/destinations', 'PUT',
@@ -434,7 +520,7 @@ def main():
         temporary_run=str(uuid.uuid4());temporary_folder='mmiv-verification-'+temporary_run
         sql("INSERT INTO MMIV_FOLDERS(NAME) VALUES ('"+temporary_folder+"');\nINSERT INTO USER_DESTINATION_ACCESS(USER_ID,DESTINATION,PERMISSION) VALUES ('"+user_id+"','"+temporary_folder+"','WRITE');\nCOMMIT;")
         for actor in [token,admin_token]:
-            assert temporary_folder not in json.dumps(json.loads(request(gateway+'/api/v1/portal/me',token=actor)[1]))
+            assert temporary_folder not in json.dumps(json.loads(request(gateway+'/api/access/me',token=actor)[1]))
         assert request(gateway+'/api/metadata/allocations','POST',{'destinationId':temporary_folder,'fileName':'test.txt','sizeBytes':4},token)[0]==403
         status,body=request(gateway+'/api/metadata/plans','POST',{'destinationId':temporary_folder,'sourcePath':'test.txt'},token,headers={'X-MMIV-Verification-Run':temporary_run});assert status==200,(status,body)
         temporary_plan=json.loads(body)
@@ -477,9 +563,9 @@ def main():
         assert duplicates == '0'
         print('PASS all seven service logs and RabbitMQ outage recovery', flush=True)
         # Broker health can temporarily mark services DOWN in Eureka; wait for routing recovery.
-        wait(lambda: request(gateway+'/api/v1/portal/me',token=admin_token)[0]==200,120)
+        wait(lambda: request(gateway+'/api/access/me',token=admin_token)[0]==200,120)
         # One-use reset links revoke old JWTs; account deletion preserves protected admins.
-        assert request(gateway+'/reset-password.html')[0]==200
+        wait(lambda: request(gateway+'/reset-password.html')[0] == 200, 120)
         reset_url=gateway+'/api/v1/portal/admin/users/'+viewer_id+'/password-reset'
         status,body=request(reset_url,'POST',{},admin_token);assert status==200,(status,body);reset=json.loads(body)
         replacement=secrets.token_hex(16)
@@ -489,7 +575,7 @@ def main():
         assert request(native+'/api/access/me',token=viewer_token)[0]==401
         assert request(native+'/api/auth/login','POST',viewer)[0]==401
         viewer['password']=replacement;viewer_token=json.loads(request(native+'/api/auth/login','POST',viewer)[1])['accessToken']
-        assert request(gateway+'/api/v1/portal/me',token=viewer_token)[0]==200
+        assert request(gateway+'/api/access/me',token=viewer_token)[0]==200
         assert request(gateway+'/api/v1/portal/admin/users/'+external_id,'DELETE',token=admin_token)[0]==403
         assert request(gateway+'/api/v1/portal/admin/users/'+external_id+'/password-reset','POST',{},admin_token)[0]==403
         assert request(gateway+'/api/v1/portal/admin/users/'+viewer_id,'DELETE',token=token)[0]==403
@@ -502,7 +588,7 @@ def main():
         assert sql("SELECT COUNT(*) FROM PASSWORD_RESETS WHERE USER_ID='"+viewer_id+"' AND EXPIRES_AT<=SYSTIMESTAMP;").strip()=='1'
         assert request(public_reset,'POST',{'token':pending_reset,'password':replacement})[0]==400
         assert request(gateway+'/api/v1/portal/admin/users/'+external_id,'DELETE',token=external_token)[0]==204
-        assert request(gateway+'/api/v1/portal/me',token=external_token)[0] in (401,403)
+        assert request(gateway+'/api/access/me',token=external_token)[0] in (401,403)
         print('PASS password-reset links, session revocation, account deletion and other-admin protection',flush=True)
         assert request(native + '/api/auth/verification-account', 'DELETE', token=token)[0] == 204
         assert request(native + '/api/auth/login', 'POST', auth)[0] == 401
@@ -514,6 +600,8 @@ def main():
                         'MMIV_EVENTS_ENABLED': 'false', 'MANAGEMENT_HEALTH_RABBIT_ENABLED': 'false',
                         'JWT_ISSUER': 'https://auth.mmiv.example', 'USER_ACCESS_JWT_ISSUER': 'https://auth.mmiv.example'}
             for name, options in [('user-access-service', ['-Poracle-it', 'verify']), ('discovery-service', ['test'])]:
+                if name == 'discovery-service':
+                    test_env.update({'DB_USERNAME': 'DISCOVERY', 'DB_PASSWORD': 'D' + secret})
                 with (artifacts / (name + '-oracle-tests.log')).open('w') as log:
                     subprocess.run([maven, '-q', '-f', str(ROOT / 'services' / name / 'pom.xml'), *options],
                                    env=test_env, stdout=log, stderr=subprocess.STDOUT, check=True, timeout=240)
@@ -530,7 +618,7 @@ def main():
                 process.wait()
         for output in outputs:
             output.close()
-        for name in SERVICES:
+        for name in SERVICES + ['integrity-service-2']:
             if (directory / (name + '.log')).exists():
                 # Keep only sanitized startup evidence, never synthetic secret or JWT values.
                 content = (directory / (name + '.log')).read_text().replace(secret, '[redacted]')

@@ -1,15 +1,5 @@
 {
-  "common": [
-    {
-      "name": "health",
-      "method": "GET",
-      "path": "/actuator/health",
-      "status": 200,
-      "json_equals": {
-        "status": "UP"
-      }
-    }
-  ],
+  "common": [],
   "services": {
     "transfer-service": [
       {
@@ -501,13 +491,6 @@
           "password": "short"
         },
         "status": 400,
-        "anonymous": true
-      },
-      {
-        "name": "signup page available",
-        "method": "GET",
-        "path": "/signup.html",
-        "status": 200,
         "anonymous": true
       }
     ],

@@ -5,7 +5,6 @@ import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
 import mmiv.reporting.audit.AuditEventRepository;
-import mmiv.reporting.report.FileFinalStatus;
 import mmiv.reporting.report.MigrationReportDocument;
 import mmiv.reporting.report.MigrationReportRepository;
 import mmiv.reporting.report.MigrationReportStatus;
@@ -46,8 +45,8 @@ public class ReportQueryService {
   }
 
   public Page<ReportResponse.FileResult> ownedFiles(
-      String subject, UUID migrationId, boolean failedOnly, Pageable requested) {
-    return files(ownedDocument(subject, migrationId), failedOnly, requested);
+      String subject, UUID migrationId, Pageable requested) {
+    return files(ownedDocument(subject, migrationId), requested);
   }
 
   public Page<ReportResponse> all(
@@ -75,9 +74,8 @@ public class ReportQueryService {
     return ReportResponse.from(find(migrationId));
   }
 
-  public Page<ReportResponse.FileResult> anyFiles(
-      UUID migrationId, boolean failedOnly, Pageable requested) {
-    return files(find(migrationId), failedOnly, requested);
+  public Page<ReportResponse.FileResult> anyFiles(UUID migrationId, Pageable requested) {
+    return files(find(migrationId), requested);
   }
 
   public Page<ReportResponse.AuditEvent> events(UUID migrationId, Pageable requested) {
@@ -118,18 +116,17 @@ public class ReportQueryService {
 
   private MigrationReportDocument ownedDocument(String subject, UUID migrationId) {
     MigrationReportDocument report = find(migrationId);
-    if (subject == null || !subject.equals(report.getInitiatedBy())) {
+    if (!report.belongsTo(subject)) {
       throw new ReportNotFoundException(migrationId);
     }
     return report;
   }
 
   private Page<ReportResponse.FileResult> files(
-      MigrationReportDocument report, boolean failedOnly, Pageable requested) {
+      MigrationReportDocument report, Pageable requested) {
     Pageable pageable = page(requested, Sort.by(Sort.Direction.ASC, "fileId"));
     List<ReportResponse.FileResult> values =
         report.getFiles().stream()
-            .filter(value -> !failedOnly || value.getFinalStatus() == FileFinalStatus.FAILED)
             .sorted(Comparator.comparing(value -> value.getFileId()))
             .map(ReportResponse.FileResult::from)
             .toList();

@@ -46,11 +46,10 @@ public class AdminReportController {
   public Page<ReportResponse.FileResult> files(
       @AuthenticationPrincipal Jwt jwt,
       @PathVariable UUID migrationId,
-      @RequestParam(defaultValue = "false") boolean failedOnly,
       @RequestParam(defaultValue = "0") int page,
       @RequestParam(defaultValue = "20") int size) {
     authorization.require(jwt.getTokenValue());
-    return reports.anyFiles(migrationId, failedOnly, PageRequest.of(page, size));
+    return reports.anyFiles(migrationId, PageRequest.of(page, size));
   }
 
   @GetMapping("/{migrationId}/events")

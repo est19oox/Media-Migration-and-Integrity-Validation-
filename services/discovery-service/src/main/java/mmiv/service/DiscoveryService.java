@@ -140,20 +140,12 @@ public class DiscoveryService {
 
     String extension = getFileExtension(fileName);
 
-    return discoveryProperties.getSupportedFileTypes().stream()
-        .anyMatch(type -> type.equalsIgnoreCase(extension));
+    return MediaMetadata.supported(fileName, discoveryProperties.getSupportedFileTypes());
   }
 
   // Extract extension as media type
   private String getFileExtension(String fileName) {
 
-    int dotIndex = fileName.lastIndexOf('.');
-
-    if (dotIndex == -1 || dotIndex == fileName.length() - 1) {
-
-      return "UNKNOWN";
-    }
-
-    return fileName.substring(dotIndex + 1).toUpperCase();
+    return MediaMetadata.extension(fileName);
   }
 }

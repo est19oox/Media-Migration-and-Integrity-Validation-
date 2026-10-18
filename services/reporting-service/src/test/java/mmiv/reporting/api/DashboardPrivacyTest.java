@@ -33,7 +33,13 @@ class DashboardPrivacyTest {
     try {
       String url = "http://127.0.0.1:" + server.getAddress().getPort();
       var mongo = mock(MongoTemplate.class);
-      var controller = new DashboardController(mongo, url, url);
+      var controller =
+          new DashboardController(
+              mongo,
+              url,
+              url,
+              new mmiv.resilience.EurekaHttpClients.EurekaRestClientFactory(
+                  org.springframework.web.client.RestClient.builder()));
       var jwt =
           Jwt.withTokenValue("fixture")
               .header("alg", "RS256")

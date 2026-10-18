@@ -20,6 +20,21 @@ def expected_services():
     return docker_ssm.expected_services()
 
 
+def scan_path(service, run_id):
+    """Select an endpoint routed to the service, not Gateway's own health URL."""
+    paths = {
+        'service-registry': '/',
+        'api-gateway': '/pages/login.html',
+        'transfer-service': '/api/v1/transfers',  # API scan uses the OpenAPI paths.
+        'user-access-service': '/user-access/.well-known/jwks.json',
+        'discovery-service': f'/api/metadata/verification/{run_id}/plans',
+        'reporting-service': '/api/reports/mine',
+        'integrity-service': '/integrity/actuator/health',
+        'integrity-service-2': '/integrity/actuator/health',
+    }
+    return paths[service]
+
+
 def states(directory, instance, commit):
     return docker_ssm.validate(json.loads((directory / 'release.json').read_text()), instance, commit)
 
@@ -44,11 +59,11 @@ def verify_scans(deployments, report_root, account_file):
             directory = report_root / name
             directory.mkdir(parents=True, exist_ok=True)
             env = {**os.environ, 'INSTANCE_ID': deployments['INSTANCE_ID'],
-                   'DAST_SERVICE_NAME': name, 'DAST_PORT': item['port'],
+                   'DAST_SERVICE_NAME': 'integrity-service' if name == 'integrity-service-2' else name, 'DAST_PORT': item['port'],
                    'DAST_REPORT_DIR': str(directory.resolve()),
                    'DAST_SCAN_MODE': 'api' if name == 'transfer-service' else 'baseline',
-                   'DAST_PATH': '/' if name == 'service-registry' else '/pages/login.html' if name == 'api-gateway' else '/user-access/actuator/health' if name == 'user-access-service' else '/actuator/health',
-                   'DAST_READY_PATH': '/actuator/health',
+                   'DAST_PATH': scan_path(name, run_id),
+                   'DAST_READY_PATH': '/user-access/actuator/health' if name == 'user-access-service' else '/actuator/health',
                    'DAST_ENDPOINT_BASE_PATH': '/user-access' if name == 'user-access-service' else '',
                    'MMIV_VERIFICATION_ACCOUNT_FILE': str(account_file),
                    'MMIV_VERIFICATION_RUN_ID': run_id,

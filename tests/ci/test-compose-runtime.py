@@ -18,7 +18,8 @@ class ComposeRuntimeTest(unittest.TestCase):
     def test_integrated_compose_assigns_browser_auth_to_gateway_only(self):
         expected = {'api-gateway', 'service-registry', 'transfer-service',
                     'discovery-service', 'user-access-service', 'reporting-service',
-                    'integrity-service', 'rabbitmq', 'mongodb'}
+                    'integrity-service', 'integrity-service-2', 'rabbitmq', 'mongodb', 'redis',
+                    'prometheus', 'grafana'}
         for filename in ('compose.yml', 'compose-scaled.yml'):
             with self.subTest(filename=filename):
                 compose = yaml.safe_load((ROOT / 'infrastructure/service-registry' / filename).read_text())
@@ -26,7 +27,7 @@ class ComposeRuntimeTest(unittest.TestCase):
                 self.assertEqual(set(services), expected)
                 gateway = services['api-gateway']
                 self.assertEqual(gateway['environment']['USER_ACCESS_JWK_SET_URI'],
-                                 'http://user-access-service:8083/.well-known/jwks.json')
+                                 'http://user-access-service/.well-known/jwks.json')
                 self.assertIn('USER_ACCESS_JWT_ISSUER', gateway['environment'])
                 self.assertIn('JWT_COOKIE_SECURE', gateway['environment'])
                 transfer = services['transfer-service']['environment']
@@ -34,6 +35,9 @@ class ComposeRuntimeTest(unittest.TestCase):
                 self.assertNotIn('REPORTING_URL', transfer)
                 self.assertIn('127.0.0.1:15672:15672',
                               [str(port) for port in services['rabbitmq'].get('ports', [])])
+                self.assertIn('prometheus', services['grafana']['depends_on'])
+                self.assertIn('127.0.0.1:3000:3000',
+                              [str(port) for port in services['grafana'].get('ports', [])])
                 for name, service in services.items():
                     for port in service.get('ports', []):
                         binding = str(port)
@@ -70,8 +74,9 @@ class ComposeRuntimeTest(unittest.TestCase):
                         'FROM python:3.12-alpine\n' +
                         f'LABEL test.version="{index}"\n' +
                         'CMD ' + json.dumps(['python', '-c', server]) + '\n')
-                    subprocess.run(['docker', 'build', '-q', '-t', image, str(directory)],
-                                   check=True, capture_output=True)
+                    build = subprocess.run(['docker', 'build', '-q', '-t', image, str(directory)],
+                                           capture_output=True, text=True)
+                    self.assertEqual(build.returncode, 0, build.stderr)
                 variables = {
                     'microservice_name': name,
                     'microservice_compose_project': name,

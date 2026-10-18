@@ -1,10 +1,8 @@
 package mmiv.reporting.integration;
 
-import java.net.http.HttpClient;
 import java.time.Duration;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
-import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClient;
@@ -16,12 +14,9 @@ public class CurrentAdminAuthorization {
   private final RestClient access;
 
   public CurrentAdminAuthorization(
-      @Value("${mmiv.access.url:http://user-access-service:8083}") String url) {
-    var factory =
-        new JdkClientHttpRequestFactory(
-            HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(3)).build());
-    factory.setReadTimeout(Duration.ofSeconds(5));
-    access = RestClient.builder().baseUrl(url).requestFactory(factory).build();
+      @Value("${mmiv.access.url:http://user-access-service}") String url,
+      mmiv.resilience.EurekaHttpClients.EurekaRestClientFactory clients) {
+    access = clients.create("user-access", url, Duration.ofSeconds(5));
   }
 
   public void require(String token) {

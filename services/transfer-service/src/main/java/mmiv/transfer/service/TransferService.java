@@ -2,6 +2,7 @@ package mmiv.transfer.service;
 
 import java.time.Instant;
 import java.util.UUID;
+import mmiv.transfer.domain.Transfer;
 import mmiv.transfer.dto.*;
 import mmiv.transfer.factory.TransferStrategyFactory;
 import mmiv.transfer.files.FileIds;
@@ -37,7 +38,7 @@ public class TransferService {
     try (PreparedTransfer source = preparer.prepare(request)) {
       var completed = execute(source);
       var stored = completed.stored();
-      var outcome = completed.outcome();
+      var outcome = completed.validation();
       var result =
           new TransferResponse(
               stored.bucket(),
@@ -46,12 +47,12 @@ public class TransferService {
               source.sizeBytes(),
               FileIds.encode(stored.key()),
               source.sha256(),
-              completed.transferId(),
-              outcome.validationResult(),
-              outcome.success(),
+              completed.id().toString(),
+              outcome.status().name(),
+              completed.success(),
               completed.message(),
-              stored.objectReference(),
-              completed.removal().status());
+              objectReference(stored),
+              completed.cleanup().status().name());
       logs.transfer(result, startedAt);
       return result;
     } catch (RuntimeException error) {
@@ -61,27 +62,37 @@ public class TransferService {
     }
   }
 
-  /** Shared storage, integrity retry, and guarded cleanup workflow for both input sources. */
-  private CompletedTransfer execute(PreparedTransfer source) {
+  /** Coordinates I/O; the aggregate decides completion and whether cleanup is required. */
+  private Transfer execute(PreparedTransfer source) {
+    var transfer = new Transfer(UUID.randomUUID());
     // Metadata currently assigns S3 destinations; clients cannot select a transport or target.
     var stored = factory.getStrategy(TransferBackend.S3).transfer(source);
-    String transferId = UUID.randomUUID().toString();
-    var outcome = integrity.validate(transferId, stored.bucket(), stored.key(), source.sha256());
-    var removal =
-        outcome.success()
-            ? new S3ObjectCleanup.Result("NOT_REQUIRED", "No cleanup required")
-            : cleanup.delete(stored.bucket(), stored.key(), stored.objectReference());
-    return new CompletedTransfer(stored, transferId, outcome, removal);
+    var reference = stored.objectReference();
+    transfer.recordStorage(
+        new Transfer.StoredObject(
+            stored.bucket(),
+            stored.key(),
+            reference == null ? null : reference.eTag(),
+            reference == null ? null : reference.versionId()));
+    var outcome =
+        integrity.validate(
+            transfer.id().toString(), stored.bucket(), stored.key(), source.sha256());
+    transfer.recordValidation(
+        new Transfer.Validation(
+            Transfer.ValidationStatus.valueOf(outcome.validationResult()), outcome.message()));
+    if (transfer.requiresCleanup()) {
+      var removal = cleanup.delete(stored.bucket(), stored.key(), reference);
+      transfer.recordCleanup(
+          new Transfer.Cleanup(
+              Transfer.CleanupStatus.valueOf(removal.status()), removal.message()));
+    }
+    return transfer;
   }
 
-  private record CompletedTransfer(
-      StoredTransfer stored,
-      String transferId,
-      IntegrityValidationGateway.Outcome outcome,
-      S3ObjectCleanup.Result removal) {
-    String message() {
-      return outcome.message() + ". " + removal.message();
-    }
+  private static S3ObjectReference objectReference(Transfer.StoredObject stored) {
+    return stored.eTag() == null && stored.versionId() == null
+        ? null
+        : new S3ObjectReference(stored.eTag(), stored.versionId());
   }
 
   public UploadResponse upload(MultipartFile file) {
@@ -110,7 +121,7 @@ public class TransferService {
     try (PreparedTransfer source = preparer.prepare(file, fileName, key)) {
       var completed = execute(source);
       var stored = completed.stored();
-      var outcome = completed.outcome();
+      var outcome = completed.validation();
       var result =
           new UploadResponse(
               stored.bucket(),
@@ -120,12 +131,12 @@ public class TransferService {
               source.sizeBytes(),
               source.sha256(),
               FileIds.encode(stored.key()),
-              completed.transferId(),
-              outcome.validationResult(),
-              outcome.success(),
+              completed.id().toString(),
+              outcome.status().name(),
+              completed.success(),
               completed.message(),
-              stored.objectReference(),
-              completed.removal().status());
+              objectReference(stored),
+              completed.cleanup().status().name());
       logs.upload(result, startedAt);
       return result;
     } catch (RuntimeException error) {

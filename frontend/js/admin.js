@@ -1150,11 +1150,7 @@
       }
       if (adminReportsMeta)
         adminReportsMeta.textContent =
-          plural(payload.totalElements, 'report') +
-          ' · Page ' +
-          (adminReportPages === 0 ? 0 : adminReportPage + 1) +
-          ' of ' +
-          adminReportPages;
+          plural(payload.totalElements, 'report') + ' · page ' + (adminReportPage + 1);
       if (adminReportsPrevious) adminReportsPrevious.disabled = adminReportPage === 0;
       if (adminReportsNext)
         adminReportsNext.disabled =

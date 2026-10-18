@@ -35,12 +35,7 @@ public class FileMutationService {
   }
 
   public static UUID migration(String key) {
-    var m = java.util.regex.Pattern.compile("^[^/]+/migrations/([0-9a-fA-F-]{36})/").matcher(key);
-    try {
-      return m.find() ? UUID.fromString(m.group(1)) : null;
-    } catch (IllegalArgumentException e) {
-      return null;
-    }
+    return new mmiv.transfer.domain.StoredFile(key).migrationId();
   }
 
   public Object deleteFile(String id) {
@@ -54,11 +49,12 @@ public class FileMutationService {
       metadata.requireFolder(folder, "WRITE");
       boolean admin = "ADMIN".equals(metadata.profile().role());
       UUID migration = migration(key);
-      if (!admin) {
-        if (migration == null || !key.equals(metadata.resolveDelete(migration).destinationKey()))
-          throw new ResponseStatusException(
-              HttpStatus.FORBIDDEN, "Only the uploader can delete this file");
-      }
+      var storedFile = new mmiv.transfer.domain.StoredFile(key);
+      String authorizedKey =
+          !admin && migration != null ? metadata.resolveDelete(migration).destinationKey() : null;
+      if (!storedFile.canDelete(admin, authorizedKey))
+        throw new ResponseStatusException(
+            HttpStatus.FORBIDDEN, "Only the uploader can delete this file");
       int count = storage.delete(bucket, key, key::equals);
       if (migration != null) metadata.deletePlan(migration, key);
       logs.deletion("DELETE", key, started);
@@ -67,32 +63,19 @@ public class FileMutationService {
   }
 
   public Object deleteFolder(String folder, String path) {
-    if (folder == null || !folder.matches("[A-Za-z0-9][A-Za-z0-9 _.-]{0,79}") || reserved(folder))
-      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid folder");
-    if (path != null
-        && (path.isBlank()
-            || path.length() > 900
-            || Arrays.stream(path.split("/", -1))
-                .anyMatch(
-                    p ->
-                        p.equals(".")
-                            || p.equals("..")
-                            || !p.matches("[\\p{L}\\p{N}._ ()-]{1,200}"))))
-      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid folder path");
-    try (@SuppressWarnings("unused")
-        var scope = folders.write(folder)) {
+    mmiv.transfer.domain.StoredFolder selected;
+    try {
+      selected = new mmiv.transfer.domain.StoredFolder(folder, path);
+    } catch (IllegalArgumentException error) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, error.getMessage());
+    }
+    try (var scope = folders.write(folder)) {
       portal.admin();
       metadata.requireFolder(folder, "WRITE");
-      String prefix = folder + "/";
-      int count =
-          storage.delete(
-              bucket,
-              prefix,
-              key ->
-                  key.startsWith(prefix)
-                      && (path == null || relative(key, folder).startsWith(path + "/")));
+      String prefix = selected.prefix();
+      int count = storage.delete(bucket, prefix, selected::contains);
       metadata.deleteFolderPlans(folder, path);
-      if (path == null)
+      if (selected.isRoot())
         portal.access(HttpMethod.DELETE, "/api/admin/folders/" + PortalClient.encode(folder), null);
       logs.deletion("FOLDER_DELETE", prefix + (path == null ? "" : path), Instant.now());
       return Map.of("deletedVersions", count);
@@ -100,10 +83,10 @@ public class FileMutationService {
   }
 
   public static String relative(String key, String folder) {
-    return key.substring(folder.length() + 1).replaceFirst("^migrations/[0-9a-fA-F-]{36}/", "");
+    return mmiv.transfer.domain.StoredFolder.relative(key, folder);
   }
 
   public static boolean reserved(String folder) {
-    return folder.equals("verification") || folder.startsWith("mmiv-verification-");
+    return mmiv.transfer.domain.StoredFolder.reserved(folder);
   }
 }

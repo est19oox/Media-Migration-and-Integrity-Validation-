@@ -22,6 +22,8 @@ class AccessConfigTest(unittest.TestCase):
         self.env = {**os.environ, 'MMIV_RELEASE_ID': 'test-1',
                     'USER_ACCESS_DB_URL': 'jdbc:oracle:thin:@//db.internal:1521/FREEPDB1',
                     'USER_ACCESS_DB_USERNAME': 'USER_ACCESS', 'USER_ACCESS_DB_PASSWORD': 'test-$-quoted-password',
+                    'DISCOVERY_DB_URL': 'jdbc:oracle:thin:@//db.internal:1521/FREEPDB1',
+                    'DISCOVERY_DB_USERNAME': 'DISCOVERY', 'DISCOVERY_DB_PASSWORD': 'test-discovery-password',
                     'USER_ACCESS_JWT_ISSUER': 'https://auth.mmiv.example', 'USER_ACCESS_JWT_KEY_ID': 'test-key',
                     'USER_ACCESS_JWT_PRIVATE_KEY': '-----BEGIN PRIVATE KEY-----\nlocal-fixture\n-----END PRIVATE KEY-----',
                     'USER_ACCESS_JWT_PUBLIC_KEY': '-----BEGIN PUBLIC KEY-----\nlocal-fixture\n-----END PUBLIC KEY-----',
@@ -30,6 +32,7 @@ class AccessConfigTest(unittest.TestCase):
     def stage(self, success=True):
         extra = {'ansible_become': False, 'ansible_connection': 'local',
                  'ansible_python_interpreter': shutil.which('python3'),
+                 'ansible_remote_tmp': str(self.root / 'remote-tmp'),
                  'mmiv_configuration_directory': str(self.root / 'config'),
                  'mmiv_configuration_owner': getpass.getuser(),
                  'mmiv_configuration_group': grp.getgrgid(os.getgid()).gr_name}

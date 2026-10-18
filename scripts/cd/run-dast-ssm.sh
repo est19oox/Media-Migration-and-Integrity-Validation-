@@ -273,6 +273,24 @@ prepare_auth() {
 }
 prepare_auth
 
+# A baseline scan must reach its intended route with the same account that ZAP
+# will use. Gateway health alone cannot establish backend scan coverage.
+if [[ "$SCAN_MODE" == baseline ]]; then
+  TARGET_CURL_ARGS=()
+  if [[ -n "${API_TEST_TOKEN:-}" ]]; then
+    TARGET_CURL_ARGS=(-H "Authorization: Bearer $API_TEST_TOKEN")
+  fi
+  if ! TARGET_STATUS=$(curl --fail --silent --show-error --max-time 10 \
+    --output /dev/null --write-out '%{http_code}' "${TARGET_CURL_ARGS[@]}" "$TARGET_URL"); then
+    echo "::error::DAST target did not return success: $PATH_SUFFIX" >&2
+    exit 1
+  fi
+  if [[ ! "$TARGET_STATUS" =~ ^2[0-9][0-9]$ ]]; then
+    echo "::error::DAST target did not return success: $PATH_SUFFIX" >&2
+    exit 1
+  fi
+fi
+
 echo 'Running functional endpoint tests through the SSM tunnel'
 ENDPOINT_TOKEN="${API_TEST_TOKEN:-}"
 # User Access cases explicitly log in and select their own token. Keep their

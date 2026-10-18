@@ -30,10 +30,7 @@ public class AuthenticationService {
         userRepository.findByUsername(username).orElseThrow(InvalidCredentialsException::new);
 
     String passwordHash = user.getPasswordHash();
-    if (!user.isActive()
-        || passwordHash == null
-        || passwordHash.isBlank()
-        || !passwordEncoder.matches(password, passwordHash)) {
+    if (!user.canAuthenticate() || !passwordEncoder.matches(password, passwordHash)) {
       throw new InvalidCredentialsException();
     }
 

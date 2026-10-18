@@ -128,6 +128,17 @@ class GatewayRoutingTest {
   }
 
   @Test
+  void publicJwksRouteIsAnonymousAndStripsUserAccessPrefix() {
+    http.get()
+        .uri("/user-access/.well-known/jwks.json")
+        .exchange()
+        .expectStatus()
+        .isOk()
+        .expectHeader()
+        .valueEquals("X-Test-Path", "/.well-known/jwks.json");
+  }
+
+  @Test
   void forwardsMultipartBytesAndNestedRelativePaths() {
     var parts = new MultipartBodyBuilder();
     parts.part(
@@ -251,23 +262,6 @@ class GatewayRoutingTest {
   }
 
   @Test
-  void exposesUserAccessHealthAndJwksWithoutAuthentication() {
-    for (String path :
-      new String[] {
-        "/user-access/actuator/health",
-        "/user-access/.well-known/jwks.json"
-      }) {
-      http.get()
-        .uri(path)
-        .exchange()
-        .expectStatus()
-        .isOk()
-        .expectHeader()
-        .valueEquals("X-Test-Backend", "A");
-    }
-  }
-
-  @Test
   void exposesItsOwnHealth() {
     http.get()
         .uri("/actuator/health")
@@ -277,5 +271,18 @@ class GatewayRoutingTest {
         .expectBody()
         .jsonPath("$.status")
         .isEqualTo("UP");
+  }
+
+  @Test
+  void exposesOnlyUserAccessHealthWithoutAuthentication() {
+    http.get()
+        .uri("/user-access/actuator/health")
+        .exchange()
+        .expectStatus()
+        .isOk()
+        .expectHeader()
+        .valueEquals("X-Test-Path", "/actuator/health");
+
+    http.get().uri("/user-access/api/access/me").exchange().expectStatus().isUnauthorized();
   }
 }

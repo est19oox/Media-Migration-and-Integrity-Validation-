@@ -9,7 +9,7 @@ const managerSource = readFileSync('frontend/js/file-manager.js', 'utf8');
 const homeSource = readFileSync('frontend/js/home.js', 'utf8');
 const activitySource = readFileSync('frontend/js/activity.js', 'utf8');
 const adminSource = readFileSync('frontend/js/admin.js', 'utf8');
-const signupHtml = readFileSync('frontend/pages/signup.html', 'utf8');
+const signupHtml = (readFileSync('frontend/pages/signup.html', 'utf8') + readFileSync('frontend/src/pages/signup.jsx', 'utf8').replaceAll('className=', 'class=').replaceAll('htmlFor=', 'for='));
 const gatewayPom = readFileSync('services/api-gateway/pom.xml', 'utf8');
 
 const TOKEN = 'a1b2c3d4'.repeat(8);
@@ -217,9 +217,9 @@ test('the login page does not log the invitation it carries', async () => {
 
 test('the signup scripts are loaded from the Gateway-owned frontend', () => {
   for (const asset of ['feedback.js', 'english-validation.js']) {
-    const browserPath = '../js/' + asset;
+    const browserPath = '/js/' + asset;
     assert.ok(
-      signupHtml.includes('"' + browserPath + '"'),
+      signupHtml.includes(browserPath),
       'signup no longer loads ' + browserPath,
     );
     assert.ok(existsSync('frontend/js/' + asset), 'missing frontend/js/' + asset);
@@ -227,13 +227,14 @@ test('the signup scripts are loaded from the Gateway-owned frontend', () => {
 });
 
 test('the Gateway packages the shared frontend JavaScript directory', () => {
-  assert.match(gatewayPom, /<include>js\/\*\*<\/include>/);
+  assert.ok(gatewayPom.includes('frontend/dist</directory>'));
+  assert.ok(readFileSync('frontend/vite.config.js', 'utf8').includes("['js', 'css', 'img', 'font', 'assets']"));
 });
 
 /* --------------------- uploads are offered only where allowed ---------------- */
 
 /** Runs file-manager.js against a profile carrying the given destinations. */
-async function loadFileManager(destinations) {
+async function loadFileManager(destinations, filePages = []) {
   const elements = new Map();
   const menus = [node('DETAILS'), node('DETAILS')];
   const byId = (id) => {
@@ -253,6 +254,8 @@ async function loadFileManager(destinations) {
         fetch: async (url) => {
           if (url === '/api/access/me')
             return { ok: true, status: 200, json: async () => ({ role: 'USER', destinations }) };
+          if (url.startsWith('/api/v1/portal/files?'))
+            return { ok: true, status: 200, json: async () => filePages.shift() || { files: [] } };
           throw new Error('Unexpected request ' + url);
         },
       },
@@ -295,6 +298,35 @@ test('one writable destination keeps the upload menus', async () => {
     app.element('destination').children.map((option) => option.value),
     ['', 'SW002'],
   );
+});
+
+test('uploaded folders and nested folders open as folders, with files shown by basename', async () => {
+  const app = await loadFileManager([{ destination: 'SW001', permission: 'READ' }], [{
+    files: [
+      { fileId: 'a', name: 'Course/Week1/notes.pdf', sizeBytes: 12, canDelete: false },
+      { fileId: 'b', name: 'Course/Week2/slides.ppt', sizeBytes: 20, canDelete: false },
+      { fileId: 'c', name: 'readme.txt', sizeBytes: 4, canDelete: false },
+    ],
+  }]);
+  const folder = app.element('folder');
+  folder.value = 'SW001';
+  folder.listeners.change();
+  await flush();
+  let rows = app.element('files').children;
+  assert.equal(rows.length, 2);
+  assert.equal(rows[0].children[0].children[0].children[1].textContent, 'Course');
+  assert.equal(rows[1].children[0].children[0].children[1].textContent, 'readme.txt');
+
+  rows[0].children[0].children[0].children[1].listeners.click();
+  rows = app.element('files').children;
+  assert.deepEqual(rows.map((row) => row.children[0].children[0].children[1].textContent),
+    ['Week1', 'Week2']);
+  rows[0].children[0].children[0].children[1].listeners.click();
+  rows = app.element('files').children;
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].children[0].children[0].children[1].textContent, 'notes.pdf');
+  assert.equal(rows[0].children[4].children[0].children[0].textContent, 'Preview');
+  assert.equal(app.element('breadcrumbs').children.at(-1).textContent, 'Week1');
 });
 
 test('frontend reads profile and reporting data without traversing Transfer', () => {

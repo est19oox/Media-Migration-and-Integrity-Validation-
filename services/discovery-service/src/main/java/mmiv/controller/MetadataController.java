@@ -2,6 +2,7 @@ package mmiv.controller;
 
 import java.util.UUID;
 import mmiv.integration.*;
+import mmiv.model.MetadataPlan;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
@@ -34,14 +35,6 @@ public class MetadataController {
       @RequestBody MetadataService.CreatePlan request,
       @RequestHeader(value = "X-MMIV-Verification-Run", required = false) UUID run) {
     return metadata.create(jwt, request, true, run);
-  }
-
-  @PostMapping("/allocations/batch")
-  public BatchAllocationResponse allocateBatch(
-      @AuthenticationPrincipal Jwt jwt,
-      @RequestBody BatchAllocationRequest request,
-      @RequestHeader(value = "X-MMIV-Verification-Run", required = false) UUID run) {
-    return metadata.allocateBatch(jwt, request, run);
   }
 
   @GetMapping("/verification/{run}/closed")

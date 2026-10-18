@@ -48,7 +48,7 @@ public class SecurityConfig {
                     .permitAll()
                     .requestMatchers(HttpMethod.GET, "/.well-known/jwks.json")
                     .permitAll()
-                    .requestMatchers(HttpMethod.GET, "/actuator/health")
+                    .requestMatchers(HttpMethod.GET, "/actuator/health", "/actuator/prometheus")
                     .permitAll()
                     .requestMatchers(HttpMethod.GET, "/api/health")
                     .permitAll()

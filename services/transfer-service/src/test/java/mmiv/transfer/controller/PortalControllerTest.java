@@ -22,7 +22,8 @@ class PortalControllerTest {
           s3,
           "bucket",
           mock(mmiv.transfer.service.FileMutationService.class),
-          new FolderAccessGuard());
+          new mmiv.transfer.service.FolderCreationService(
+              portal, s3, "bucket", new FolderAccessGuard()));
 
   @Test
   void profileHistoryAndLogsPortalMethodsNoLongerExist() {
@@ -40,12 +41,11 @@ class PortalControllerTest {
     assertNotNull(PortalController.class.getDeclaredMethod("files", String.class, String.class));
     assertNotNull(
         PortalController.class.getDeclaredMethod("create", PortalController.Folder.class));
-    assertNotNull(
-        PortalController.class.getDeclaredMethod(
-            "grant", java.util.UUID.class, PortalController.Grant.class));
-    assertNotNull(
-        PortalController.class.getDeclaredMethod(
-            "deleteUser", java.util.UUID.class, jakarta.servlet.http.HttpServletResponse.class));
+    assertTrue(
+        java.util.Arrays.stream(PortalController.class.getDeclaredMethods())
+            .noneMatch(
+                method ->
+                    method.getName().equals("grant") || method.getName().equals("deleteUser")));
   }
 
   @Test
@@ -107,29 +107,5 @@ class PortalControllerTest {
     assertEquals("docs/report.pdf", file.name());
     assertEquals(key, FileIds.decode(file.fileId()));
     assertEquals("next-page", result.get("nextCursor"));
-  }
-
-  @Test
-  void deletingUserDoesNotManageGatewaySessionCookie() {
-    var id = java.util.UUID.randomUUID();
-    var jwt =
-        org.springframework.security.oauth2.jwt.Jwt.withTokenValue("fixture")
-            .header("alg", "RS256")
-            .subject(id.toString())
-            .build();
-    org.springframework.security.core.context.SecurityContextHolder.getContext()
-        .setAuthentication(
-            new org.springframework.security.oauth2.server.resource.authentication
-                .JwtAuthenticationToken(jwt));
-    try {
-      var response = mock(jakarta.servlet.http.HttpServletResponse.class);
-      controller.deleteUser(id, response);
-      verify(portal)
-          .access(org.springframework.http.HttpMethod.DELETE, "/api/admin/users/" + id, null);
-      verify(response, never()).addHeader(eq("Set-Cookie"), anyString());
-      verify(response).setStatus(204);
-    } finally {
-      org.springframework.security.core.context.SecurityContextHolder.clearContext();
-    }
   }
 }

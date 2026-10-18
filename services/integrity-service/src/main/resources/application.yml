@@ -4,7 +4,7 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info
+        include: health,info,prometheus
   endpoint:
     health:
       probes:
@@ -49,5 +49,5 @@ mmiv.events.outbox-directory: ${MMIV_EVENTS_OUTBOX_DIRECTORY:./.mmiv-outbox}
 mmiv.s3.endpoint: ${MMIV_S3_ENDPOINT:}
 
 mmiv.auth.issuer: ${USER_ACCESS_JWT_ISSUER:https://auth.mmiv.example}
-mmiv.auth.jwk-set-uri: ${USER_ACCESS_JWK_SET_URI:http://user-access-service:8083/.well-known/jwks.json}
-mmiv.metadata.url: ${METADATA_URL:http://discovery-service:8085}
+mmiv.auth.jwk-set-uri: ${USER_ACCESS_JWK_SET_URI:http://user-access-service/.well-known/jwks.json}
+mmiv.metadata.url: ${METADATA_URL:http://discovery-service}

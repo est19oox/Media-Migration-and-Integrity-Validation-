@@ -4,7 +4,6 @@ import java.util.Optional;
 import mmiv.user_access_service.dto.AccessCheckRequest;
 import mmiv.user_access_service.dto.AccessCheckResponse;
 import mmiv.user_access_service.dto.AccessibleDestinationsResponse;
-import mmiv.user_access_service.model.Action;
 import mmiv.user_access_service.model.DestinationAccess;
 import mmiv.user_access_service.model.User;
 import mmiv.user_access_service.repository.UserRepository;
@@ -36,44 +35,8 @@ public class AccessService {
     }
 
     User user = userOptional.get();
-    // Deny destination access for inactive users.
-    if (!user.isActive()) {
-      return new AccessCheckResponse(false, "User account is inactive");
-    }
-
-    if ("ADMIN".equals(user.getRole())
-        && ("READ".equalsIgnoreCase(request.getAction())
-            || "WRITE".equalsIgnoreCase(request.getAction())))
-      return new AccessCheckResponse(true, "Access granted");
-
-    // 2. Find user's access to the requested destination
-
-    Optional<DestinationAccess> destinationAccess =
-        user.getDestinationAccesses().stream()
-            .filter(access -> access.getDestination().equals(request.getDestination()))
-            .findFirst();
-
-    if (destinationAccess.isEmpty()) {
-      return new AccessCheckResponse(false, "No access to destination");
-    }
-
-    // 3. Convert requested action
-    Action action;
-
-    try {
-      action = Action.valueOf(request.getAction().toUpperCase());
-    } catch (IllegalArgumentException e) {
-      return new AccessCheckResponse(false, "Invalid action");
-    }
-
-    // 4. Check permission
-    boolean authorised = destinationAccess.get().getPermission().allows(action);
-
-    if (authorised) {
-      return new AccessCheckResponse(true, "Access granted");
-    }
-
-    return new AccessCheckResponse(false, "Insufficient permission");
+    var decision = user.accessTo(request.getDestination(), request.getAction());
+    return new AccessCheckResponse(decision.authorised(), decision.reason());
   }
 
   public AccessibleDestinationsResponse getAccessibleDestinations(String userId) {

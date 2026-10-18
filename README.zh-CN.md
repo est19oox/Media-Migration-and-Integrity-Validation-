@@ -1,49 +1,42 @@
-# 媒体迁移与完整性验证平台（MMIV）
+# 媒体迁移与完整性验证
 
 [English](README.md) | [简体中文](README.zh-CN.md)
 
-MMIV 是一个基于 Java 和 Spring Boot 的系统，用于发现媒体、授权迁移目标、将文件传至 Amazon S3、验证文件完整性并生成报告。API Gateway 提供浏览器前端和 API 入口。
+MMIV 是一个基于微服务的系统，用于在访问控制下发现、传输、验证媒体迁移，并生成相关报告。
 
-## 系统概览
+## 服务
 
-MMIV 由七个独立构建的 Spring Boot 服务组成。Eureka 负责服务发现，HTTP 和 RabbitMQ 支持服务通信，Oracle 与 MongoDB 存储应用数据，Amazon S3 存储媒体文件；API Gateway 提供浏览器应用。服务职责和端口见[服务目录](docs/services/catalog.zh-CN.md)。
-
-## 环境要求
-
-- 构建和测试服务：JDK 25、Maven 3.9.16。仓库提供 Maven Wrapper：`services/user-access-service/mvnw`（Windows 使用 `mvnw.cmd`）。
-- 前端开发和格式检查：Node.js 22.12+ 与 npm；Vite 也支持 Node.js 20.19+。
-- 本地数据库和集成运行：Docker Compose v2。
-- 部分 CI 和部署校验脚本：Python 3。
-
-集成运行还需要已配置的 Oracle、RabbitMQ、MongoDB、AWS 凭据和 S3 访问权限。切勿将凭据提交到仓库。启动前请阅读[本地开发指南](docs/development/local-setup.zh-CN.md)。
-
-## 快速开始
-
-在仓库根目录构建并测试 Transfer 服务：
-
-```sh
-./services/user-access-service/mvnw -B -f services/transfer-service/pom.xml clean verify
-```
-
-Windows PowerShell：
-
-```powershell
-.\services\user-access-service\mvnw.cmd -B -f services\transfer-service\pom.xml clean verify
-```
-
-启动前端开发服务器：
-
-```sh
-npm ci --prefix frontend
-npm --prefix frontend run dev
-```
-
-Vite 将 API 请求代理到 `http://localhost:8080`，相关页面需要 Gateway 和依赖服务运行。格式检查命令为 `npm ci && npm run format:check`。更多测试和开发说明见文档索引。
+| 服务        | 端口 | 职责                   |
+| ----------- | ---: | ---------------------- |
+| Transfer    | 8081 | 在存储位置之间传输媒体 |
+| Discovery   | 8085 | 发现媒体和资源         |
+| User Access | 8083 | 管理并检查访问权限     |
+| Reporting   | 8084 | 生成迁移和验证报告     |
+| Integrity   | 8082 | 验证已迁移媒体的完整性 |
 
 ## 文档
 
-从[中文](docs/README.zh-CN.md)或[英文](docs/README.md)文档索引开始，查看维护中的指南及其翻译。Jenkins 指南介绍可选的本地控制器；托管 CI/CD 使用 GitHub Actions。
+- **[草案]** [架构](docs/architecture/architecture.zh-CN.md) — 架构选项和需要团队讨论的决策
+- **[草案]** [API 契约](docs/api/api-contracts.zh-CN.md) — 跨服务 API 契约
+- **[草案]** [CI/CD](docs/ci-cd/ci-cd.zh-CN.md) — GitHub Actions 和 Jenkins 的职责
+- [Jenkins 设置](docs/jenkins/local-setup.zh-CN.md) — 本地脚本自动构建、配置并运行 Jenkins
 
-## 贡献
+标记为**草案**的架构和 API 文档仍在团队讨论中。
 
-除非涉及共享契约或公共事件实现，服务变更应限制在相应 Maven 项目内。行为、配置或命令发生变化时，请更新相关文档。提交 Pull Request 前运行适用的检查；切勿提交凭据、环境文件或生成的 Terraform 状态文件。
+## 开发
+
+每个微服务都在 `services/` 下独立维护。
+
+请从对应服务目录构建和测试服务：
+
+```bash
+mvn clean verify
+```
+
+Gateway browser access: see docs/ci-cd/gateway-access.md.
+
+## Merged gateway access
+
+Gateway is public on EC2 TCP 8080; backends bind to localhost. See
+[Gateway access](docs/ci-cd/gateway-access.md). The real Discovery Service from
+main is preserved; its CD entry is disabled pending Oracle/runtime configuration.
