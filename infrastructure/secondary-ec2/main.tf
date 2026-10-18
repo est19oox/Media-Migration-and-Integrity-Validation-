@@ -130,9 +130,9 @@ resource "aws_security_group" "secondary" {
   # configuration are managed separately; these rules alone do not connect hosts.
   dynamic "egress" {
     for_each = {
-      eureka   = 8761
-      rabbitmq = 5672
-      redis    = 6379
+      eureka    = 8761
+      rabbitmq  = 5672
+      redis     = 6379
       user_jwks = 8083
     }
     content {
