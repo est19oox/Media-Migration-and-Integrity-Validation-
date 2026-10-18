@@ -4,6 +4,26 @@
   --reports-line: rgba(110, 155, 200, 0.16);
 }
 
+html:has(body.reports-page),
+body.home-page.reports-page {
+  height: auto;
+  min-height: 100%;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.reports-page .home-shell {
+  height: auto;
+  min-height: 100dvh;
+  overflow: visible;
+}
+
+.reports-page .home-main {
+  flex: 1 0 auto;
+  min-height: auto;
+  overflow: visible;
+}
+
 .reports-main {
   width: 100%;
   flex: 1;
@@ -17,7 +37,7 @@
   width: 100%;
   min-height: 0;
   padding: 24px 26px;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .reports-heading,
@@ -176,8 +196,12 @@
 
 .report-detail-main {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 16px;
   width: 100%;
+  min-width: 0;
+  max-width: 1320px;
+  margin: 0 auto;
   padding: 12px 0;
 }
 
@@ -189,7 +213,14 @@
 }
 
 .report-detail-card {
+  min-width: 0;
+  max-width: 100%;
   padding: 24px 26px;
+}
+
+.report-detail-card .reports-table-scroll {
+  min-width: 0;
+  max-width: 100%;
 }
 
 .report-back-link {
