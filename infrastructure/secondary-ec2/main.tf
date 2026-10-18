@@ -126,6 +126,14 @@ resource "aws_security_group" "secondary" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 
+  ingress {
+    description     = "HA demo ALB health and HTTP"
+    from_port       = 8080
+    to_port         = 8080
+    protocol        = "tcp"
+    security_groups = [aws_security_group.ha_alb.id]
+  }
+
   # Outbound-only private dependencies. Primary SG and Docker listener
   # configuration are managed separately; these rules alone do not connect hosts.
   dynamic "egress" {
