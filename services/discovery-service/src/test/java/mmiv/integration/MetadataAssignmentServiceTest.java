@@ -40,4 +40,25 @@ class MetadataAssignmentServiceTest {
     order.verify(runs).lock("owner", run);
     order.verify(plans).saveNamed(plan, List.of());
   }
+
+  @Test
+  void batchLocksVerificationRunOnceAndPersistsAtomically() {
+    UUID run = UUID.randomUUID();
+    UUID migration = UUID.randomUUID();
+    var first =
+        MetadataPlan.assign(
+            "owner", "SW001", "bucket", null, "a.txt", 10, true, "folder/a.txt", run, migration);
+    var second =
+        MetadataPlan.assign(
+            "owner", "SW001", "bucket", null, "b.txt", 10, true, "folder/b.txt", run, migration);
+    var requested = List.of(first, second);
+    when(runs.lock("owner", run)).thenReturn(new VerificationRun("owner", run, false));
+    when(plans.saveNamedBatch(requested, List.of())).thenReturn(requested);
+
+    assertEquals(requested, service.allocateBatch(requested, List.of()));
+
+    var order = inOrder(runs, plans);
+    order.verify(runs).lock("owner", run);
+    order.verify(plans).saveNamedBatch(requested, List.of());
+  }
 }

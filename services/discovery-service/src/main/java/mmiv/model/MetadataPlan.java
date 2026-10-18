@@ -75,6 +75,58 @@ public record MetadataPlan(
       boolean upload,
       String relativePath,
       UUID verificationRun) {
+    UUID metadataId = UUID.randomUUID();
+    return assign(
+        ownerId,
+        destinationId,
+        bucket,
+        source,
+        name,
+        size,
+        upload,
+        relativePath,
+        verificationRun,
+        metadataId,
+        metadataId);
+  }
+
+  public static MetadataPlan assign(
+      String ownerId,
+      String destinationId,
+      String bucket,
+      String source,
+      String name,
+      long size,
+      boolean upload,
+      String relativePath,
+      UUID verificationRun,
+      UUID migrationId) {
+    return assign(
+        ownerId,
+        destinationId,
+        bucket,
+        source,
+        name,
+        size,
+        upload,
+        relativePath,
+        verificationRun,
+        UUID.randomUUID(),
+        migrationId);
+  }
+
+  private static MetadataPlan assign(
+      String ownerId,
+      String destinationId,
+      String bucket,
+      String source,
+      String name,
+      long size,
+      boolean upload,
+      String relativePath,
+      UUID verificationRun,
+      UUID metadataId,
+      UUID migrationId) {
     if (name == null
         || !name.matches("[\\p{L}\\p{N}._ ()-]{1,200}")
         || name.equals(".")
@@ -96,20 +148,19 @@ public record MetadataPlan(
                         || part.isBlank()
                         || !part.matches("[\\p{L}\\p{N}._ ()-]{1,200}")))
       throw new IllegalArgumentException("Invalid relative media path");
-    var id = UUID.randomUUID();
     var file = UUID.randomUUID();
-    if ((destinationId + "/migrations/" + id + "/" + objectPath)
+    if ((destinationId + "/migrations/" + metadataId + "/" + objectPath)
             .getBytes(java.nio.charset.StandardCharsets.UTF_8)
             .length
         > 1024) throw new IllegalArgumentException("File path is too long");
     return new MetadataPlan(
-        id,
-        id,
+        metadataId,
+        migrationId,
         file,
         ownerId,
         destinationId,
         bucket,
-        destinationId + "/migrations/" + id + "/" + objectPath,
+        destinationId + "/migrations/" + metadataId + "/" + objectPath,
         source,
         name,
         contentType,
