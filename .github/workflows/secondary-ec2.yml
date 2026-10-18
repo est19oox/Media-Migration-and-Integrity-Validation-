@@ -61,27 +61,16 @@ jobs:
         run: terraform init -input=false -reconfigure
       - name: Generate plan without apply
         run: terraform plan -input=false -lock-timeout=60s -out=secondary.tfplan
-      - name: Verify narrowly scoped partial-apply recovery plan
+      - name: Verify secondary-only network plan (no apply)
         run: |
           terraform show -json secondary.tfplan | python3 -c '
           import json,sys
           p=json.load(sys.stdin)
-          allowed={
-            "aws_subnet.secondary":{("update",)},
-            "aws_security_group.secondary":{("update",)},
-            "aws_route_table.secondary":{("no-op",)},
-            "aws_route_table_association.secondary":{("create",)},
-            "aws_instance.secondary":{("create",)},
-          }
-          changes={x["address"]:tuple(x["change"]["actions"]) for x in p.get("resource_changes",[])}
-          for address,actions in changes.items():
-              if address not in allowed or actions not in allowed[address]:
-                  sys.exit(f"Unsafe recovery plan: {address} {actions}")
-          required={"aws_subnet.secondary","aws_security_group.secondary","aws_route_table_association.secondary","aws_instance.secondary"}
-          if not required.issubset(changes):
-              sys.exit("Missing expected recovery actions")
-          for address in sorted(changes): print("RECOVERY PLAN:",address,changes[address])
-          print("PASS: only approved secondary recovery actions. No apply.")
+          changes={x["address"]:x["change"]["actions"] for x in p.get("resource_changes",[]) if x["change"]["actions"]!=["no-op"]}
+          if any(a!="aws_security_group.secondary" or v!=["update"] for a,v in changes.items()):
+              sys.exit("Unexpected infrastructure changes: "+repr(changes))
+          print("PASS: only secondary security-group in-place update or no changes.",changes)
+          print("No apply performed.")
           '
 
   apply:
