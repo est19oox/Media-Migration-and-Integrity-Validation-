@@ -260,7 +260,7 @@ function detailPage(options = {}) {
       totalPages: 1,
       totalElements: 1,
     },
-    [`/api/reports/${MIGRATION_ID}/timeline?page=0&size=50`]: {
+    [`/api/reports/${MIGRATION_ID}/timeline?page=0&size=20`]: {
       content: [
         {
           stage: 'INTEGRITY',
@@ -274,7 +274,7 @@ function detailPage(options = {}) {
       totalPages: 1,
       totalElements: 1,
     },
-    [`/api/admin/reports/${MIGRATION_ID}/events?page=0&size=50`]: {
+    [`/api/admin/reports/${MIGRATION_ID}/events?page=0&size=20`]: {
       content: [
         {
           eventId: 'event-1',
@@ -374,6 +374,10 @@ function detailPage(options = {}) {
       visibilityHandlers.forEach((handler) => handler());
       await flush();
     },
+    async trigger(id, event = 'click') {
+      byId(id).listeners[event]({ preventDefault() {} });
+      await flush();
+    },
   };
 }
 
@@ -391,7 +395,7 @@ test('loads summary files and sanitized timeline for an owned report', async () 
     '/api/access/me',
     `/api/reports/${MIGRATION_ID}`,
     `/api/reports/${MIGRATION_ID}/files?page=0&size=20`,
-    `/api/reports/${MIGRATION_ID}/timeline?page=0&size=50`,
+    `/api/reports/${MIGRATION_ID}/timeline?page=0&size=20`,
   ]);
   assert.equal(app.element('reportMigrationId').textContent, MIGRATION_ID);
   assert.equal(app.element('reportFileRows').children.length, 1);
@@ -408,8 +412,11 @@ test('does not request admin events for a USER profile', async () => {
 test('requests /api/admin/reports/{id}/events only for current ADMIN', async () => {
   const app = detailPage({ profile: { userId: 'admin', username: 'admin', role: 'ADMIN' } });
   await app.flush();
-  assert.ok(
-    app.requests.includes(`/api/admin/reports/${MIGRATION_ID}/events?page=0&size=50`),
+  assert.equal(
+    app.requests.filter(
+      (url) => url === `/api/admin/reports/${MIGRATION_ID}/events?page=0&size=20`,
+    ).length,
+    1,
   );
   assert.ok(app.requests.includes(`/api/admin/reports/${MIGRATION_ID}`));
   assert.equal(app.requests.includes(`/api/reports/${MIGRATION_ID}`), false);
@@ -480,14 +487,96 @@ test('uses textContent for filenames paths failures and event values', async () 
   assert.ok(serialized.includes('<internal detail>'));
 });
 
+test('migration timeline can move between backend pages', async () => {
+  const firstPageUrl = `/api/reports/${MIGRATION_ID}/timeline?page=0&size=20`;
+  const secondPageUrl = `/api/reports/${MIGRATION_ID}/timeline?page=1&size=20`;
+  const app = detailPage({
+    responses: {
+      [firstPageUrl]: {
+        content: [{ stage: 'DISCOVERY', status: 'ACCEPTED', message: 'First page' }],
+        number: 0,
+        totalPages: 2,
+        totalElements: 21,
+      },
+      [secondPageUrl]: {
+        content: [{ stage: 'TRANSFER', status: 'STORED', message: 'Second page' }],
+        number: 1,
+        totalPages: 2,
+        totalElements: 21,
+      },
+    },
+  });
+  await app.flush();
+
+  assert.equal(app.element('reportTimelineCount').textContent, '21 events');
+  assert.equal(app.element('reportTimelinePage').textContent, 'Page 1 of 2');
+  assert.equal(app.element('reportTimelinePrevious').disabled, true);
+  assert.equal(app.element('reportTimelineNext').disabled, false);
+
+  await app.trigger('reportTimelineNext');
+  assert.equal(app.requests.at(-1), secondPageUrl);
+  assert.equal(app.element('reportTimeline').children[0].children[1].textContent, 'Second page');
+  assert.equal(app.element('reportTimelinePage').textContent, 'Page 2 of 2');
+  assert.equal(app.element('reportTimelinePrevious').disabled, false);
+  assert.equal(app.element('reportTimelineNext').disabled, true);
+});
+
+test('administrator event pagination does not change the timeline page', async () => {
+  const firstPageUrl = `/api/admin/reports/${MIGRATION_ID}/events?page=0&size=20`;
+  const secondPageUrl = `/api/admin/reports/${MIGRATION_ID}/events?page=1&size=20`;
+  const page = (number, eventType) => ({
+    content: [
+      {
+        eventId: `event-${number}`,
+        eventType,
+        sourceService: 'TRANSFER_SERVICE',
+        occurredAt: '2026-10-11T10:04:00Z',
+        data: { status: 'STORED' },
+      },
+    ],
+    number,
+    totalPages: 2,
+    totalElements: 21,
+  });
+  const app = detailPage({
+    profile: { userId: 'admin', username: 'admin', role: 'ADMIN' },
+    responses: {
+      [firstPageUrl]: page(0, 'FILE_DISCOVERY_COMPLETED'),
+      [secondPageUrl]: page(1, 'FILE_TRANSFER_COMPLETED'),
+    },
+  });
+  await app.flush();
+
+  assert.equal(app.element('adminEventCount').textContent, '21 events');
+  assert.equal(app.element('adminEventPage').textContent, 'Page 1 of 2');
+  assert.equal(app.element('reportTimelinePage').textContent, 'Page 1 of 2');
+
+  await app.trigger('adminEventNext');
+  assert.equal(app.requests.at(-1), secondPageUrl);
+  assert.equal(
+    app.element('adminEventRows').children[0].children[1].textContent,
+    'FILE_TRANSFER_COMPLETED',
+  );
+  assert.equal(app.element('adminEventPage').textContent, 'Page 2 of 2');
+  assert.equal(app.element('reportTimelinePage').textContent, 'Page 1 of 2');
+});
+
 test('detail page exposes report, file, timeline and admin event regions', () => {
   [
     'reportDetailStatus',
     'reportMigrationId',
     'reportFileRows',
     'reportTimeline',
+    'reportTimelineCount',
+    'reportTimelinePage',
+    'reportTimelinePrevious',
+    'reportTimelineNext',
     'adminReportEvents',
     'adminEventRows',
+    'adminEventCount',
+    'adminEventPage',
+    'adminEventPrevious',
+    'adminEventNext',
   ].forEach((id) => assert.ok(detailHtml.includes(`id="${id}"`), `missing ${id}`));
 });
 
