@@ -329,6 +329,43 @@ test('uploaded folders and nested folders open as folders, with files shown by b
   assert.equal(app.element('breadcrumbs').children.at(-1).textContent, 'Week1');
 });
 
+test('file-manager breadcrumbs return to a parent folder and destination root', async () => {
+  const app = await loadFileManager([{ destination: 'SW001', permission: 'READ' }], [{
+    files: [
+      { fileId: 'a', name: 'Course/Week1/notes.pdf', sizeBytes: 12, canDelete: false },
+      { fileId: 'b', name: 'Course/Week2/slides.ppt', sizeBytes: 20, canDelete: false },
+    ],
+  }]);
+  const folder = app.element('folder');
+  folder.value = 'SW001';
+  folder.listeners.change();
+  await flush();
+
+  app.element('files').children[0].children[0].children[0].children[1].listeners.click();
+  app.element('files').children[0].children[0].children[0].children[1].listeners.click();
+  assert.equal(app.element('breadcrumbs').children.at(-1).textContent, 'Week1');
+
+  const courseCrumb = app.element('breadcrumbs').children.find(
+    (child) => child.tagName === 'BUTTON' && child.textContent === 'Course',
+  );
+  courseCrumb.listeners.click();
+  assert.deepEqual(
+    app.element('files').children.map(
+      (row) => row.children[0].children[0].children[1].textContent,
+    ),
+    ['Week1', 'Week2'],
+  );
+
+  const rootCrumb = app.element('breadcrumbs').children.find(
+    (child) => child.tagName === 'BUTTON' && child.textContent === 'SW001',
+  );
+  rootCrumb.listeners.click();
+  assert.equal(
+    app.element('files').children[0].children[0].children[0].children[1].textContent,
+    'Course',
+  );
+});
+
 test('frontend reads profile and reporting data without traversing Transfer', () => {
   for (const script of [homeSource, activitySource, adminSource, managerSource]) {
     for (const legacy of [
