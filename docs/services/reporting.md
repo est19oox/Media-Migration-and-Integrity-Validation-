@@ -26,16 +26,16 @@ invalid or exhausted events are sent to `reporting.events.dlq`.
 Browser and external clients use API Gateway on port 8080. Reporting validates
 the relayed JWT again and applies data ownership itself:
 
-| Gateway endpoint                             | Access             | Purpose                            |
-| -------------------------------------------- | ------------------ | ---------------------------------- |
-| `GET /api/reports/mine`                      | Authenticated user | Paged reports owned by JWT subject |
-| `GET /api/reports/{migrationId}`             | Report owner       | One sanitized report               |
-| `GET /api/reports/{migrationId}/files`       | Report owner       | Stable paged file results          |
-| `GET /api/reports/{migrationId}/timeline`    | Report owner       | Sanitized business timeline        |
-| `GET /api/admin/reports`                     | Administrator      | Cross-user report search           |
-| `GET /api/admin/reports/{migrationId}/files` | Administrator      | Failed/all file troubleshooting    |
-| `GET /api/history`                           | Administrator      | Operational audit history          |
-| `GET /api/dashboard`                         | Administrator      | Aggregate operational dashboard    |
+| Gateway endpoint                          | Access             | Purpose                            |
+| ----------------------------------------- | ------------------ | ---------------------------------- |
+| `GET /api/reports/mine`                   | Authenticated user | Paged reports owned by JWT subject |
+| `GET /api/reports/{migrationId}`          | Report owner       | One sanitized report               |
+| `GET /api/reports/{migrationId}/files`    | Report owner       | Stable paged file results          |
+| `GET /api/reports/{migrationId}/timeline` | Report owner       | Sanitized business timeline        |
+| `GET /api/admin/reports`                  | Administrator      | Cross-user report search           |
+| `GET /api/admin/reports/{migrationId}/files` | Administrator   | Failed/all file troubleshooting    |
+| `GET /api/history`                        | Administrator      | Operational audit history          |
+| `GET /api/dashboard`                      | Administrator      | Aggregate operational dashboard    |
 
 A user cannot select another owner with a query parameter. Internal exception
 text, infrastructure addresses, credentials, absolute paths, and checksum

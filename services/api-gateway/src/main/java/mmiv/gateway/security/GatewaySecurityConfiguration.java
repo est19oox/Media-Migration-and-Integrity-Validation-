@@ -137,12 +137,12 @@ public class GatewaySecurityConfiguration {
                 exchanges
                     .pathMatchers(
                         HttpMethod.GET,
-                        "/actuator/health",
-                        "/actuator/health/**",
-                        "/actuator/info",
-                        "/user-access/actuator/health",
-                        "/user-access/actuator/health/**",
-                        "/user-access/.well-known/jwks.json")
+                      "/actuator/health",
+                      "/actuator/health/**",
+                      "/actuator/info",
+                      "/user-access/actuator/health",
+                      "/user-access/actuator/health/**",
+                      "/user-access/.well-known/jwks.json")
                     .permitAll()
                     .pathMatchers(
                         HttpMethod.GET,

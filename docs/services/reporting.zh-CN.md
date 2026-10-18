@@ -21,16 +21,16 @@ Discovery 发布迁移/发现结果，Transfer 发布存储结果，Integrity �
 浏览器和外部客户端通过 8080 端口的 API Gateway 访问。Reporting 会再次验证
 转发的 JWT，并自行执行数据所有权检查：
 
-| Gateway endpoint                             | 权限       | 用途                              |
-| -------------------------------------------- | ---------- | --------------------------------- |
-| `GET /api/reports/mine`                      | 已认证用户 | 分页列出 JWT subject 所拥有的报告 |
-| `GET /api/reports/{migrationId}`             | 报告所有者 | 获取单份脱敏报告                  |
-| `GET /api/reports/{migrationId}/files`       | 报告所有者 | 分页读取稳定的文件结果            |
-| `GET /api/reports/{migrationId}/timeline`    | 报告所有者 | 脱敏业务时间线                    |
-| `GET /api/admin/reports`                     | 管理员     | 跨用户报告搜索                    |
-| `GET /api/admin/reports/{migrationId}/files` | 管理员     | 失败/全部文件排查                 |
-| `GET /api/history`                           | 管理员     | 运行审计历史                      |
-| `GET /api/dashboard`                         | 管理员     | 汇总运行面板                      |
+| Gateway endpoint                          | 权限       | 用途                              |
+| ----------------------------------------- | ---------- | --------------------------------- |
+| `GET /api/reports/mine`                   | 已认证用户 | 分页列出 JWT subject 所拥有的报告 |
+| `GET /api/reports/{migrationId}`          | 报告所有者 | 获取单份脱敏报告                  |
+| `GET /api/reports/{migrationId}/files`    | 报告所有者 | 分页读取稳定的文件结果            |
+| `GET /api/reports/{migrationId}/timeline` | 报告所有者 | 脱敏业务时间线                    |
+| `GET /api/admin/reports`                  | 管理员     | 跨用户报告搜索                    |
+| `GET /api/admin/reports/{migrationId}/files` | 管理员  | 失败/全部文件排查                 |
+| `GET /api/history`                        | 管理员     | 运行审计历史                      |
+| `GET /api/dashboard`                      | 管理员     | 汇总运行面板                      |
 
 用户不能通过查询参数选择其他所有者。用户时间线不会返回内部异常、基础设施
 地址、凭据、绝对路径或 checksum。服务的 8084 回环端口仅用于本地诊断；生产

@@ -140,8 +140,7 @@
 
       page = payload.number;
       totalPages = payload.totalPages;
-      pagePosition.textContent =
-        totalPages === 0 ? 'Page 0 of 0' : `Page ${page + 1} of ${totalPages}`;
+      pagePosition.textContent = totalPages === 0 ? 'Page 0 of 0' : `Page ${page + 1} of ${totalPages}`;
       render(payload.content);
       count.textContent = `${payload.totalElements} ${payload.totalElements === 1 ? 'report' : 'reports'}`;
       status.textContent = payload.content.length
@@ -173,12 +172,9 @@
     }
   });
 
-  window.mmivAuth.ready
-    .then(loadProfile)
-    .then(load)
-    .catch(() => {
-      rows.replaceChildren();
-      count.textContent = '0 reports';
-      status.textContent = 'Your session could not be verified.';
-    });
+  window.mmivAuth.ready.then(loadProfile).then(load).catch(() => {
+    rows.replaceChildren();
+    count.textContent = '0 reports';
+    status.textContent = 'Your session could not be verified.';
+  });
 })();
