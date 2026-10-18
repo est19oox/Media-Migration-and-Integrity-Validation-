@@ -23,7 +23,7 @@ public class VerificationRunRepository implements InitializingBean {
             + " CLOSED NUMBER DEFAULT 0 NOT NULL, PRIMARY KEY(OWNER_ID,RUN_ID))';"
             + " EXCEPTION WHEN OTHERS THEN IF SQLCODE != -955 THEN RAISE; END IF; END;");
     mmiv.integration.LegacyDiscoveryDataMigration.copy(
-        jdbc, "MMIV_VERIFICATION_RUNS", "OWNER_ID,RUN_ID,CLOSED");
+        jdbc, mmiv.integration.LegacyDiscoveryDataMigration.Table.MMIV_VERIFICATION_RUNS);
   }
 
   public VerificationRun lock(String owner, UUID run) {

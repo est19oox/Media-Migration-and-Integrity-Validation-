@@ -44,16 +44,12 @@ public class MetadataPlanRepository implements InitializingBean {
             PLAN_JSON CLOB NOT NULL, EXPIRES_AT TIMESTAMP NOT NULL)';
         EXCEPTION WHEN OTHERS THEN IF SQLCODE != -955 THEN RAISE; END IF; END;
         """);
-    LegacyDiscoveryDataMigration.copy(jdbc, "MMIV_NAME_LOCKS", "FOLDER");
-    LegacyDiscoveryDataMigration.copy(jdbc, "MMIV_NAME_RESERVATIONS", "FOLDER,OBJECT_PATH,PLAN_ID");
+    LegacyDiscoveryDataMigration.copy(jdbc, LegacyDiscoveryDataMigration.Table.MMIV_NAME_LOCKS);
     LegacyDiscoveryDataMigration.copy(
-        jdbc, "MMIV_TRANSFER_PLANS", "PLAN_ID,OWNER_ID,PLAN_JSON,EXPIRES_AT");
-    LegacyDiscoveryDataMigration.copy(
-        jdbc, "FILE_METADATA", "FILE_NAME,MEDIA_TYPE,FILE_SIZE,SRC_DIR,CREATED_DATE");
-    LegacyDiscoveryDataMigration.copy(
-        jdbc,
-        "MEDIA_LOG",
-        "FILE_NAME,FILE_TYPE,FILE_DIR,FILE_SIZE,VALIDATION_STATUS,CHECK_FAILED,EXPECTED_VALUE,CHECKED_AT");
+        jdbc, LegacyDiscoveryDataMigration.Table.MMIV_NAME_RESERVATIONS);
+    LegacyDiscoveryDataMigration.copy(jdbc, LegacyDiscoveryDataMigration.Table.MMIV_TRANSFER_PLANS);
+    LegacyDiscoveryDataMigration.copy(jdbc, LegacyDiscoveryDataMigration.Table.FILE_METADATA);
+    LegacyDiscoveryDataMigration.copy(jdbc, LegacyDiscoveryDataMigration.Table.MEDIA_LOG);
   }
 
   private void createTable(String sql) {
