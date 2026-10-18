@@ -7,6 +7,10 @@ filesystem, S3, RabbitMQ, cryptography, retry, and circuit-breaker operations.
 
 ## Bounded contexts and roots
 
+![MMIV aggregate boundaries](mmiv-aggregates.png)
+
+The image source is `render-aggregates.py` (requires Pillow).
+
 | Context            | Aggregate root                   | Rules owned by the root                                                                                                                                                    | Persistence boundary                                                |
 | ------------------ | -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
 | User Access        | `User`                           | Folder-scoped authorization, administrator management restrictions, account deactivation, credential/session version transitions, role transitions, grant/revoke decisions | `UserRepository`: Oracle and test-memory implementations            |

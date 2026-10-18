@@ -1,15 +1,5 @@
 {
-  "common": [
-    {
-      "name": "health",
-      "method": "GET",
-      "path": "/actuator/health",
-      "status": 200,
-      "json_equals": {
-        "status": "UP"
-      }
-    }
-  ],
+  "common": [],
   "services": {
     "transfer-service": [
       {

@@ -1,6 +1,6 @@
 # Endpoint and DAST tests
 
-scripts/cd/test-endpoints.py reads tests/api/endpoints.json. The only common test is GET /actuator/health (HTTP 200, status UP). Each service also runs its own configured tests. Future services remain commented in the workflow and their functional arrays remain empty.
+scripts/cd/test-endpoints.py reads tests/api/endpoints.json. Each service has its own functional cases. The deployment readiness barrier checks service health separately; a shared `/actuator/health` case was removed because backend requests through Gateway checked Gateway health rather than the selected service.
 
 Transfer supports two content types on POST /api/v1/transfers:
 
@@ -11,15 +11,15 @@ Functional cases include JSON validation errors, missing multipart file, empty u
 
 ZAP imports transfer-openapi.json for the multipart POST, file GET/HEAD routes and health endpoint. zap-upload-hook.py sends a real TXT upload through ZAP's sendRequest API before scanning, checks the returned checksum, and saves upload-seed.json as evidence. Alert reports include findings, not every successful request. Inspect upload-seed.json and zap.log to confirm POST coverage. The legacy JSON migration content type is not defined in this OpenAPI scan.
 
-Active scanning can create multiple S3 objects under uploads/. Use a test bucket and clean up test objects. The workflow retains non-blocking security warnings (-I); scanner errors fail the step. No live AWS/ZAP scan was performed while generating these files.
+Active scanning can create multiple S3 objects. The verification run scopes these objects and its cleanup step removes them; check the cleanup evidence after a failed scan. The workflow retains non-blocking security warnings (-I); scanner errors fail the step.
 
-Future services each have their own OpenAPI file and commented matrix entries. Add implemented API routes and functional cases, uncomment their complete matrix entry, and extend the DAST_SCAN_MODE expression in cicd.yml to select api for that service. Only Transfer uses the upload hook.
+Transfer uses an active OpenAPI scan with the upload hook. Other services use baseline scans through Gateway routes: User Access JWKs, Discovery verification plans, Reporting user reports, Integrity's routed health endpoint, and Gateway's login page. The service registry is scanned directly. A baseline scan starting at a single endpoint does not exercise every API operation, and the two Integrity baseline runs use the load-balanced Gateway route rather than proving coverage of each replica.
 
 ## File viewing and download checks
 
 The successful multipart case saves `fileId` as `UPLOADED_FILE_ID`. Later JSON cases expand it into GET/HEAD routes and assert original bytes, download bytes, Content-Length, single/suffix ranges, 416 responses and invalid IDs. `save_fields` maps variable names to dotted JSON fields; `header_equals` and `body_equals` compare response headers and exact UTF-8 bytes.
 
-For Transfer DAST, the ZAP hook uploads a real TXT fixture, checks its SHA-256, seeds GET preview/download/range requests and replaces the OpenAPI fileId example with the uploaded ID before import. The API scan includes multipart POST plus GET/HEAD file routes and health. `upload-seed.json` records seed responses; `openapi.json` records the rendered spec. Inspect `zap-report.html` and `zap-report.json` for alerts and `zap-internal.log` for ZAP internal errors. Seed traffic proves those requests were exercised; it does not guarantee exhaustive coverage or a clean security assessment. Scans may create additional objects; remove test objects from S3 after testing.
+For Transfer DAST, the ZAP hook uploads a real TXT fixture, checks its SHA-256, seeds GET preview/download/range requests and replaces the OpenAPI fileId example with the uploaded ID before import. The API scan includes multipart POST plus GET/HEAD file routes and health. `upload-seed.json` records seed responses; `openapi.json` records the rendered spec. Inspect `zap-report.html` and `zap-report.json` for alerts and `zap-internal.log` for ZAP internal errors. Seed traffic proves those requests were exercised; it does not guarantee exhaustive coverage or a clean security assessment. Check the verification cleanup evidence for objects created by the scan.
 
 ## Failure evidence
 

@@ -691,9 +691,15 @@ class RunnerAndBarrierTest(unittest.TestCase):
             self.assertEqual(set(names), ssm.expected_services() - {'integrity-service-2'})
             self.assertEqual(names.count('integrity-service'), 2)
             user_access = environments['user-access-service']
-            self.assertEqual(user_access['DAST_PATH'], '/user-access/actuator/health')
+            self.assertEqual(user_access['DAST_PATH'], '/user-access/.well-known/jwks.json')
             self.assertEqual(user_access['DAST_READY_PATH'], '/user-access/actuator/health')
             self.assertEqual(user_access['DAST_ENDPOINT_BASE_PATH'], '/user-access')
+            discovery = environments['discovery-service']
+            self.assertEqual(discovery['DAST_PATH'],
+                             '/api/metadata/verification/' + discovery['MMIV_VERIFICATION_RUN_ID'] + '/plans')
+            self.assertEqual(environments['reporting-service']['DAST_PATH'], '/api/reports/mine')
+            self.assertEqual(environments['integrity-service']['DAST_PATH'], '/integrity/actuator/health')
+            self.assertEqual(environments['transfer-service']['DAST_SCAN_MODE'], 'api')
             restore.assert_not_called()
 
     def test_generated_account_cleanup_runs_after_success_and_failure(self):

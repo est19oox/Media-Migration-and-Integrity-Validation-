@@ -102,12 +102,14 @@ jobs:
       - name: Ansible validation
         working-directory: infrastructure/ansible
         run: |
-          python -m pip install ansible requests boto3 botocore
+          python -m pip install "ansible-core==2.19.14" requests boto3 botocore
           ansible-galaxy collection install -r requirements.yml
           ansible-playbook -i inventory/ci.ini playbook.yml --syntax-check
           ansible-playbook -i inventory/ci.ini rollback.yml --syntax-check
           ansible-playbook -i inventory/ci.ini setup-host.yml --syntax-check
           ansible-playbook -i inventory/ci.ini stage-integrity.yml --syntax-check
+          ansible-playbook -i inventory/ci.ini stage-user-access.yml --syntax-check
+          python ../../tests/ci/test-access-config.py
           python ../../tests/ci/test-deployment-config.py
           python ../../tests/ci/test-compose-runtime.py
           python ../../tests/ci/test-gateway-frontend-ownership.py

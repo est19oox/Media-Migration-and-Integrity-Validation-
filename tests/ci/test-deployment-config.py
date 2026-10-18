@@ -131,9 +131,12 @@ class DeploymentConfigurationTest(unittest.TestCase):
         workflow = yaml.safe_load((ROOT / '.github/workflows/cicd.yml').read_text())
         services = ['service-registry', 'api-gateway', 'integrity-service'] + [s['name'] for s in
             workflow['jobs']['build-images']['strategy']['matrix']['service']]
+        self.assertNotIn('/actuator/health',
+                         [case['path'] for case in config.get('common', [])],
+                         'Gateway health cannot prove a backend service is healthy')
         for service in services:
             self.assertIn(service, config['services'])
-            self.assertTrue(config['common'] + config['services'][service])
+            self.assertTrue(config['services'][service], service)
 
     def test_ec2_adoption(self):
         with tempfile.TemporaryDirectory() as temporary:
