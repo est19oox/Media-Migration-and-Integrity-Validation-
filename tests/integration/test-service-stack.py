@@ -186,6 +186,10 @@ def main():
     try:
         run_container('oracle', 1521, {'ORACLE_PASSWORD': secret, 'APP_USER': 'USER_ACCESS', 'APP_USER_PASSWORD': secret})
         wait(lambda: docker('exec', names['oracle'], 'healthcheck.sh') is not None, 240)
+        docker('exec', '-i', names['oracle'], 'sqlplus', '-s', '/', 'as', 'sysdba', input=(
+            'WHENEVER SQLERROR EXIT FAILURE\nALTER SESSION SET CONTAINER=FREEPDB1;\n'
+            f'CREATE USER DISCOVERY IDENTIFIED BY "D{secret}" DEFAULT TABLESPACE USERS QUOTA 128M ON USERS;\n'
+            'GRANT CREATE SESSION, CREATE TABLE TO DISCOVERY;\nEXIT;\n'))
         # Reuse the application's unused-tail reclaim routine on this disposable DB
         # before starting other databases, to stay within development disk budgets.
         import importlib.util
@@ -239,8 +243,12 @@ def main():
         for name in SERVICES:
             output = (directory / (name + '.log')).open('w')
             outputs.append(output)
+            service_env = {**env, 'SERVER_PORT': str(ports[name]),
+                           'MMIV_EVENTS_OUTBOX_DIRECTORY': str(directory / 'outbox' / name)}
+            if name == 'discovery-service':
+                service_env.update({'ORACLE_USER': 'DISCOVERY', 'ORACLE_PASSWORD': 'D' + secret})
             process = subprocess.Popen([java, '-jar', str(jars / (name + '.jar'))],
-                    env={**env, 'SERVER_PORT': str(ports[name]), 'MMIV_EVENTS_OUTBOX_DIRECTORY': str(directory / 'outbox' / name)},
+                    env=service_env,
                     stdout=output, stderr=subprocess.STDOUT)
             processes.append(process)
             if name == 'service-registry':
@@ -592,6 +600,8 @@ def main():
                         'MMIV_EVENTS_ENABLED': 'false', 'MANAGEMENT_HEALTH_RABBIT_ENABLED': 'false',
                         'JWT_ISSUER': 'https://auth.mmiv.example', 'USER_ACCESS_JWT_ISSUER': 'https://auth.mmiv.example'}
             for name, options in [('user-access-service', ['-Poracle-it', 'verify']), ('discovery-service', ['test'])]:
+                if name == 'discovery-service':
+                    test_env.update({'DB_USERNAME': 'DISCOVERY', 'DB_PASSWORD': 'D' + secret})
                 with (artifacts / (name + '-oracle-tests.log')).open('w') as log:
                     subprocess.run([maven, '-q', '-f', str(ROOT / 'services' / name / 'pom.xml'), *options],
                                    env=test_env, stdout=log, stderr=subprocess.STDOUT, check=True, timeout=240)

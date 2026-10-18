@@ -249,6 +249,30 @@ BEGIN
     EXECUTE IMMEDIATE 'CREATE USER USER_ACCESS IDENTIFIED BY "${APP_USER_PASSWORD}" DEFAULT TABLESPACE USERS QUOTA UNLIMITED ON USERS';
   END IF;
   EXECUTE IMMEDIATE 'GRANT DB_DEVELOPER_ROLE TO USER_ACCESS';
+  SELECT COUNT(*) INTO account_count FROM DBA_USERS WHERE USERNAME = 'DISCOVERY';
+  IF account_count = 0 THEN
+    EXECUTE IMMEDIATE 'CREATE USER DISCOVERY IDENTIFIED BY "${DISCOVERY_USER_PASSWORD}" DEFAULT TABLESPACE USERS QUOTA 512M ON USERS';
+  END IF;
+  EXECUTE IMMEDIATE 'GRANT CREATE SESSION, CREATE TABLE, CREATE SEQUENCE TO DISCOVERY';
+  SELECT COUNT(*) INTO account_count FROM DBA_USERS WHERE USERNAME = 'INTEGRITY_SERVICE';
+  IF account_count = 0 THEN
+    EXECUTE IMMEDIATE 'CREATE USER INTEGRITY_SERVICE IDENTIFIED BY "${INTEGRITY_USER_PASSWORD}" DEFAULT TABLESPACE USERS QUOTA 128M ON USERS';
+  END IF;
+  EXECUTE IMMEDIATE 'GRANT CREATE SESSION, CREATE TABLE TO INTEGRITY_SERVICE';
+  BEGIN
+    EXECUTE IMMEDIATE 'CREATE TABLE INTEGRITY_SERVICE.INTEGRITY_VALIDATION_LOG (
+      VALIDATION_ID NUMBER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+      BUCKET_NAME VARCHAR2(255) NOT NULL, OBJECT_KEY VARCHAR2(1024) NOT NULL,
+      SOURCE_CHECKSUM VARCHAR2(64) NOT NULL, DESTINATION_CHECKSUM VARCHAR2(64),
+      ALGORITHM VARCHAR2(20) NOT NULL, VALIDATION_STATUS VARCHAR2(20) NOT NULL,
+      ERROR_MESSAGE VARCHAR2(2000), VALIDATED_AT TIMESTAMP NOT NULL)';
+  EXCEPTION WHEN OTHERS THEN IF SQLCODE != -955 THEN RAISE; END IF;
+  END;
+  FOR legacy IN (SELECT table_name FROM DBA_TABLES WHERE owner = 'USER_ACCESS'
+    AND table_name IN ('MMIV_NAME_LOCKS', 'MMIV_NAME_RESERVATIONS',
+      'MMIV_TRANSFER_PLANS', 'MMIV_VERIFICATION_RUNS', 'FILE_METADATA', 'MEDIA_LOG')) LOOP
+    EXECUTE IMMEDIATE 'GRANT SELECT ON USER_ACCESS.' || legacy.table_name || ' TO DISCOVERY';
+  END LOOP;
 END;
 /
 ''' + ORACLE_STORAGE_SQL + '''
@@ -262,6 +286,10 @@ if ! sqlplus -L -s /nolog >/dev/null 2>&1 <<SQL
 WHENEVER OSERROR EXIT FAILURE
 WHENEVER SQLERROR EXIT FAILURE
 CONNECT USER_ACCESS/"${APP_USER_PASSWORD}"@//localhost:1521/FREEPDB1
+SELECT 1 FROM DUAL;
+CONNECT DISCOVERY/"${DISCOVERY_USER_PASSWORD}"@//localhost:1521/FREEPDB1
+SELECT 1 FROM DUAL;
+CONNECT INTEGRITY_SERVICE/"${INTEGRITY_USER_PASSWORD}"@//localhost:1521/FREEPDB1
 SELECT 1 FROM DUAL;
 EXIT;
 SQL
@@ -345,9 +373,20 @@ def managed_access(state):
         save(settings, {'administrator': 'A' + secrets.token_hex(24),
                         'user_access': 'U' + secrets.token_hex(24)})
     values = json.loads(settings.read_text())
-    if set(values) != {'administrator', 'user_access'} or not all(
-            isinstance(v, str) and re.fullmatch(r'[AU][a-f0-9]{48}', v) for v in values.values()):
+    prefixes = {'administrator': 'A', 'user_access': 'U', 'discovery': 'D', 'integrity': 'I'}
+    if (not isinstance(values, dict) or
+            not {'administrator', 'user_access'} <= set(values) or
+            not set(values) <= set(prefixes) or any(
+                not isinstance(value, str) or
+                not re.fullmatch(prefixes[name] + r'[a-f0-9]{48}', value)
+                for name, value in values.items())):
         raise RuntimeError('Invalid managed Oracle credentials; restore their backup')
+    if set(values) == {'administrator', 'user_access'}:
+        values['discovery'] = 'D' + secrets.token_hex(24)
+        save(settings, values)
+    if set(values) == {'administrator', 'user_access', 'discovery'}:
+        values['integrity'] = 'I' + secrets.token_hex(24)
+        save(settings, values)
     private, public = directory / 'private.pem', directory / 'public.pem'
     if not private.exists():
         if public.exists() or existing.returncode == 0:
@@ -408,7 +447,17 @@ def managed_access(state):
         if not target.exists():
             atomic_write(target, content)
     oracle_env = ('ORACLE_PASSWORD=' + values['administrator'] + '\nAPP_USER=USER_ACCESS\n'
-                  'APP_USER_PASSWORD=' + values['user_access'] + '\n')
+                  'APP_USER_PASSWORD=' + values['user_access'] + '\n'
+                  'DISCOVERY_USER_PASSWORD=' + values['discovery'] + '\n'
+                  'INTEGRITY_USER_PASSWORD=' + values['integrity'] + '\n')
+    discovery_env = ('ORACLE_JDBC_URL=jdbc:oracle:thin:@//oracle:1521/FREEPDB1\n'
+                     'ORACLE_USER=DISCOVERY\nORACLE_PASSWORD=' + values['discovery'] + '\n')
+    atomic_write(directory / 'discovery.env', discovery_env)
+    integrity_env = ('SPRING_PROFILES_ACTIVE=oracle\n'
+                     'INTEGRITY_DB_URL=jdbc:oracle:thin:@//oracle:1521/FREEPDB1\n'
+                     'INTEGRITY_DB_USERNAME=INTEGRITY_SERVICE\n'
+                     'INTEGRITY_DB_PASSWORD=' + values['integrity'] + '\n')
+    atomic_write(directory / 'integrity.env', integrity_env)
     target = directory / 'oracle.env'
     if not target.exists() or target.read_text() != oracle_env:
         atomic_write(target, oracle_env)
@@ -517,7 +566,10 @@ def config_for(state):
             config_id = state.get('USER_ACCESS_CONFIG_ID', '')
             if not re.fullmatch(r'[a-f0-9]{64}', config_id):
                 raise ValueError('Metadata requires the staged Oracle configuration')
-            service['env_file'].append({'path': '/etc/mmiv/user-access/versions/' + config_id + '/environment.env', 'format': 'raw'})
+            discovery_configuration = ('/etc/mmiv/managed-oracle/discovery.env'
+                if state.get('MANAGED_USER_ACCESS_ORACLE') else
+                '/etc/mmiv/user-access/versions/' + config_id + '/discovery.env')
+            service['env_file'].append({'path': discovery_configuration, 'format': 'raw'})
             service['environment'].update({'DISCOVERY_ROOT': '/media',
                                           'SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE': '3',
                                           'SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE': '1'})
@@ -553,6 +605,8 @@ def config_for(state):
                  'target': '/run/mmiv-jwt/public.pem', 'read_only': True}])
         if name in ('integrity-service', 'integrity-service-2'):
             service['env_file'].append({'path': ENVIRONMENT, 'format': 'raw'})
+            if state.get('MANAGED_USER_ACCESS_ORACLE'):
+                service['env_file'].append({'path': '/etc/mmiv/managed-oracle/integrity.env', 'format': 'raw'})
         service['healthcheck'] = {'test': ['CMD-SHELL',
             'wget -q --spider http://127.0.0.1:' + str(port) + '/actuator/health'],
             'interval': '10s', 'timeout': '5s', 'retries': 60, 'start_period': '60s'}
@@ -561,7 +615,7 @@ def config_for(state):
             dependencies['mongodb'] = {'condition': 'service_healthy'}
         if name != 'service-registry' and 'service-registry' in state['services']:
             dependencies['service-registry'] = {'condition': 'service_healthy'}
-        if name in ('user-access-service', 'discovery-service') and state.get('MANAGED_USER_ACCESS_ORACLE'):
+        if name in ('user-access-service', 'discovery-service', 'integrity-service', 'integrity-service-2') and state.get('MANAGED_USER_ACCESS_ORACLE'):
             dependencies['oracle'] = {'condition': 'service_healthy'}
         if name == 'api-gateway':
             dependencies['redis'] = {'condition': 'service_healthy'}
@@ -616,6 +670,17 @@ def config_for(state):
                     '--storage.tsdb.retention.size=512MB'],
         'volumes': [{'type': 'bind', 'source': str(monitoring), 'target': '/etc/prometheus/prometheus.yml', 'read_only': True},
                     {'type': 'volume', 'source': 'prometheus-data', 'target': '/prometheus'}]}
+    grafana_root = Path('/etc/mmiv/monitoring/grafana')
+    services['grafana'] = {'image': 'grafana/grafana:12.2.0', 'container_name': 'grafana',
+        'restart': 'unless-stopped', 'networks': ['backend'], 'ports': ['127.0.0.1:3000:3000'],
+        'mem_limit': '256m', 'memswap_limit': '256m',
+        'environment': {'GF_AUTH_ANONYMOUS_ENABLED': 'true', 'GF_AUTH_ANONYMOUS_ORG_ROLE': 'Viewer',
+                        'GF_AUTH_DISABLE_LOGIN_FORM': 'true'},
+        'depends_on': {'prometheus': {'condition': 'service_started'}},
+        'volumes': [{'type': 'bind', 'source': str(grafana_root / 'provisioning'),
+                     'target': '/etc/grafana/provisioning', 'read_only': True},
+                    {'type': 'bind', 'source': str(grafana_root / 'dashboards'),
+                     'target': '/var/lib/grafana/dashboards', 'read_only': True}]}
     config = {'services': services, 'networks': {'backend': {'external': True, 'name': 'mmiv-backend'}}}
     config['volumes'] = {'prometheus-data': {'name': 'mmiv-prometheus-data'}, 'rabbit-data': {'name': 'mmiv-rabbitmq-data'}, 'mongo-data': {'name': 'mmiv-reporting-data'}}
     if 'oracle' in services:
@@ -628,10 +693,29 @@ def managed_monitoring(state):
     scrape = {'global': {'scrape_interval': '10s'}, 'scrape_configs': [
         {'job_name': name, 'metrics_path': '/actuator/prometheus',
          'static_configs': [{'targets': [name + ':' + str(item['port'])],
-                             'labels': {'service': 'integrity-service' if name == 'integrity-service-2' else name}}]}
+                             'labels': {'service': 'integrity-service' if name == 'integrity-service-2' else name,
+                                        'replica': name}}]}
         for name, item in state['services'].items() if name != 'api-gateway']}
     atomic_write(monitoring, json.dumps(scrape, indent=2))
     monitoring.chmod(0o644)
+    root = monitoring.parent / 'grafana'
+    dashboard = globals().get('INTEGRITY_DASHBOARD_JSON')
+    if dashboard is None:
+        raise RuntimeError('Integrity dashboard was not packaged with the release')
+    for relative, content in (
+        ('dashboards/integrity-validation.json', dashboard),
+        ('provisioning/datasources/prometheus.yml',
+         'apiVersion: 1\ndatasources:\n  - name: Prometheus\n    uid: mmiv-prometheus\n'
+         '    type: prometheus\n    access: proxy\n    url: http://prometheus:9090\n'
+         '    isDefault: true\n    editable: false\n'),
+        ('provisioning/dashboards/mmiv.yml',
+         'apiVersion: 1\nproviders:\n  - name: MMIV\n    folder: MMIV\n'
+         '    type: file\n    disableDeletion: true\n    editable: false\n'
+         '    options:\n      path: /var/lib/grafana/dashboards\n')):
+        target = root / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        atomic_write(target, content)
+        target.chmod(0o644)
 
 
 def ensure_images(state, images):
@@ -821,7 +905,7 @@ def reconcile(action, state):
             labels = previous['services'][replica].get('labels')
             if labels:
                 desired['services'][replica]['labels'] = labels
-    for infrastructure in ('rabbitmq', 'mongodb', 'prometheus', 'redis'):
+    for infrastructure in ('rabbitmq', 'mongodb', 'prometheus', 'grafana', 'redis'):
         previous['services'].setdefault(infrastructure, desired['services'][infrastructure])
     previous['volumes'] = desired['volumes']
     if 'oracle' in desired['services']:

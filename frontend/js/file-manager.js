@@ -9,14 +9,13 @@
  *
  *   GET /api/v1/portal/files?folder=<name>&cursor=<token>
  *     -> { files: [{ fileId, name, sizeBytes, modifiedAt, canDelete }], nextCursor }
- *     name is the storage key with the folder prefix and any migrations/<id>/
- *     segment removed. Only files are returned: the backend filters out every
- *     key ending in "/", so there are no folder entries to render.
+ *     name is the relative path with the folder prefix and any migrations/<id>/
+ *     segment removed. The browser derives folders from the file paths.
  *     The server lists 100 keys per call and authorises READ on the folder,
  *     answering 403 when the account has no access.
  *
- * Uploads, downloads, deletion, preview and subfolder navigation are not part of
- * this phase, so the row actions are rendered but disabled.
+ * Folder rows navigate within the selected destination; file actions use the
+ * original file ID and permissions supplied by the server.
  */
 (() => {
   const PROFILE_URL = '/api/access/me';
@@ -62,6 +61,7 @@
   // Invalidates responses that arrive after the folder changed.
   let generation = 0;
   let query = '';
+  let currentPath = '';
   let observer = null;
   let lastStatus = null;
 
@@ -148,7 +148,7 @@
     wrapper.className = 'file-name';
     icon.className = 'file-icon' + (type.variant ? ' ' + type.variant : '');
     icon.textContent = type.badge;
-    label.textContent = file.name;
+    label.textContent = file.name.split('/').pop();
     wrapper.append(icon, label);
     nameCell.append(wrapper);
 
@@ -184,6 +184,65 @@
 
     row.append(nameCell, typeCell, sizeCell, dateCell, actionsCell);
     return row;
+  }
+
+  function folderRow(name, path) {
+    const row = document.createElement('tr');
+    const nameCell = document.createElement('td');
+    const wrapper = document.createElement('span');
+    const icon = document.createElement('span');
+    const open = document.createElement('button');
+    wrapper.className = 'file-name';
+    icon.className = 'file-icon folder-type';
+    icon.textContent = '📁';
+    open.type = 'button';
+    open.className = 'folder-open';
+    open.textContent = name;
+    open.addEventListener('click', () => openFolder(path));
+    wrapper.append(icon, open);
+    nameCell.append(wrapper);
+    const typeCell = document.createElement('td');
+    typeCell.textContent = 'Folder';
+    const sizeCell = document.createElement('td');
+    sizeCell.textContent = '—';
+    const dateCell = document.createElement('td');
+    dateCell.textContent = '—';
+    const actionsCell = document.createElement('td');
+    const actions = document.createElement('div');
+    actions.className = 'table-actions';
+    const openAction = document.createElement('button');
+    openAction.type = 'button';
+    openAction.className = 'table-action';
+    openAction.textContent = 'Open';
+    openAction.addEventListener('click', () => openFolder(path));
+    actions.append(openAction);
+    actionsCell.append(actions);
+    row.append(nameCell, typeCell, sizeCell, dateCell, actionsCell);
+    return row;
+  }
+
+  function entriesInCurrentFolder() {
+    const folders = new Map();
+    const directFiles = [];
+    for (const file of files) {
+      if (typeof file.name !== 'string' || !file.name.startsWith(currentPath)) continue;
+      const remainder = file.name.slice(currentPath.length);
+      const slash = remainder.indexOf('/');
+      if (slash < 0) directFiles.push(file);
+      else if (slash > 0) {
+        const name = remainder.slice(0, slash);
+        folders.set(name, currentPath + name + '/');
+      }
+    }
+    return { folders: [...folders], directFiles };
+  }
+
+  function openFolder(path) {
+    currentPath = path;
+    if (search) search.value = '';
+    query = '';
+    renderBreadcrumbs();
+    render();
   }
 
   function downloadUrl(fileId) {
@@ -283,33 +342,60 @@
       const separator = document.createElement('span');
       separator.setAttribute('aria-hidden', 'true');
       separator.textContent = '›';
-      const current = document.createElement('span');
-      current.textContent = folder;
-      parts.push(separator, current);
+      const root = document.createElement('button');
+      root.type = 'button';
+      root.className = 'breadcrumb-link';
+      root.textContent = folder;
+      root.addEventListener('click', () => openFolder(''));
+      parts.push(separator, root);
+      let path = '';
+      for (const name of currentPath.split('/').filter(Boolean)) {
+        path += name + '/';
+        const parent = path;
+        const divider = document.createElement('span');
+        divider.setAttribute('aria-hidden', 'true');
+        divider.textContent = '›';
+        const crumb = document.createElement('button');
+        crumb.type = 'button';
+        crumb.className = 'breadcrumb-link';
+        crumb.textContent = name;
+        crumb.addEventListener('click', () => openFolder(parent));
+        parts.push(divider, crumb);
+      }
     }
     breadcrumbs.replaceChildren(...parts);
   }
 
   function render() {
-    const visible = query ? files.filter((file) => file.name.toLowerCase().includes(query)) : files;
+    const entries = entriesInCurrentFolder();
+    const visibleFolders = query
+      ? entries.folders.filter(([name]) => name.toLowerCase().includes(query))
+      : entries.folders;
+    const visibleFiles = query
+      ? entries.directFiles.filter((file) => file.name.split('/').pop().toLowerCase().includes(query))
+      : entries.directFiles;
 
     table.replaceChildren();
-    visible.forEach((file) => table.append(fileRow(file)));
+    visibleFolders.forEach(([name, path]) => table.append(folderRow(name, path)));
+    visibleFiles.forEach((file) => table.append(fileRow(file)));
 
-    if (fileCount) fileCount.textContent = files.length + (files.length === 1 ? ' item' : ' items');
+    const count = entries.folders.length + entries.directFiles.length;
+    if (fileCount) fileCount.textContent = count + (count === 1 ? ' item' : ' items');
 
     if (listStatus) {
       // The search only sees the pages fetched so far, so the count names them
       // as loaded rather than implying the whole folder was searched.
       if (query)
-        listStatus.textContent = visible.length + ' of ' + files.length + ' loaded files match';
+        listStatus.textContent =
+          visibleFolders.length + visibleFiles.length + ' of ' + count + ' loaded items match';
       else if (cursor) listStatus.textContent = 'Scroll to load more';
       else listStatus.textContent = '';
     }
 
-    if (emptyFolder) emptyFolder.hidden = files.length !== 0;
-    if (files.length === 0) setBrowseStatus('');
-    else if (query && visible.length === 0) setBrowseStatus('No loaded files match your search.');
+    if (emptyFolder) emptyFolder.hidden = count !== 0 || !!cursor;
+    if (count === 0) setBrowseStatus('');
+    else if (query && visibleFolders.length + visibleFiles.length === 0)
+      setBrowseStatus('No loaded items match your search.');
     else setBrowseStatus('');
 
     observeSentinel();
@@ -343,6 +429,7 @@
 
   async function loadFiles(options = {}) {
     if (options.reset) {
+      if (options.resetPath) currentPath = '';
       generation += 1;
       loading = false;
       clearListing();
@@ -672,7 +759,7 @@
     await loadFiles({ reset: true });
   }
 
-  folderSelect.addEventListener('change', () => loadFiles({ reset: true }));
+  folderSelect.addEventListener('change', () => loadFiles({ reset: true, resetPath: true }));
 
   if (search) {
     search.addEventListener('input', () => {

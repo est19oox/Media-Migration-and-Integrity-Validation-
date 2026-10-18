@@ -19,6 +19,9 @@ if [ -d /opt/jdk-25 ]; then
     export PATH
 fi
 
+# Services consume these pinned artifacts instead of compiling shared source trees.
+mvn --batch-mode -f "$ROOT/common/pom.xml" clean install
+
 # This is part of the endpoint evidence contract used by CD.
 require_command python3
 if [ -f "$ROOT/tests/ci/test-endpoint-runner.py" ]; then

@@ -12,17 +12,20 @@ import org.springframework.web.server.ResponseStatusException;
 @Service
 public class VerificationCleanupService {
   private final MetadataPlanRepository repository;
+  private final mmiv.repository.VerificationRunRepository runs;
   private final PermissionClient permissions;
   private final RestClient transfer;
   private final RestClient reporting;
 
   public VerificationCleanupService(
       MetadataPlanRepository repository,
+      mmiv.repository.VerificationRunRepository runs,
       PermissionClient permissions,
       @Value("${mmiv.transfer.url:http://transfer-service}") String transferUrl,
       @Value("${mmiv.reporting.url:http://reporting-service}") String reportingUrl,
       mmiv.resilience.EurekaHttpClients.EurekaRestClientFactory clients) {
     this.repository = repository;
+    this.runs = runs;
     this.permissions = permissions;
     transfer = clients.create("transfer", transferUrl, java.time.Duration.ofMinutes(5));
     reporting = clients.create("reporting", reportingUrl, java.time.Duration.ofMinutes(5));
@@ -30,7 +33,7 @@ public class VerificationCleanupService {
 
   public boolean closed(Jwt jwt, UUID run) {
     permissions.requireActive(jwt.getTokenValue());
-    return repository.isClosed(jwt.getSubject(), run);
+    return runs.isClosed(jwt.getSubject(), run);
   }
 
   public List<MetadataPlan> plans(Jwt jwt, UUID run) {
@@ -43,7 +46,7 @@ public class VerificationCleanupService {
 
   public Object clean(Jwt jwt, UUID run) {
     plans(jwt, run); // Authorize before closing or deleting anything.
-    repository.closeRun(jwt.getSubject(), run);
+    runs.close(jwt.getSubject(), run);
     try {
       transfer
           .post()

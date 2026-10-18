@@ -16,11 +16,15 @@ class MetadataAuthorizationTest {
   @TempDir Path root;
   PermissionClient permissions = mock(PermissionClient.class);
   MetadataPlanRepository plans = mock(MetadataPlanRepository.class);
+  MetadataAssignmentService assignments = mock(MetadataAssignmentService.class);
+  mmiv.repository.VerificationRunRepository runs =
+      mock(mmiv.repository.VerificationRunRepository.class);
   EventPublisher events = mock(EventPublisher.class);
   Jwt jwt = Jwt.withTokenValue("caller-token").header("alg", "RS256").subject("caller").build();
 
   MetadataService service() {
-    return new MetadataService(permissions, plans, events, root.toString(), "landing", "bucket");
+    return new MetadataService(
+        permissions, plans, assignments, runs, events, root.toString(), "landing", "bucket");
   }
 
   @Test
@@ -33,7 +37,7 @@ class MetadataAuthorizationTest {
         () ->
             service()
                 .create(jwt, new MetadataService.CreatePlan("landing", null, "test.txt", 5), true));
-    verifyNoInteractions(plans, events);
+    verifyNoInteractions(plans, assignments, events);
   }
 
   @Test
@@ -45,7 +49,7 @@ class MetadataAuthorizationTest {
     assertEquals("bucket", plan.bucket());
     assertEquals("landing/migrations/" + plan.metadataId() + "/test.txt", plan.destinationKey());
     verify(permissions).require("caller-token", "caller", "landing", "WRITE");
-    verify(plans).saveNamed(plan, null);
+    verify(assignments).allocate(plan, null);
     verify(events, times(3))
         .migration(
             anyString(), anyString(), eq(plan.migrationId()), nullable(UUID.class), anyMap());
@@ -67,7 +71,7 @@ class MetadataAuthorizationTest {
                     jwt,
                     new MetadataService.CreatePlan("landing", "../outside.txt", null, 0),
                     false));
-    verifyNoInteractions(plans, events);
+    verifyNoInteractions(plans, assignments, events);
   }
 
   @Test

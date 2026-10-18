@@ -15,6 +15,8 @@ import org.springframework.web.server.ResponseStatusException;
 public class MetadataService {
   private final PermissionClient permissions;
   private final MetadataPlanRepository plans;
+  private final MetadataAssignmentService assignments;
+  private final mmiv.repository.VerificationRunRepository runs;
   private final EventPublisher events;
   private final Path root;
   private final String destination;
@@ -23,6 +25,8 @@ public class MetadataService {
   public MetadataService(
       PermissionClient permissions,
       MetadataPlanRepository plans,
+      MetadataAssignmentService assignments,
+      mmiv.repository.VerificationRunRepository runs,
       EventPublisher events,
       @Value("${discovery.root}") String root,
       @Value("${mmiv.metadata.destination-id:${mmiv.s3.bucket:media-migration-dev-landing}}")
@@ -30,6 +34,8 @@ public class MetadataService {
       @Value("${mmiv.s3.bucket:media-migration-dev-landing}") String bucket) {
     this.permissions = permissions;
     this.plans = plans;
+    this.assignments = assignments;
+    this.runs = runs;
     this.events = events;
     this.root = Path.of(root);
     this.destination = destination;
@@ -89,11 +95,9 @@ public class MetadataService {
     var file = plan.fileId();
     String contentType = plan.contentType();
     String objectPath = plan.objectPath();
-    if (request.occupiedPaths() != null
-        && (request.occupiedPaths().size() > 100000
-            || request.occupiedPaths().stream().anyMatch(p -> p == null || p.length() > 900)))
+    if (!MetadataPlan.validOccupiedPaths(request.occupiedPaths()))
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid folder inventory");
-    var named = plans.saveNamed(plan, request.occupiedPaths());
+    var named = assignments.allocate(plan, request.occupiedPaths());
     if (named != null) plan = named;
     events.migration(
         "MIGRATION_STARTED",
@@ -118,11 +122,7 @@ public class MetadataService {
             "relativePath",
             source == null ? objectPath : source,
             "mediaType",
-            contentType.startsWith("image/")
-                ? "IMAGE"
-                : contentType.startsWith("video/")
-                    ? "VIDEO"
-                    : contentType.startsWith("audio/") ? "AUDIO" : "DOCUMENT",
+            plan.mediaType(),
             "format",
             name.substring(name.lastIndexOf('.') + 1).toUpperCase(Locale.ROOT),
             "sizeBytes",
@@ -147,8 +147,8 @@ public class MetadataService {
       throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Metadata not found");
     permissions.require(jwt.getTokenValue(), jwt.getSubject(), plan.destinationId(), action);
     if ("WRITE".equals(action)
-        && plan.verificationRunId() != null
-        && plans.isClosed(plan.ownerId(), plan.verificationRunId()))
+        && plan.requiresOpenVerificationRunForWrite()
+        && runs.isClosed(plan.ownerId(), plan.verificationRunId()))
       throw new ResponseStatusException(HttpStatus.CONFLICT, "Verification run is closed");
     return plan;
   }
@@ -194,15 +194,7 @@ public class MetadataService {
   public int deleteFolderPlans(Jwt jwt, String folder, String path) {
     permissions.requireAdmin(jwt.getTokenValue());
     permissions.requireFolder(jwt.getTokenValue(), folder);
-    if (path != null
-        && (path.isBlank()
-            || path.length() > 900
-            || Arrays.stream(path.split("/", -1))
-                .anyMatch(
-                    p ->
-                        p.equals(".")
-                            || p.equals("..")
-                            || !p.matches("[\\p{L}\\p{N}._ ()-]{1,200}"))))
+    if (!MetadataPlan.validFolderPath(path))
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid folder path");
     return plans.deleteFolder(folder, path);
   }

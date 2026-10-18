@@ -2,16 +2,28 @@ package mmiv.repository;
 
 import java.util.UUID;
 import mmiv.model.VerificationRun;
+import org.springframework.beans.factory.InitializingBean;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
 
 @Repository
-public class VerificationRunRepository {
+public class VerificationRunRepository implements InitializingBean {
   private final JdbcTemplate jdbc;
 
   public VerificationRunRepository(JdbcTemplate jdbc) {
     this.jdbc = jdbc;
+  }
+
+  @Override
+  public void afterPropertiesSet() {
+    jdbc.execute(
+        "DECLARE BEGIN EXECUTE IMMEDIATE 'CREATE TABLE MMIV_VERIFICATION_RUNS ("
+            + "OWNER_ID VARCHAR2(128) NOT NULL, RUN_ID VARCHAR2(36) NOT NULL,"
+            + " CLOSED NUMBER DEFAULT 0 NOT NULL, PRIMARY KEY(OWNER_ID,RUN_ID))';"
+            + " EXCEPTION WHEN OTHERS THEN IF SQLCODE != -955 THEN RAISE; END IF; END;");
+    mmiv.integration.LegacyDiscoveryDataMigration.copy(
+        jdbc, "MMIV_VERIFICATION_RUNS", "OWNER_ID,RUN_ID,CLOSED");
   }
 
   public VerificationRun lock(String owner, UUID run) {

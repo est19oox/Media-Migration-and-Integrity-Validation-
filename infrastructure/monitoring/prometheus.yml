@@ -22,6 +22,7 @@ scrape_configs:
           - integrity-service:8082
         labels:
           service: integrity-service
+          replica: integrity-service
   - job_name: integrity-service-2
     metrics_path: /actuator/prometheus
     static_configs:
@@ -29,6 +30,7 @@ scrape_configs:
           - integrity-service-2:8086
         labels:
           service: integrity-service
+          replica: integrity-service-2
   - job_name: user-access-service
     metrics_path: /actuator/prometheus
     static_configs:

@@ -22,6 +22,11 @@ public final class CookieServerBearerTokenConverter implements ServerAuthenticat
     if (authorization != null) {
       return headerConverter.convert(exchange);
     }
+    // Login, signup and password reset must work even when the browser still
+    // carries a session cookie invalidated by a password change.
+    if (GatewaySecurityConfiguration.isPublicAuthPost(exchange)) {
+      return Mono.empty();
+    }
     HttpCookie cookie = exchange.getRequest().getCookies().getFirst(AUTH_COOKIE);
     return cookie == null || cookie.getValue().isBlank()
         ? Mono.empty()

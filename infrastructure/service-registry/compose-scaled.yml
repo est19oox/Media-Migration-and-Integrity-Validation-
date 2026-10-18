@@ -125,8 +125,8 @@ services:
     environment:
       EUREKA_DEFAULT_ZONE: http://service-registry:8761/eureka/
       DB_URL: ${DB_URL:?Set DB_URL}
-      DB_USERNAME: ${DB_USERNAME:?Set DB_USERNAME}
-      DB_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD}
+      DB_USERNAME: ${DISCOVERY_DB_USERNAME:?Set DISCOVERY_DB_USERNAME to the Discovery schema user}
+      DB_PASSWORD: ${DISCOVERY_DB_PASSWORD:?Set DISCOVERY_DB_PASSWORD}
       DISCOVERY_ROOT: ${DISCOVERY_ROOT:-/media}
       SPRING_RABBITMQ_HOST: rabbitmq
       SPRING_RABBITMQ_USERNAME: mmiv
@@ -335,6 +335,23 @@ services:
     volumes:
     - ../monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
     - prometheus-data:/prometheus
+  grafana:
+    image: grafana/grafana:12.2.0
+    restart: unless-stopped
+    networks:
+    - registry
+    depends_on:
+    - prometheus
+    ports:
+    - 127.0.0.1:3000:3000
+    mem_limit: 256m
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: 'true'
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_AUTH_DISABLE_LOGIN_FORM: 'true'
+    volumes:
+    - ../monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+    - ../monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
 networks:
   registry: null
 volumes:

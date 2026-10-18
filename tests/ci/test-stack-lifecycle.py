@@ -40,6 +40,9 @@ class StackLifecycleTest(unittest.TestCase):
                                    for n, p in ssm.PORTS.items() if n in
                                    ('service-registry', 'transfer-service', 'integrity-service', 'api-gateway')}}
         self.addCleanup(patch.stopall)
+        patch.object(remote, 'INTEGRITY_DASHBOARD_JSON',
+                     (ROOT / 'infrastructure/monitoring/grafana/dashboards/integrity-validation.json').read_text(),
+                     create=True).start()
         patch.object(remote, 'Path', side_effect=lambda path: self.root / str(path).lstrip('/')).start()
         patch.object(remote, 'command', side_effect=self.command).start()
         patch.object(remote, 'healthy').start()
@@ -203,7 +206,11 @@ class StackLifecycleTest(unittest.TestCase):
         self.assertIn('MMIV_BOOTSTRAP_ADMIN_USERNAME=admin', bootstrap_environment)
         self.assertIn({'path': '/etc/mmiv/managed-oracle/bootstrap-admin.env', 'format': 'raw'}, self.configs['user-access-service']['env_file'])
         self.assertNotIn('MMIV_BOOTSTRAP_ADMIN_PASSWORD', environment)
-        self.assertNotIn('oracle', self.configs['integrity-service'].get('depends_on', {}))
+        self.assertIn('oracle', self.configs['integrity-service'].get('depends_on', {}))
+        self.assertIn({'path': '/etc/mmiv/managed-oracle/integrity.env', 'format': 'raw'},
+                      self.configs['integrity-service']['env_file'])
+        self.assertIn('ORACLE_USER=DISCOVERY', (secrets_dir / 'discovery.env').read_text())
+        self.assertIn('INTEGRITY_DB_USERNAME=INTEGRITY_SERVICE', (secrets_dir / 'integrity.env').read_text())
         self.assertEqual((self.root / 'etc/mmiv/integrity.env').read_text(),
                          '# Embedded H2 mode: no Oracle secrets required.\n')
         self.assertTrue(all((secrets_dir / n).stat().st_mode & 0o777 == 0o600
@@ -242,7 +249,8 @@ class StackLifecycleTest(unittest.TestCase):
         hook = directory / 'startup.sh'
         hook.write_text(remote.ORACLE_STARTUP.replace('/opt/oracle/oradata/mmiv-app-user-ready', str(marker)))
         env = {**os.environ, 'PATH': str(directory) + os.pathsep + os.environ['PATH'],
-               'APP_USER_PASSWORD': 'test-password', 'TEST_LOGIN_EXIT': '1',
+               'APP_USER_PASSWORD': 'test-password', 'DISCOVERY_USER_PASSWORD': 'test-discovery',
+               'INTEGRITY_USER_PASSWORD': 'test-integrity', 'TEST_LOGIN_EXIT': '1',
                'TEST_SCHEMA_EXIT': '0', 'SQL_CAPTURE': str(directory / 'captured.sql')}
         for exit_code in ('1', '0'):
             env['TEST_LOGIN_EXIT'] = exit_code

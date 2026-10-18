@@ -53,6 +53,8 @@ jobs:
       working-directory: frontend
       run: npm ci && npm run build
     - name: Build and test
+      run: mvn -B -f common/pom.xml clean install
+    - name: Build and test service
       working-directory: ${{ inputs.service-path }}
       run: mvn -B clean verify
     - name: Verify Docker build JAR

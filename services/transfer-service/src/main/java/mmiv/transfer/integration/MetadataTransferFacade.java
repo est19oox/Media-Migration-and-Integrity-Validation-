@@ -2,6 +2,7 @@ package mmiv.transfer.integration;
 
 import java.util.*;
 import mmiv.events.EventPublisher;
+import mmiv.transfer.domain.TransferAssignment;
 import mmiv.transfer.dto.*;
 import mmiv.transfer.service.*;
 import org.springframework.stereotype.Service;
@@ -44,19 +45,19 @@ public class MetadataTransferFacade {
     try (@SuppressWarnings("unused")
         var folderScope = accessGuard.read(initial.destinationId())) {
       var plan = metadata.resolve(metadataId);
+      UUID requestedRun = null;
       if (org.springframework.web.context.request.RequestContextHolder.getRequestAttributes()
           instanceof org.springframework.web.context.request.ServletRequestAttributes attributes) {
         String run = attributes.getRequest().getHeader("X-MMIV-Verification-Run");
-        if (run != null && !UUID.fromString(run).equals(plan.verificationRunId()))
-          throw new IllegalArgumentException(
-              "Verification transfer must use a plan from the same run");
+        if (run != null) requestedRun = UUID.fromString(run);
       }
-      if (!"SOURCE".equals(plan.kind()) || plan.sourcePath() == null)
-        throw new IllegalArgumentException("Metadata requires an uploaded file");
+      String source =
+          new TransferAssignment(plan.kind(), plan.sourcePath(), plan.verificationRunId())
+              .sourceForTransfer(requestedRun);
       MigrationContext.set(plan);
       try (var scope = runs.acquire(plan)) {
         return transfers.transfer(
-            new TransferRequest(plan.sourcePath(), plan.destinationKey(), plan.contentType()));
+            new TransferRequest(source, plan.destinationKey(), plan.contentType()));
       } finally {
         MigrationContext.clear();
       }

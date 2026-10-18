@@ -131,6 +131,12 @@ public class GatewaySecurityConfiguration {
                       if (!methodRequiresCsrf.isMatch()) {
                         return ServerWebExchangeMatcher.MatchResult.notMatch();
                       }
+                      // Public credential endpoints do not act on the existing session.
+                      // A password reset invalidates that session while its cookie may
+                      // still be present in the browser.
+                      if (isPublicAuthPost(exchange)) {
+                        return ServerWebExchangeMatcher.MatchResult.notMatch();
+                      }
                       boolean cookiePresent =
                           exchange.getRequest().getCookies().getFirst("MMIV_SESSION") != null;
                       boolean explicitBearer =
@@ -199,5 +205,13 @@ public class GatewaySecurityConfiguration {
   private static boolean isHtmlPage(ServerWebExchange exchange) {
     String path = exchange.getRequest().getPath().pathWithinApplication().value();
     return "/".equals(path) || path.endsWith(".html");
+  }
+
+  static boolean isPublicAuthPost(ServerWebExchange exchange) {
+    if (exchange.getRequest().getMethod() != HttpMethod.POST) return false;
+    String path = exchange.getRequest().getPath().pathWithinApplication().value();
+    return path.equals("/user-access/api/auth/login")
+        || path.equals("/user-access/api/auth/signup")
+        || path.equals("/user-access/api/auth/password-reset");
   }
 }

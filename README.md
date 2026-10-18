@@ -29,9 +29,11 @@ MMIV discovers, transfers, validates, and reports media migrations with destinat
 
 Each microservice is maintained independently under `services/`.
 
-Build and test a service from its own directory:
+Install the versioned shared Maven modules once, then build and test a service from its own directory:
 
 ```bash
+mvn -f common/pom.xml clean install
+cd services/transfer-service
 mvn clean verify
 ```
 

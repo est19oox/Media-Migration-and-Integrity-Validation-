@@ -10,6 +10,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import zlib
 
 import re
 import yaml
@@ -75,8 +76,12 @@ def aws(*args):
 
 def lifecycle(action, state):
     source = Path(__file__).with_name('docker-stack-remote.py').read_bytes()
-    encoded = base64.b64encode(source).decode()
-    launch = 'import base64; exec(compile(base64.b64decode(' + repr(encoded) + "), '<docker-lifecycle>', 'exec'))"
+    encoded = base64.b64encode(zlib.compress(source, 9)).decode()
+    dashboard = (ROOT / 'infrastructure/monitoring/grafana/dashboards/integrity-validation.json').read_bytes()
+    encoded_dashboard = base64.b64encode(zlib.compress(dashboard, 9)).decode()
+    launch = ('import base64,zlib; INTEGRITY_DASHBOARD_JSON = zlib.decompress(base64.b64decode('
+              + repr(encoded_dashboard) + ')).decode(); exec(compile(zlib.decompress(base64.b64decode('
+              + repr(encoded) + ")), '<docker-lifecycle>', 'exec'))")
     shell = 'python3 -c ' + shlex.quote(launch) + ' ' + shlex.quote(action) + ' ' + shlex.quote(json.dumps(state))
     # Temporary file contains only image/config identities, never Oracle secrets.
     with tempfile.TemporaryDirectory() as directory:

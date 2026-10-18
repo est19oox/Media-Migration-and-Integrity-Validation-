@@ -17,6 +17,15 @@ ROOT = Path(__file__).resolve().parents[2]
 ROLE = ROOT / 'infrastructure/ansible/roles/microservice'
 
 class DeploymentConfigurationTest(unittest.TestCase):
+    def test_integrity_scrape_targets_have_distinct_replica_labels(self):
+        monitoring = yaml.safe_load((ROOT / 'infrastructure/monitoring/prometheus.yml').read_text())
+        targets = {job['job_name']: job['static_configs'][0] for job in monitoring['scrape_configs']}
+        self.assertEqual(targets['integrity-service']['labels']['replica'], 'integrity-service')
+        self.assertEqual(targets['integrity-service-2']['labels']['replica'], 'integrity-service-2')
+        dashboard = json.loads((ROOT / 'infrastructure/monitoring/grafana/dashboards/integrity-validation.json').read_text())
+        self.assertTrue(any('mmiv_integrity_validation_seconds_bucket' in panel['targets'][0]['expr']
+                            for panel in dashboard['panels']))
+
     def test_every_eureka_client_registers_and_reports_health(self):
         for service in ['api-gateway', 'transfer-service', 'integrity-service',
                         'user-access-service', 'reporting-service', 'discovery-service']:

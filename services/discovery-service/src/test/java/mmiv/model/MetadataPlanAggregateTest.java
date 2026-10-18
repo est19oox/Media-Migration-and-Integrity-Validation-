@@ -45,4 +45,14 @@ class MetadataPlanAggregateTest {
     assertFalse(run.close().acceptsPlans());
     assertEquals(run.close(), run.close().close());
   }
+
+  @Test
+  void planOwnsItsMediaAndFolderPathRules() {
+    var plan = plan("semester/report.pdf");
+    assertEquals("DOCUMENT", plan.mediaType());
+    assertFalse(plan.requiresOpenVerificationRunForWrite());
+    assertTrue(MetadataPlan.validFolderPath("semester/week 1"));
+    assertFalse(MetadataPlan.validFolderPath("semester/../other"));
+    assertFalse(MetadataPlan.validOccupiedPaths(java.util.Arrays.asList("valid", null)));
+  }
 }

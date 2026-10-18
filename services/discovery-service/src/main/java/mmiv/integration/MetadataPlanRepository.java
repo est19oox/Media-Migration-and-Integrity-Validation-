@@ -12,17 +12,10 @@ import tools.jackson.databind.json.JsonMapper;
 @Repository
 public class MetadataPlanRepository implements InitializingBean {
   private final JdbcTemplate jdbc;
-  private final mmiv.repository.VerificationRunRepository runs;
   private final JsonMapper json = JsonMapper.builder().build();
 
-  @org.springframework.beans.factory.annotation.Autowired
-  public MetadataPlanRepository(JdbcTemplate jdbc, mmiv.repository.VerificationRunRepository runs) {
-    this.jdbc = jdbc;
-    this.runs = runs;
-  }
-
   public MetadataPlanRepository(JdbcTemplate jdbc) {
-    this(jdbc, new mmiv.repository.VerificationRunRepository(jdbc));
+    this.jdbc = jdbc;
   }
 
   @Override
@@ -32,9 +25,6 @@ public class MetadataPlanRepository implements InitializingBean {
         "CREATE TABLE MMIV_NAME_RESERVATIONS (FOLDER VARCHAR2(80) NOT NULL, OBJECT_PATH"
             + " VARCHAR2(900 BYTE) NOT NULL, PLAN_ID VARCHAR2(36) NOT NULL, PRIMARY"
             + " KEY(FOLDER,OBJECT_PATH))");
-    createTable(
-        "CREATE TABLE MMIV_VERIFICATION_RUNS (OWNER_ID VARCHAR2(128) NOT NULL, RUN_ID VARCHAR2(36)"
-            + " NOT NULL, CLOSED NUMBER DEFAULT 0 NOT NULL, PRIMARY KEY(OWNER_ID,RUN_ID))");
     createTable(
         "CREATE TABLE FILE_METADATA (FILE_ID NUMBER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,"
             + " FILE_NAME VARCHAR2(255) NOT NULL, MEDIA_TYPE VARCHAR2(100), FILE_SIZE NUMBER,"
@@ -54,6 +44,16 @@ public class MetadataPlanRepository implements InitializingBean {
             PLAN_JSON CLOB NOT NULL, EXPIRES_AT TIMESTAMP NOT NULL)';
         EXCEPTION WHEN OTHERS THEN IF SQLCODE != -955 THEN RAISE; END IF; END;
         """);
+    LegacyDiscoveryDataMigration.copy(jdbc, "MMIV_NAME_LOCKS", "FOLDER");
+    LegacyDiscoveryDataMigration.copy(jdbc, "MMIV_NAME_RESERVATIONS", "FOLDER,OBJECT_PATH,PLAN_ID");
+    LegacyDiscoveryDataMigration.copy(
+        jdbc, "MMIV_TRANSFER_PLANS", "PLAN_ID,OWNER_ID,PLAN_JSON,EXPIRES_AT");
+    LegacyDiscoveryDataMigration.copy(
+        jdbc, "FILE_METADATA", "FILE_NAME,MEDIA_TYPE,FILE_SIZE,SRC_DIR,CREATED_DATE");
+    LegacyDiscoveryDataMigration.copy(
+        jdbc,
+        "MEDIA_LOG",
+        "FILE_NAME,FILE_TYPE,FILE_DIR,FILE_SIZE,VALIDATION_STATUS,CHECK_FAILED,EXPECTED_VALUE,CHECKED_AT");
   }
 
   private void createTable(String sql) {
@@ -65,11 +65,6 @@ public class MetadataPlanRepository implements InitializingBean {
 
   @org.springframework.transaction.annotation.Transactional
   public void save(MetadataPlan plan) {
-    if (plan.verificationRunId() != null) {
-      if (!runs.lock(plan.ownerId(), plan.verificationRunId()).acceptsPlans())
-        throw new org.springframework.web.server.ResponseStatusException(
-            org.springframework.http.HttpStatus.CONFLICT, "Verification run is closed");
-    }
     jdbc.update(
         "INSERT INTO MMIV_TRANSFER_PLANS (PLAN_ID,OWNER_ID,PLAN_JSON,EXPIRES_AT) VALUES (?,?,?,?)",
         plan.metadataId().toString(),
@@ -122,16 +117,6 @@ public class MetadataPlanRepository implements InitializingBean {
         id.toString(),
         id.toString(),
         owner);
-  }
-
-  // Compatibility facade; VerificationRunRepository exclusively persists run aggregates.
-  @org.springframework.transaction.annotation.Transactional
-  public void closeRun(String owner, UUID run) {
-    runs.close(owner, run);
-  }
-
-  public boolean isClosed(String owner, UUID run) {
-    return runs.isClosed(owner, run);
   }
 
   public List<MetadataPlan> verificationPlans(String owner, UUID run) {

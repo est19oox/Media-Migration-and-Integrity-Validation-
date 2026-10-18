@@ -18,6 +18,7 @@ class VerificationCleanupServiceTest {
   @Test
   void peerFailureRetainsPlansForRetryAndNeverDeletesUnrelatedRows() throws Exception {
     var repository = mock(MetadataPlanRepository.class);
+    var runs = mock(mmiv.repository.VerificationRunRepository.class);
     var permissions = mock(PermissionClient.class);
     var run = UUID.randomUUID();
     var paths = new ArrayList<String>();
@@ -32,13 +33,14 @@ class VerificationCleanupServiceTest {
     server.start();
     String url = "http://127.0.0.1:" + server.getAddress().getPort();
     try {
-      var service = new VerificationCleanupService(repository, permissions, url, url, clients());
+      var service =
+          new VerificationCleanupService(repository, runs, permissions, url, url, clients());
       var jwt = Jwt.withTokenValue("fixture").header("alg", "RS256").subject("owner").build();
       assertThrows(
           org.springframework.web.server.ResponseStatusException.class,
           () -> service.clean(jwt, run));
       verify(repository).verificationPlans("owner", run);
-      verify(repository).closeRun("owner", run);
+      verify(runs).close("owner", run);
       verify(repository, never()).deleteVerificationPlans(anyString(), any(UUID.class));
       assertEquals(List.of("/api/v1/verification/" + run + "/cleanup"), paths);
     } finally {
@@ -49,6 +51,7 @@ class VerificationCleanupServiceTest {
   @Test
   void deniedPermissionCannotCloseRunOrDeleteData() {
     var repository = mock(MetadataPlanRepository.class);
+    var runs = mock(mmiv.repository.VerificationRunRepository.class);
     var permissions = mock(PermissionClient.class);
     doThrow(
             new org.springframework.web.server.ResponseStatusException(
@@ -57,11 +60,12 @@ class VerificationCleanupServiceTest {
         .requireActive("fixture");
     var service =
         new VerificationCleanupService(
-            repository, permissions, "http://127.0.0.1:1", "http://127.0.0.1:1", clients());
+            repository, runs, permissions, "http://127.0.0.1:1", "http://127.0.0.1:1", clients());
     var jwt = Jwt.withTokenValue("fixture").header("alg", "RS256").subject("owner").build();
     assertThrows(
         org.springframework.web.server.ResponseStatusException.class,
         () -> service.clean(jwt, UUID.randomUUID()));
     verifyNoInteractions(repository);
+    verifyNoInteractions(runs);
   }
 }

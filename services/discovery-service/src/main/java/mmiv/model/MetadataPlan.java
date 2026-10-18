@@ -1,5 +1,6 @@
 package mmiv.model;
 
+import java.util.Collection;
 import java.util.Locale;
 import java.util.Set;
 import java.util.UUID;
@@ -151,6 +152,35 @@ public record MetadataPlan(
 
   public boolean visibleTo(String userId) {
     return destinationKey.startsWith(destinationId + "/") || belongsTo(userId);
+  }
+
+  public boolean requiresOpenVerificationRunForWrite() {
+    return verificationRunId != null;
+  }
+
+  public String mediaType() {
+    if (contentType.startsWith("image/")) return "IMAGE";
+    if (contentType.startsWith("video/")) return "VIDEO";
+    if (contentType.startsWith("audio/")) return "AUDIO";
+    return "DOCUMENT";
+  }
+
+  public static boolean validOccupiedPaths(Collection<String> occupied) {
+    return occupied == null
+        || occupied.size() <= 100000
+            && occupied.stream().allMatch(path -> path != null && path.length() <= 900);
+  }
+
+  public static boolean validFolderPath(String path) {
+    return path == null
+        || !path.isBlank()
+            && path.length() <= 900
+            && java.util.Arrays.stream(path.split("/", -1))
+                .allMatch(
+                    part ->
+                        part.matches("[\\p{L}\\p{N}._ ()-]{1,200}")
+                            && !part.equals(".")
+                            && !part.equals(".."));
   }
 
   public boolean matchesObject(String key) {

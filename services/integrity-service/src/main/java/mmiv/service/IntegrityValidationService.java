@@ -16,13 +16,16 @@ public class IntegrityValidationService {
 
   private final S3ChecksumService s3ChecksumService;
   private final IntegrityValidationLogRepository validationLogRepository;
+  private final io.micrometer.core.instrument.MeterRegistry metrics;
 
   public IntegrityValidationService(
       S3ChecksumService s3ChecksumService,
-      IntegrityValidationLogRepository validationLogRepository) {
+      IntegrityValidationLogRepository validationLogRepository,
+      io.micrometer.core.instrument.MeterRegistry metrics) {
 
     this.s3ChecksumService = s3ChecksumService;
     this.validationLogRepository = validationLogRepository;
+    this.metrics = metrics;
   }
 
   public ValidationResponse validate(String bucket, String objectKey, String sourceChecksum)
@@ -68,7 +71,11 @@ public class IntegrityValidationService {
 
       throw e;
     } finally {
-      io.micrometer.core.instrument.Metrics.timer("mmiv.integrity.validation", "outcome", outcome)
+      io.micrometer.core.instrument.Timer.builder("mmiv.integrity.validation")
+          .description("End-to-end checksum validation duration")
+          .tag("outcome", outcome)
+          .publishPercentileHistogram()
+          .register(metrics)
           .record(System.nanoTime() - started, java.util.concurrent.TimeUnit.NANOSECONDS);
     }
   }

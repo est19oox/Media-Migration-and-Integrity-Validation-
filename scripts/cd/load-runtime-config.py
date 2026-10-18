@@ -43,6 +43,11 @@ def values(config, mode):
             return output
         for key, name in [('dbUrl', 'DB_URL'), ('dbUsername', 'DB_USERNAME'), ('dbPassword', 'DB_PASSWORD')]:
             output['USER_ACCESS_' + name] = text(access, key)
+        discovery = section(config, 'discovery', required=True)
+        for key, name in [('dbUrl', 'DB_URL'), ('dbUsername', 'DB_USERNAME'), ('dbPassword', 'DB_PASSWORD')]:
+            output['DISCOVERY_' + name] = text(discovery, key)
+        if output['DISCOVERY_DB_USERNAME'].upper() == output['USER_ACCESS_DB_USERNAME'].upper():
+            raise ValueError('Discovery and User Access must use different Oracle schemas')
         private = text(access, 'jwtPrivateKey', multiline=True).strip()
         if not private.startswith('-----BEGIN PRIVATE KEY-----') or not private.endswith('-----END PRIVATE KEY-----'):
             raise ValueError('jwtPrivateKey must be unencrypted PKCS8 PEM')
