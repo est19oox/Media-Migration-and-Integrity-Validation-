@@ -136,6 +136,95 @@ public class MetadataService {
     return plan;
   }
 
+  @org.springframework.transaction.annotation.Transactional
+  public BatchAllocationResponse allocateBatch(
+      Jwt jwt, BatchAllocationRequest request, UUID verificationRun) {
+    if (request == null
+        || !MetadataPlan.validDestination(request.destinationId(), bucket)
+        || request.files() == null
+        || request.files().isEmpty()
+        || request.files().size() > 500)
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid allocation batch");
+    permissions.requireFolder(jwt.getTokenValue(), request.destinationId());
+    if (!MetadataPlan.acceptsVerificationRun(request.destinationId(), verificationRun))
+      throw new ResponseStatusException(
+          HttpStatus.FORBIDDEN, "Verification folder requires its run ID");
+    permissions.require(jwt.getTokenValue(), jwt.getSubject(), request.destinationId(), "WRITE");
+    if (!MetadataPlan.validOccupiedPaths(request.occupiedPaths()))
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid folder inventory");
+
+    UUID migrationId = UUID.randomUUID();
+    var pending = new ArrayList<MetadataPlan>(request.files().size());
+    try {
+      for (BatchAllocationRequest.FileItem file : request.files()) {
+        if (file == null) throw new IllegalArgumentException("Invalid media file");
+        pending.add(
+            MetadataPlan.assign(
+                jwt.getSubject(),
+                request.destinationId(),
+                bucket,
+                null,
+                file.fileName(),
+                file.sizeBytes() == null ? 0 : file.sizeBytes(),
+                true,
+                file.relativePath(),
+                verificationRun,
+                migrationId));
+      }
+    } catch (IllegalArgumentException error) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, error.getMessage());
+    }
+    List<MetadataPlan> named = assignments.allocateBatch(pending, request.occupiedPaths());
+    publishBatchEvents(jwt.getSubject(), migrationId, named);
+    return new BatchAllocationResponse(migrationId, named);
+  }
+
+  private void publishBatchEvents(String subject, UUID migrationId, List<MetadataPlan> named) {
+    events.migration(
+        "MIGRATION_STARTED",
+        "migration.started",
+        migrationId,
+        null,
+        Map.of(
+            "initiatedBy", subject, "source", Map.of("type", "DIRECT_UPLOAD", "rootId", "media")));
+    for (MetadataPlan plan : named) {
+      events.migration(
+          "FILE_DISCOVERY_COMPLETED",
+          "discovery.file.completed",
+          migrationId,
+          plan.fileId(),
+          Map.of(
+              "status",
+              "ACCEPTED",
+              "fileName",
+              plan.fileName(),
+              "relativePath",
+              plan.objectPath(),
+              "mediaType",
+              plan.mediaType(),
+              "format",
+              plan.fileName()
+                  .substring(plan.fileName().lastIndexOf('.') + 1)
+                  .toUpperCase(Locale.ROOT),
+              "sizeBytes",
+              plan.sizeBytes()));
+    }
+    events.migration(
+        "MIGRATION_DISCOVERY_COMPLETED",
+        "discovery.migration.completed",
+        migrationId,
+        null,
+        Map.of(
+            "status",
+            "COMPLETED",
+            "totalFiles",
+            named.size(),
+            "acceptedFiles",
+            named.size(),
+            "rejectedFiles",
+            0));
+  }
+
   public MetadataPlan get(Jwt jwt, UUID id, String action) {
     var found = "READ".equals(action) ? plans.findAny(id) : plans.find(id, jwt.getSubject());
     var plan =
