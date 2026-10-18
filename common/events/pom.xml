@@ -3,7 +3,19 @@
   <modelVersion>4.0.0</modelVersion>
   <parent><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-parent</artifactId><version>4.1.1</version><relativePath/></parent>
   <groupId>mmiv</groupId><artifactId>mmiv-events</artifactId><version>1.0.0</version>
-  <properties><java.version>25</java.version></properties>
+  <properties>
+    <java.version>25</java.version>
+    <rabbitmq-amqp-client.version>5.34.0</rabbitmq-amqp-client.version>
+    <jackson-bom.version>3.1.7</jackson-bom.version>
+  </properties>
+  <dependencyManagement>
+    <dependencies>
+      <dependency>
+        <groupId>com.rabbitmq</groupId><artifactId>amqp-client</artifactId>
+        <version>${rabbitmq-amqp-client.version}</version>
+      </dependency>
+    </dependencies>
+  </dependencyManagement>
   <dependencies>
     <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-amqp</artifactId></dependency>
     <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-json</artifactId></dependency>
