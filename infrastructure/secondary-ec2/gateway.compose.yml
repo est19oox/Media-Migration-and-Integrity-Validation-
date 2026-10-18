@@ -1,0 +1,33 @@
+# Staged secondary API Gateway replica (NOT a complete HA deployment).
+# This compose file intentionally starts ONLY api-gateway.
+# Before starting, primary Eureka, RabbitMQ, Redis and JWT JWKS must be
+# reachable via private IP and Eureka must advertise routable backend addresses.
+# Do not use the primary's all-in-one compose stack here.
+services:
+  api-gateway:
+    image: ${MMIV_GATEWAY_IMAGE:?Set the immutable ECR image URI for api-gateway}
+    container_name: mmiv-secondary-api-gateway
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8080:8080"
+    environment:
+      SERVER_PORT: "8080"
+      AWS_REGION: "ap-southeast-1"
+      EUREKA_DEFAULT_ZONE: "http://${MMIV_PRIMARY_PRIVATE_IP:?Set primary private IP}:8761/eureka/"
+      SPRING_RABBITMQ_HOST: "${MMIV_PRIMARY_PRIVATE_IP}"
+      SPRING_RABBITMQ_PORT: "5672"
+      SPRING_RABBITMQ_USERNAME: "${MMIV_RABBITMQ_USERNAME:?Set RabbitMQ username}"
+      SPRING_RABBITMQ_PASSWORD: "${MMIV_RABBITMQ_PASSWORD:?Set RabbitMQ password}"
+      SPRING_DATA_REDIS_HOST: "${MMIV_PRIMARY_PRIVATE_IP}"
+      USER_ACCESS_JWK_SET_URI: "http://${MMIV_PRIMARY_PRIVATE_IP}:8083/.well-known/jwks.json"
+      USER_ACCESS_JWT_ISSUER: "${MMIV_JWT_ISSUER:?Set the existing JWT issuer}"
+      MMIV_EVENTS_ENABLED: "false"
+      JWT_COOKIE_SECURE: "${MMIV_JWT_COOKIE_SECURE:-false}"
+    mem_limit: 768m
+    cpus: 1.0
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8080/actuator/health || exit 1"]
+      interval: 20s
+      timeout: 5s
+      retries: 6
+      start_period: 90s
