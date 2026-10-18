@@ -114,27 +114,30 @@ jobs:
         run: terraform init -input=false -reconfigure
       - name: Generate fresh locked plan
         run: terraform plan -input=false -lock-timeout=60s -out=secondary.tfplan
-      - name: Verify narrowly scoped partial-apply recovery plan
+      - name: Verify HA demo-only apply plan
         run: |
           terraform show -json secondary.tfplan | python3 -c '
           import json,sys
           p=json.load(sys.stdin)
-          allowed={
-            "aws_subnet.secondary":{("update",)},
-            "aws_security_group.secondary":{("update",)},
-            "aws_route_table.secondary":{("no-op",)},
-            "aws_route_table_association.secondary":{("create",)},
-            "aws_instance.secondary":{("create",)},
+          expected={
+            "aws_security_group.secondary":("update",),
+            "aws_security_group.ha_alb":("create",),
+            "aws_lb.ha_demo":("create",),
+            "aws_lb_target_group.ha_demo":("create",),
+            "aws_lb_target_group_attachment.primary":("create",),
+            "aws_lb_target_group_attachment.secondary":("create",),
+            "aws_lb_listener.ha_demo":("create",),
           }
-          changes={x["address"]:tuple(x["change"]["actions"]) for x in p.get("resource_changes",[])}
-          for address,actions in changes.items():
-              if address not in allowed or actions not in allowed[address]:
-                  sys.exit(f"Unsafe recovery plan: {address} {actions}")
-          required={"aws_subnet.secondary","aws_security_group.secondary","aws_route_table_association.secondary","aws_instance.secondary"}
-          if not required.issubset(changes):
-              sys.exit("Missing expected recovery actions")
-          for address in sorted(changes): print("RECOVERY PLAN:",address,changes[address])
-          print("PASS: only approved secondary recovery actions. Apply allowed.")
+          changes={x["address"]:tuple(x["change"]["actions"]) for x in p.get("resource_changes",[]) if x["change"]["actions"]!=["no-op"]}
+          if changes!=expected:
+              sys.exit("Unexpected HA apply plan; refusing: "+repr(changes))
+          primary=data=None
+          for item in p.get("resource_changes",[]):
+              if item["address"]=="aws_lb_target_group_attachment.primary":
+                  primary=item["change"]["after"].get("target_id")
+          if primary!="i-0674efed441197be5":
+              sys.exit("Unexpected primary target registration: "+repr(primary))
+          print("PASS: exact HA demo resources, expected primary target, no primary changes or deletes.")
           '
       - name: Apply exactly the reviewed plan
         run: terraform apply -input=false -auto-approve secondary.tfplan
