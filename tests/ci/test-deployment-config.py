@@ -12,11 +12,36 @@ import importlib.util
 import sys
 from types import SimpleNamespace
 from jinja2 import Environment, StrictUndefined
+from jinja2.nativetypes import NativeEnvironment
 
 ROOT = Path(__file__).resolve().parents[2]
 ROLE = ROOT / 'infrastructure/ansible/roles/microservice'
 
 class DeploymentConfigurationTest(unittest.TestCase):
+    def test_host_installation_excludes_packages_already_in_rpm(self):
+        play = yaml.safe_load((ROOT / 'infrastructure/ansible/setup-host.yml').read_text())[0]
+        packages = play['vars']['host_packages']
+        tasks = {task['name']: task for task in play['tasks']}
+        query = tasks['Check installed host components directly in RPM']
+        self.assertEqual(query['ansible.builtin.command']['argv'],
+                         ['rpm', '--query', '--quiet', '{{ item }}'])
+        env = NativeEnvironment(undefined=StrictUndefined)
+        self.assertEqual(env.from_string(query['loop']).render(host_packages=packages), packages)
+        selection = tasks['Select missing host components']['ansible.builtin.set_fact']['missing_host_packages']
+        install = tasks['Install missing host components']
+        for installed in (set(), {'docker'}, set(packages)):
+            with self.subTest(installed=installed):
+                results = [{'item': name, 'rc': 0 if name in installed else 1} for name in packages]
+                missing = env.from_string(selection).render(host_package_query={'results': results})
+                self.assertEqual(missing, [name for name in packages if name not in installed])
+                self.assertEqual(env.from_string(install['ansible.builtin.dnf']['name']).render(
+                    missing_host_packages=missing), missing)
+                self.assertEqual(env.compile_expression(install['when'])(missing_host_packages=missing),
+                                 bool(missing))
+        for rc in (0, 1, 2):
+            self.assertEqual(env.compile_expression(query['failed_when'])(host_package_query={'rc': rc}),
+                             rc not in (0, 1))
+
     def test_integrity_scrape_targets_have_distinct_replica_labels(self):
         monitoring = yaml.safe_load((ROOT / 'infrastructure/monitoring/prometheus.yml').read_text())
         targets = {job['job_name']: job['static_configs'][0] for job in monitoring['scrape_configs']}

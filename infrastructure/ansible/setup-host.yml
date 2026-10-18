@@ -3,6 +3,7 @@
   become: true
   gather_facts: false
   vars:
+    host_packages: [docker, awscli, python3-requests, openssl]
     docker_compose_version: '2.40.3'
     docker_compose_checksums:
       x86_64: dba9d98e1ba5bfe11d88c99b9bd32fc4a0624a30fafe68eea34d61a3e42fd372
@@ -30,14 +31,21 @@
         path: /var/lib/mmiv/transfer-log-outbox
         state: directory
         mode: '0700'
+    - name: Check installed host components directly in RPM
+      ansible.builtin.command:
+        argv: [rpm, --query, --quiet, "{{ item }}"]
+      loop: "{{ host_packages }}"
+      register: host_package_query
+      changed_when: false
+      failed_when: host_package_query.rc not in [0, 1]
+    - name: Select missing host components
+      ansible.builtin.set_fact:
+        missing_host_packages: "{{ host_package_query.results | selectattr('rc', 'equalto', 1) | map(attribute='item') | list }}"
     - name: Install missing host components
       ansible.builtin.dnf:
-        name:
-          - docker
-          - awscli
-          - python3-requests
-          - openssl
+        name: "{{ missing_host_packages }}"
         state: present
+      when: missing_host_packages | length > 0
     - name: Enable Docker
       ansible.builtin.service:
         name: docker
