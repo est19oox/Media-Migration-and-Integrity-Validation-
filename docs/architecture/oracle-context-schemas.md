@@ -2,11 +2,11 @@
 
 The managed Oracle instance contains three application-owned schemas:
 
-| Schema | Owner | Tables |
-| --- | --- | --- |
-| `USER_ACCESS` | User Access | accounts, permissions, destinations, invitations and password resets |
-| `DISCOVERY` | Discovery/Metadata | transfer plans, name reservations, verification runs, file metadata and media log |
-| `INTEGRITY_SERVICE` | Integrity | checksum validation audit log |
+| Schema              | Owner              | Tables                                                                            |
+| ------------------- | ------------------ | --------------------------------------------------------------------------------- |
+| `USER_ACCESS`       | User Access        | accounts, permissions, destinations, invitations and password resets              |
+| `DISCOVERY`         | Discovery/Metadata | transfer plans, name reservations, verification runs, file metadata and media log |
+| `INTEGRITY_SERVICE` | Integrity          | checksum validation audit log                                                     |
 
 Transfer, Gateway and Service Registry do not own Oracle tables. Reporting keeps its MongoDB store. The two Integrity replicas share the same Integrity schema.
 
@@ -21,3 +21,16 @@ For an externally managed Oracle database, the runtime JSON must provide separat
 Prometheus scrapes both Integrity containers separately. The `replica` label identifies `integrity-service` and `integrity-service-2`; Prometheus also supplies its normal `instance` target label. The `mmiv_integrity_validation_seconds` histogram records each validation's duration and `outcome` (`PASSED`, `FAILED` or `ERROR`). The Grafana dashboard plots request rate, mean duration, p95 duration and outcomes for each replica.
 
 Grafana listens on EC2 loopback port 3000. Forward that port with SSM or SSH and open `http://127.0.0.1:3000/d/mmiv-integrity/mmiv-integrity-validation` locally. Grafana provides read-only anonymous access because the port is not published on the EC2 public interface. Its Prometheus datasource and dashboard are provisioned from `infrastructure/monitoring/grafana/`.
+
+The **MMIV Services overview** dashboard at `http://127.0.0.1:3000/d/mmiv-services/mmiv-services-overview`
+shows every Java service, including API Gateway and both Integrity replicas. Use the Service dropdown
+to select one or several services. Panels show scrape availability, HTTP throughput, mean response
+duration, 4xx/5xx responses, process CPU, JVM heap, threads and uptime. HTTP panels may have no data
+before requests arrive; `up=1` means scraping works, not that every business dependency is healthy.
+Oracle, MongoDB, RabbitMQ and Redis do not expose these JVM metrics and are not included in this dashboard.
+
+Gateway metrics are accessible without a user session only from loopback and private network peers.
+Override `mmiv.monitoring.scrape-cidrs` if your Docker network uses a different CIDR. Gateway ignores
+forwarded address headers so client-supplied headers cannot grant metrics access. The release command
+packages every dashboard JSON in `infrastructure/monitoring/grafana/dashboards/`; both dashboards and
+the datasource are provisioned automatically. This change takes effect on the next deployment.

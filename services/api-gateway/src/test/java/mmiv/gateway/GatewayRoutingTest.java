@@ -57,6 +57,17 @@ class GatewayRoutingTest {
   static final DisposableServer second = backend("B");
   @Autowired WebTestClient http;
 
+  @Test
+  void prometheusCanScrapeGatewayWithoutUserSessionFromLoopback() {
+    http.get()
+        .uri("/actuator/prometheus")
+        .exchange()
+        .expectStatus()
+        .isOk()
+        .expectBody(String.class)
+        .value(body -> assertTrue(body.contains("jvm_memory_used_bytes")));
+  }
+
   private WebTestClient authenticated() {
     return http.mutate()
         .defaultHeader(HttpHeaders.AUTHORIZATION, "Bearer routing-test-token")

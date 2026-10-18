@@ -9,6 +9,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
+import org.springframework.security.authorization.AuthorizationDecision;
 import org.springframework.security.config.web.server.ServerHttpSecurity;
 import org.springframework.security.oauth2.core.DelegatingOAuth2TokenValidator;
 import org.springframework.security.oauth2.core.OAuth2Error;
@@ -25,6 +26,8 @@ import org.springframework.security.web.server.csrf.CookieServerCsrfTokenReposit
 import org.springframework.security.web.server.csrf.CsrfWebFilter;
 import org.springframework.security.web.server.csrf.ServerCsrfTokenRepository;
 import org.springframework.security.web.server.csrf.ServerCsrfTokenRequestAttributeHandler;
+import org.springframework.security.web.server.util.matcher.IpAddressServerWebExchangeMatcher;
+import org.springframework.security.web.server.util.matcher.OrServerWebExchangeMatcher;
 import org.springframework.security.web.server.util.matcher.ServerWebExchangeMatcher;
 import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
@@ -119,7 +122,11 @@ public class GatewaySecurityConfiguration {
       ServerAuthenticationConverter converter,
       ServerAuthenticationEntryPoint entryPoint,
       ServerCsrfTokenRepository csrfRepository,
-      ServerAccessDeniedHandler accessDeniedHandler) {
+      ServerAccessDeniedHandler accessDeniedHandler,
+      @Value(
+              "${mmiv.monitoring.scrape-cidrs:127.0.0.1/32,::1/128,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16}")
+          String scrapeCidrs) {
+    ServerWebExchangeMatcher scrapeNetwork = metricsScrapeNetworks(scrapeCidrs);
     ServerCsrfTokenRequestAttributeHandler csrfHandler =
         new ServerCsrfTokenRequestAttributeHandler();
     ServerWebExchangeMatcher cookieMutation =
@@ -157,6 +164,12 @@ public class GatewaySecurityConfiguration {
         .authorizeExchange(
             exchanges ->
                 exchanges
+                    .pathMatchers(HttpMethod.GET, "/actuator/prometheus")
+                    .access(
+                        (authentication, context) ->
+                            scrapeNetwork
+                                .matches(context.getExchange())
+                                .map(match -> new AuthorizationDecision(match.isMatch())))
                     .pathMatchers(
                         HttpMethod.GET,
                         "/actuator/health",
@@ -200,6 +213,14 @@ public class GatewaySecurityConfiguration {
                     .bearerTokenConverter(converter)
                     .jwt(jwt -> jwt.jwtDecoder(decoder)))
         .build();
+  }
+
+  static ServerWebExchangeMatcher metricsScrapeNetworks(String cidrs) {
+    return new OrServerWebExchangeMatcher(
+        java.util.Arrays.stream(cidrs.split(","))
+            .map(String::trim)
+            .map(cidr -> (ServerWebExchangeMatcher) new IpAddressServerWebExchangeMatcher(cidr))
+            .toList());
   }
 
   private static boolean isHtmlPage(ServerWebExchange exchange) {

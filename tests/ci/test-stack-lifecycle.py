@@ -5,6 +5,7 @@ import importlib.util
 import io
 import json
 import os
+import shlex
 from pathlib import Path
 import subprocess
 import tempfile
@@ -25,6 +26,24 @@ verification = module('verification', 'verify-deployed-services.py')
 ssm = verification.docker_ssm
 
 class StackLifecycleTest(unittest.TestCase):
+    def test_monitoring_includes_every_service_and_provisions_both_dashboards(self):
+        self.state['services']['integrity-service-2'] = {
+            'image': self.state['services']['integrity-service']['image'], 'port': '8086'}
+        remote.managed_monitoring(self.state)
+        monitoring = json.loads((self.root / 'etc/mmiv/monitoring/prometheus.yml').read_text())
+        targets = {job['job_name']: job['static_configs'][0] for job in monitoring['scrape_configs']}
+        self.assertEqual(set(targets), set(self.state['services']))
+        self.assertEqual(targets['api-gateway']['targets'], ['api-gateway:8080'])
+        self.assertEqual(targets['integrity-service-2']['labels'],
+                         {'service': 'integrity-service', 'replica': 'integrity-service-2'})
+        dashboards = self.root / 'etc/mmiv/monitoring/grafana/dashboards'
+        self.assertEqual({path.name for path in dashboards.glob('*.json')},
+                         {'integrity-validation.json', 'services-overview.json'})
+        overview = json.loads((dashboards / 'services-overview.json').read_text())
+        self.assertEqual(overview['uid'], 'mmiv-services')
+        self.assertTrue(all(panel['datasource']['uid'] == 'mmiv-prometheus'
+                            for panel in overview['panels']))
+
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary.cleanup)
@@ -40,8 +59,9 @@ class StackLifecycleTest(unittest.TestCase):
                                    for n, p in ssm.PORTS.items() if n in
                                    ('service-registry', 'transfer-service', 'integrity-service', 'api-gateway')}}
         self.addCleanup(patch.stopall)
-        patch.object(remote, 'INTEGRITY_DASHBOARD_JSON',
-                     (ROOT / 'infrastructure/monitoring/grafana/dashboards/integrity-validation.json').read_text(),
+        patch.object(remote, 'GRAFANA_DASHBOARDS',
+                     {path.name: path.read_text() for path in
+                      (ROOT / 'infrastructure/monitoring/grafana/dashboards').glob('*.json')},
                      create=True).start()
         patch.object(remote, 'Path', side_effect=lambda path: self.root / str(path).lstrip('/')).start()
         patch.object(remote, 'command', side_effect=self.command).start()
@@ -298,7 +318,7 @@ class StackLifecycleTest(unittest.TestCase):
         with patch.object(remote, 'registered', side_effect=RuntimeError('not registered')):
             failed = remote.run('deploy', dict(self.state))
         self.assertTrue(failed['ROLLED_BACK'])
-        self.assertEqual(set(self.containers), {'oracle', 'rabbitmq', 'prometheus', 'redis'})
+        self.assertEqual(set(self.containers), {'oracle', 'rabbitmq', 'prometheus', 'grafana', 'redis'})
         self.assertEqual(self.volumes, {remote.ORACLE_VOLUME})
         self.state['RELEASE_ID'] = 'retry-2'
         self.assertTrue(remote.run('deploy', dict(self.state))['READY'])
@@ -409,6 +429,9 @@ class StackLifecycleTest(unittest.TestCase):
     def test_registry_first_backends_together_gateway_last(self):
         result = remote.run('deploy', dict(self.state))
         self.assertTrue(result['READY'])
+        self.assertIn('grafana', self.containers)
+        self.assertEqual(self.configs['grafana']['ports'], ['127.0.0.1:3000:3000'])
+        self.assertIn('prometheus', self.containers)
         launches = [c for c in self.calls if c[:2] == ('docker', 'compose') and 'up' in c]
         groups = [[n for n in c if n in self.state['services']] for c in launches]
         self.assertEqual(len(groups), 1)
@@ -781,6 +804,27 @@ class RunnerAndBarrierTest(unittest.TestCase):
             self.assertTrue(result['ROLLED_BACK'])
             self.assertEqual(result['COMMAND_STATUS'], 'Failed')
             self.assertEqual([call.args[0] for call in sleep.call_args_list], [1, 1])
+
+    def test_ssm_payload_includes_both_dashboard_definitions(self):
+        state = self.state()
+        def aws_reply(*args):
+            if args[0] == 'send-command':
+                parameter = args[args.index('--parameters') + 1]
+                payload = json.loads(Path(parameter.removeprefix('file://')).read_text())
+                launch = shlex.split(payload['commands'][0])[2]
+                compile(launch, '<test-ssm-command>', 'exec')
+                # Execute only the generated data declarations, never the remote lifecycle.
+                namespace = {}
+                exec(launch.split('; exec(', 1)[0], namespace)
+                dashboards = namespace['GRAFANA_DASHBOARDS']
+                self.assertEqual(set(dashboards), {'integrity-validation.json', 'services-overview.json'})
+                self.assertEqual(json.loads(dashboards['services-overview.json'])['uid'], 'mmiv-services')
+                return subprocess.CompletedProcess([], 0, 'command-id', '')
+            return subprocess.CompletedProcess([], 0, json.dumps({
+                'Status': 'Success', 'ResponseCode': 0,
+                'StandardOutputContent': 'MMIV_RELEASE_STATE=' + json.dumps(state)}), '')
+        with patch.object(ssm, 'aws', side_effect=aws_reply):
+            self.assertEqual(ssm.lifecycle('deploy', state)['COMMAND_STATUS'], 'Success')
 
 if __name__ == '__main__':
     unittest.main()

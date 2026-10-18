@@ -1,5 +1,6 @@
 server:
   port: ${SERVER_PORT:8080}
+  forward-headers-strategy: none # Metrics access uses the socket peer, not client-supplied headers.
 spring:
   rabbitmq:
     host: ${SPRING_RABBITMQ_HOST:localhost}

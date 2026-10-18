@@ -695,15 +695,15 @@ def managed_monitoring(state):
          'static_configs': [{'targets': [name + ':' + str(item['port'])],
                              'labels': {'service': 'integrity-service' if name == 'integrity-service-2' else name,
                                         'replica': name}}]}
-        for name, item in state['services'].items() if name != 'api-gateway']}
+        for name, item in state['services'].items()]}
     atomic_write(monitoring, json.dumps(scrape, indent=2))
     monitoring.chmod(0o644)
     root = monitoring.parent / 'grafana'
-    dashboard = globals().get('INTEGRITY_DASHBOARD_JSON')
-    if dashboard is None:
-        raise RuntimeError('Integrity dashboard was not packaged with the release')
-    for relative, content in (
-        ('dashboards/integrity-validation.json', dashboard),
+    dashboards = globals().get('GRAFANA_DASHBOARDS', {})
+    if not {'integrity-validation.json', 'services-overview.json'} <= dashboards.keys():
+        raise RuntimeError('Grafana dashboards were not packaged with the release')
+    files = [('dashboards/' + name, content) for name, content in dashboards.items()]
+    files.extend((
         ('provisioning/datasources/prometheus.yml',
          'apiVersion: 1\ndatasources:\n  - name: Prometheus\n    uid: mmiv-prometheus\n'
          '    type: prometheus\n    access: proxy\n    url: http://prometheus:9090\n'
@@ -711,7 +711,8 @@ def managed_monitoring(state):
         ('provisioning/dashboards/mmiv.yml',
          'apiVersion: 1\nproviders:\n  - name: MMIV\n    folder: MMIV\n'
          '    type: file\n    disableDeletion: true\n    editable: false\n'
-         '    options:\n      path: /var/lib/grafana/dashboards\n')):
+         '    options:\n      path: /var/lib/grafana/dashboards\n')))
+    for relative, content in files:
         target = root / relative
         target.parent.mkdir(parents=True, exist_ok=True)
         atomic_write(target, content)
@@ -940,7 +941,7 @@ def reconcile(action, state):
         names = list(state['services'])
         journal['touched'].extend(names)
         save(journal_path, journal)
-        stage('compose_startup', up, compose, ['prometheus'] + names + (['oracle'] if 'oracle' in desired['services'] else []))
+        stage('compose_startup', up, compose, ['prometheus', 'grafana'] + names + (['oracle'] if 'oracle' in desired['services'] else []))
         parallel(lambda name: stage('readiness_' + name, ready, name, state), names)
         result['READY'] = True
         save(directory / 'current-release.json', result)
