@@ -18,7 +18,8 @@ class ComposeRuntimeTest(unittest.TestCase):
     def test_integrated_compose_assigns_browser_auth_to_gateway_only(self):
         expected = {'api-gateway', 'service-registry', 'transfer-service',
                     'discovery-service', 'user-access-service', 'reporting-service',
-                    'integrity-service', 'integrity-service-2', 'rabbitmq', 'mongodb', 'redis', 'prometheus'}
+                    'integrity-service', 'integrity-service-2', 'rabbitmq', 'mongodb', 'redis',
+                    'prometheus', 'grafana'}
         for filename in ('compose.yml', 'compose-scaled.yml'):
             with self.subTest(filename=filename):
                 compose = yaml.safe_load((ROOT / 'infrastructure/service-registry' / filename).read_text())
@@ -34,6 +35,9 @@ class ComposeRuntimeTest(unittest.TestCase):
                 self.assertNotIn('REPORTING_URL', transfer)
                 self.assertIn('127.0.0.1:15672:15672',
                               [str(port) for port in services['rabbitmq'].get('ports', [])])
+                self.assertIn('prometheus', services['grafana']['depends_on'])
+                self.assertIn('127.0.0.1:3000:3000',
+                              [str(port) for port in services['grafana'].get('ports', [])])
                 for name, service in services.items():
                     for port in service.get('ports', []):
                         binding = str(port)
