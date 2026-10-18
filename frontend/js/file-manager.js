@@ -372,7 +372,9 @@
       ? entries.folders.filter(([name]) => name.toLowerCase().includes(query))
       : entries.folders;
     const visibleFiles = query
-      ? entries.directFiles.filter((file) => file.name.split('/').pop().toLowerCase().includes(query))
+      ? entries.directFiles.filter((file) =>
+          file.name.split('/').pop().toLowerCase().includes(query),
+        )
       : entries.directFiles;
 
     table.replaceChildren();

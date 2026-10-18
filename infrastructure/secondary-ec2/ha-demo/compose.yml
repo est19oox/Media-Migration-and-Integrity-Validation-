@@ -6,7 +6,7 @@ services:
     container_name: mmiv-ha-demo-a
     restart: unless-stopped
     ports:
-      - "8091:80"
+      - '8091:80'
     volumes:
       - ./site-a:/usr/share/nginx/html:ro
     mem_limit: 64m
@@ -15,7 +15,7 @@ services:
     container_name: mmiv-ha-demo-b
     restart: unless-stopped
     ports:
-      - "8092:80"
+      - '8092:80'
     volumes:
       - ./site-b:/usr/share/nginx/html:ro
     mem_limit: 64m
