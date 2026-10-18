@@ -15,9 +15,8 @@
  *     The server lists 100 keys per call and authorises READ on the folder,
  *     answering 403 when the account has no access.
  *
- * Stored relative paths are presented as navigable virtual folders. File
- * actions keep using the original backend file id, so navigation changes only
- * presentation and never weakens server-side authorization.
+ * Uploads, downloads, deletion, preview and subfolder navigation are not part of
+ * this phase, so the row actions are rendered but disabled.
  */
 (() => {
   const PROFILE_URL = '/api/access/me';
@@ -62,7 +61,6 @@
   let loading = false;
   // Invalidates responses that arrive after the folder changed.
   let generation = 0;
-  let currentPath = [];
   let query = '';
   let observer = null;
   let lastStatus = null;
@@ -134,8 +132,8 @@
     return { badge, label: 'File', variant: '' };
   }
 
-  function fileRow(file, displayName = file.name) {
-    const type = describe(displayName);
+  function fileRow(file) {
+    const type = describe(file.name);
     const row = document.createElement('tr');
     const nameCell = document.createElement('td');
     const wrapper = document.createElement('span');
@@ -150,7 +148,7 @@
     wrapper.className = 'file-name';
     icon.className = 'file-icon' + (type.variant ? ' ' + type.variant : '');
     icon.textContent = type.badge;
-    label.textContent = displayName;
+    label.textContent = file.name;
     wrapper.append(icon, label);
     nameCell.append(wrapper);
 
@@ -165,7 +163,7 @@
     preview.type = 'button';
     preview.className = 'table-action';
     preview.textContent = 'Preview';
-    preview.addEventListener('click', () => openPreview(file, displayName));
+    preview.addEventListener('click', () => openPreview(file));
     const download = document.createElement('button');
     download.type = 'button';
     download.className = 'table-action';
@@ -179,38 +177,11 @@
       remove.type = 'button';
       remove.className = 'table-action';
       remove.textContent = 'Delete';
-      remove.addEventListener('click', () => deleteFile(file, remove, displayName));
+      remove.addEventListener('click', () => deleteFile(file, remove));
       actions.append(remove);
     }
     actionsCell.append(actions);
 
-    row.append(nameCell, typeCell, sizeCell, dateCell, actionsCell);
-    return row;
-  }
-
-  function folderRow(name) {
-    const row = document.createElement('tr');
-    const nameCell = document.createElement('td');
-    const typeCell = document.createElement('td');
-    const sizeCell = document.createElement('td');
-    const dateCell = document.createElement('td');
-    const actionsCell = document.createElement('td');
-    const button = document.createElement('button');
-    const icon = document.createElement('span');
-    const label = document.createElement('span');
-
-    button.type = 'button';
-    button.className = 'file-name folder-link';
-    button.setAttribute('aria-label', 'Open folder ' + name);
-    icon.className = 'file-icon folder-type';
-    icon.textContent = '📁';
-    label.textContent = name;
-    button.append(icon, label);
-    button.addEventListener('click', () => navigate([...currentPath, name]));
-    nameCell.append(button);
-    typeCell.textContent = 'Folder';
-    sizeCell.textContent = '—';
-    dateCell.textContent = '—';
     row.append(nameCell, typeCell, sizeCell, dateCell, actionsCell);
     return row;
   }
@@ -263,9 +234,9 @@
     }
   }
 
-  function openPreview(file, displayName = file.name) {
+  function openPreview(file) {
     if (!window.mmivPreview) return;
-    window.mmivPreview.open(file.fileId, displayName);
+    window.mmivPreview.open(file.fileId, file.name);
   }
 
   function deleteError(code) {
@@ -285,9 +256,9 @@
    * used because this stylesheet defines no confirmation dialog and the CSS must
    * not change.
    */
-  async function deleteFile(file, button, displayName = file.name) {
+  async function deleteFile(file, button) {
     if (button.disabled) return;
-    const question = 'Permanently delete "' + displayName + '" and all stored versions?';
+    const question = 'Permanently delete "' + file.name + '" and all stored versions?';
     if (!window.confirm(question)) return;
     button.disabled = true;
     try {
@@ -312,90 +283,33 @@
       const separator = document.createElement('span');
       separator.setAttribute('aria-hidden', 'true');
       separator.textContent = '›';
-      const root = document.createElement('button');
-      root.type = 'button';
-      root.className = 'breadcrumb-link';
-      root.textContent = folder;
-      root.addEventListener('click', () => navigate([]));
-      parts.push(separator, root);
-      currentPath.forEach((name, index) => {
-        const pathSeparator = document.createElement('span');
-        pathSeparator.setAttribute('aria-hidden', 'true');
-        pathSeparator.textContent = '›';
-        const crumb = document.createElement('button');
-        crumb.type = 'button';
-        crumb.className = 'breadcrumb-link';
-        crumb.textContent = name;
-        if (index === currentPath.length - 1) crumb.setAttribute('aria-current', 'page');
-        crumb.addEventListener('click', () => navigate(currentPath.slice(0, index + 1)));
-        parts.push(pathSeparator, crumb);
-      });
+      const current = document.createElement('span');
+      current.textContent = folder;
+      parts.push(separator, current);
     }
     breadcrumbs.replaceChildren(...parts);
   }
 
-  function navigate(nextPath) {
-    currentPath = nextPath;
-    query = '';
-    if (search) search.value = '';
-    if (window.mmivPreview && typeof window.mmivPreview.close === 'function')
-      window.mmivPreview.close();
-    renderBreadcrumbs();
-    render();
-  }
-
-  function currentDirectory() {
-    const prefix = currentPath.length ? currentPath.join('/') + '/' : '';
-    const folders = new Set();
-    const directFiles = [];
-
-    files.forEach((file) => {
-      if (!file.name.startsWith(prefix)) return;
-      const relative = file.name.slice(prefix.length);
-      const slash = relative.indexOf('/');
-      if (slash >= 0) folders.add(relative.slice(0, slash));
-      else if (relative) directFiles.push({ file, displayName: relative });
-    });
-
-    return {
-      folders: Array.from(folders).sort((left, right) => left.localeCompare(right, 'en')),
-      files: directFiles.sort((left, right) =>
-        left.displayName.localeCompare(right.displayName, 'en'),
-      ),
-    };
-  }
-
   function render() {
-    const directory = currentDirectory();
-    const visibleFolders = query
-      ? directory.folders.filter((name) => name.toLowerCase().includes(query))
-      : directory.folders;
-    const visibleFiles = query
-      ? directory.files.filter((entry) => entry.displayName.toLowerCase().includes(query))
-      : directory.files;
-    const entryCount = directory.folders.length + directory.files.length;
-    const visibleCount = visibleFolders.length + visibleFiles.length;
+    const visible = query ? files.filter((file) => file.name.toLowerCase().includes(query)) : files;
 
     table.replaceChildren();
-    visibleFolders.forEach((name) => table.append(folderRow(name)));
-    visibleFiles.forEach((entry) => table.append(fileRow(entry.file, entry.displayName)));
+    visible.forEach((file) => table.append(fileRow(file)));
 
-    if (fileCount)
-      fileCount.textContent =
-        entryCount + (entryCount === 1 ? ' item' : ' items') + (cursor ? ' loaded' : '');
+    if (fileCount) fileCount.textContent = files.length + (files.length === 1 ? ' item' : ' items');
 
     if (listStatus) {
       // The search only sees the pages fetched so far, so the count names them
       // as loaded rather than implying the whole folder was searched.
       if (query)
-        listStatus.textContent = visibleCount + ' of ' + entryCount + ' loaded items match';
+        listStatus.textContent = visible.length + ' of ' + files.length + ' loaded files match';
       else if (cursor) listStatus.textContent = 'Scroll to load more';
       else listStatus.textContent = '';
     }
 
-    if (emptyFolder) emptyFolder.hidden = entryCount !== 0 || Boolean(cursor);
-    if (entryCount === 0) setBrowseStatus(cursor ? 'Loading more files…' : '');
-    else if (query && visibleCount === 0) setBrowseStatus('No loaded items match your search.');
+    if (emptyFolder) emptyFolder.hidden = files.length !== 0;
+    if (files.length === 0) setBrowseStatus('');
+    else if (query && visible.length === 0) setBrowseStatus('No loaded files match your search.');
     else setBrowseStatus('');
 
     observeSentinel();
@@ -431,7 +345,6 @@
     if (options.reset) {
       generation += 1;
       loading = false;
-      if (options.resetPath) currentPath = [];
       clearListing();
       renderBreadcrumbs();
     }
@@ -756,10 +669,10 @@
       node.hidden = profile.role !== 'ADMIN';
     });
 
-    await loadFiles({ reset: true, resetPath: true });
+    await loadFiles({ reset: true });
   }
 
-  folderSelect.addEventListener('change', () => loadFiles({ reset: true, resetPath: true }));
+  folderSelect.addEventListener('change', () => loadFiles({ reset: true }));
 
   if (search) {
     search.addEventListener('input', () => {

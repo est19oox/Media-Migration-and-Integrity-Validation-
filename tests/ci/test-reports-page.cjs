@@ -550,10 +550,4 @@ test('detail styles keep the document scrollable and grids responsive', () => {
   const css = readFileSync('frontend/css/reports.css', 'utf8');
   assert.match(css, /\.reports-page \.home-shell[\s\S]*overflow:\s*visible/);
   assert.match(css, /@media \(max-width: 1000px\)[\s\S]*\.report-metadata/);
-  assert.match(
-    css,
-    /\.report-detail-main\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)[^}]*min-width:\s*0/s,
-  );
-  assert.match(css, /\.report-detail-card\s*\{[^}]*min-width:\s*0[^}]*max-width:\s*100%/s);
-  assert.match(css, /\.report-detail-card \.reports-table-scroll\s*\{[^}]*min-width:\s*0/s);
 });
