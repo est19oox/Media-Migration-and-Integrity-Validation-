@@ -61,16 +61,24 @@ jobs:
         run: terraform init -input=false -reconfigure
       - name: Generate plan without apply
         run: terraform plan -input=false -lock-timeout=60s -out=secondary.tfplan
-      - name: Verify secondary-only network plan (no apply)
+      - name: Verify HA demo additions (plan only)
         run: |
           terraform show -json secondary.tfplan | python3 -c '
           import json,sys
           p=json.load(sys.stdin)
-          changes={x["address"]:x["change"]["actions"] for x in p.get("resource_changes",[]) if x["change"]["actions"]!=["no-op"]}
-          if any(a!="aws_security_group.secondary" or v!=["update"] for a,v in changes.items()):
-              sys.exit("Unexpected infrastructure changes: "+repr(changes))
-          print("PASS: only secondary security-group in-place update or no changes.",changes)
-          print("No apply performed.")
+          expected={
+            "aws_security_group.secondary":("update",),
+            "aws_security_group.ha_alb":("create",),
+            "aws_lb.ha_demo":("create",),
+            "aws_lb_target_group.ha_demo":("create",),
+            "aws_lb_target_group_attachment.primary":("create",),
+            "aws_lb_target_group_attachment.secondary":("create",),
+            "aws_lb_listener.ha_demo":("create",),
+          }
+          changes={x["address"]:tuple(x["change"]["actions"]) for x in p.get("resource_changes",[]) if x["change"]["actions"]!=["no-op"]}
+          if changes!=expected:
+              sys.exit("Unexpected HA plan; refusing: "+repr(changes))
+          print("PASS: six HA additions and secondary SG update; no primary changes or deletions.")
           '
 
   apply:
