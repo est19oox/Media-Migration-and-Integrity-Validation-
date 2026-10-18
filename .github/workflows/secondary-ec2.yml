@@ -61,17 +61,27 @@ jobs:
         run: terraform init -input=false -reconfigure
       - name: Generate plan without apply
         run: terraform plan -input=false -lock-timeout=60s -out=secondary.tfplan
-      - name: Reject changes to anything except initial five creates
+      - name: Verify narrowly scoped partial-apply recovery plan
         run: |
           terraform show -json secondary.tfplan | python3 -c '
           import json,sys
           p=json.load(sys.stdin)
-          expected={"aws_subnet.secondary","aws_route_table.secondary","aws_route_table_association.secondary","aws_security_group.secondary","aws_instance.secondary"}
-          changes={x["address"]:x["change"]["actions"] for x in p.get("resource_changes",[]) if x["change"]["actions"]!=["no-op"]}
-          if set(changes)!=expected or any(v!=["create"] for v in changes.values()):
-              sys.exit("Unexpected plan (only initial five creates are allowed): "+repr(changes))
-          for name in sorted(changes): print("PROPOSED CREATE:",name)
-          print("PASS: 5 additions, 0 changes, 0 deletions. No apply.")
+          allowed={
+            "aws_subnet.secondary":{("update",)},
+            "aws_security_group.secondary":{("update",)},
+            "aws_route_table.secondary":{("no-op",)},
+            "aws_route_table_association.secondary":{("create",)},
+            "aws_instance.secondary":{("create",)},
+          }
+          changes={x["address"]:tuple(x["change"]["actions"]) for x in p.get("resource_changes",[])}
+          for address,actions in changes.items():
+              if address not in allowed or actions not in allowed[address]:
+                  sys.exit(f"Unsafe recovery plan: {address} {actions}")
+          required={"aws_subnet.secondary","aws_security_group.secondary","aws_route_table_association.secondary","aws_instance.secondary"}
+          if not required.issubset(changes):
+              sys.exit("Missing expected recovery actions")
+          for address in sorted(changes): print("RECOVERY PLAN:",address,changes[address])
+          print("PASS: only approved secondary recovery actions. No apply.")
           '
 
   apply:
@@ -107,16 +117,27 @@ jobs:
         run: terraform init -input=false -reconfigure
       - name: Generate fresh locked plan
         run: terraform plan -input=false -lock-timeout=60s -out=secondary.tfplan
-      - name: Reject changes to anything except initial five creates
+      - name: Verify narrowly scoped partial-apply recovery plan
         run: |
           terraform show -json secondary.tfplan | python3 -c '
           import json,sys
           p=json.load(sys.stdin)
-          expected={"aws_subnet.secondary","aws_route_table.secondary","aws_route_table_association.secondary","aws_security_group.secondary","aws_instance.secondary"}
-          changes={x["address"]:x["change"]["actions"] for x in p.get("resource_changes",[]) if x["change"]["actions"]!=["no-op"]}
-          if set(changes)!=expected or any(v!=["create"] for v in changes.values()):
-              sys.exit("Unexpected plan; refusing apply: "+repr(changes))
-          print("Approved initial create-only resource set.")
+          allowed={
+            "aws_subnet.secondary":{("update",)},
+            "aws_security_group.secondary":{("update",)},
+            "aws_route_table.secondary":{("no-op",)},
+            "aws_route_table_association.secondary":{("create",)},
+            "aws_instance.secondary":{("create",)},
+          }
+          changes={x["address"]:tuple(x["change"]["actions"]) for x in p.get("resource_changes",[])}
+          for address,actions in changes.items():
+              if address not in allowed or actions not in allowed[address]:
+                  sys.exit(f"Unsafe recovery plan: {address} {actions}")
+          required={"aws_subnet.secondary","aws_security_group.secondary","aws_route_table_association.secondary","aws_instance.secondary"}
+          if not required.issubset(changes):
+              sys.exit("Missing expected recovery actions")
+          for address in sorted(changes): print("RECOVERY PLAN:",address,changes[address])
+          print("PASS: only approved secondary recovery actions. Apply allowed.")
           '
       - name: Apply exactly the reviewed plan
         run: terraform apply -input=false -auto-approve secondary.tfplan
