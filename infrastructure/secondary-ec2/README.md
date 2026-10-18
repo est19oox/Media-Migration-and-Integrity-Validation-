@@ -34,3 +34,15 @@ terraform apply secondary.tfplan
 `prevent_destroy` intentionally prevents accidental instance destruction. Stop/start the EC2 through AWS when not in use; Terraform does not schedule it.
 
 The existing AWS OIDC trust policy may not authorize GitHub Actions from this fork. The initial workflow should therefore use local CloudShell credentials for a read-only plan until authorization is separately reviewed.
+
+## GitHub Actions (recommended)
+
+`.github/workflows/secondary-ec2.yml` installs Terraform on a GitHub runner and provides two manually triggered operations: `plan` and `apply`. It never runs on normal pushes and never touches the primary Terraform root.
+
+**Before it can access AWS:** create a dedicated GitHub OIDC role for the `est19oox` repository, with the minimum permissions for the isolated secondary resources and its state key, then configure the repository Actions variable `SECONDARY_TERRAFORM_ROLE_ARN`. Do not reuse a broad production Terraform role without review. The existing AWS role's OIDC trust may not authorize this fork.
+
+**Before allowing apply:** create the GitHub Environment `secondary-ec2-apply`, restrict it to `feature/secondary-ec2-isolated`, and configure required reviewers. Without these protection rules, the environment name alone does not provide approval.
+
+From Actions, choose **Secondary EC2 Infrastructure (isolated)** > **Run workflow** on the feature branch. Enter primary instance ID `i-0674efed441197be5` and choose `plan` first. The workflow checks that exactly five resources are created and none are updated or deleted. To provision, choose `apply` and enter `PROVISION-SECONDARY-EC2`; the workflow regenerates and checks the plan in the approval-gated job before applying. **An apply launches a billable running EC2 instance.**
+
+This initial-create-only workflow deliberately refuses subsequent apply runs, updates, or deletions. Stop the EC2 through AWS when not in use. Review the actual plan and costs before first apply.
