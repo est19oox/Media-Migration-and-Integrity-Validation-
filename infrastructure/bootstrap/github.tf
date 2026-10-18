@@ -50,7 +50,7 @@ resource "aws_iam_role" "github_terraform" {
           }
 
           StringLike = {
-            "token.actions.githubusercontent.com:sub" = "repo:est19oox@70089857/Media-Migration-and-Integrity-Validation-@1359946801:ref:refs/heads/*"
+            "token.actions.githubusercontent.com:sub" = "repo:est19oox/Media-Migration-and-Integrity-Validation-:ref:refs/heads/*"
           }
         }
       }
@@ -129,7 +129,7 @@ resource "aws_iam_role" "github_app" {
           }
 
           StringLike = {
-            "token.actions.githubusercontent.com:sub" = "repo:est19oox@70089857/Media-Migration-and-Integrity-Validation-@1359946801:ref:refs/heads/*"
+            "token.actions.githubusercontent.com:sub" = "repo:est19oox/Media-Migration-and-Integrity-Validation-:ref:refs/heads/*"
           }
         }
       }
