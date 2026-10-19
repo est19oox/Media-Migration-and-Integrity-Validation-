@@ -25,7 +25,7 @@ function updateParallax() {
     }px, ${yValue * 3}px, 50px) rotateX(${-yValue}deg) rotateY(${xValue}deg)`;
   }
 
-  const authCard = document.querySelector('#login-form, #signupForm, .reset-card');
+  const authCard = document.querySelector('#login-form, #signupForm, .reset-card, .login-card');
   if (authCard) {
     authCard.style.transform = `perspective(5000px) translate3d(${xValue * 3}px, ${
       yValue * 2
@@ -59,7 +59,7 @@ function setParallaxEnabled() {
   body.removeEventListener('mousemove', handleMouseMove);
   body
     .querySelectorAll(
-      '#media-layer-view, #media-layer-front, #login-form, #signupForm, .reset-card',
+      '#media-layer-view, #media-layer-front, #login-form, #signupForm, .reset-card, .login-card',
     )
     .forEach((element) => {
       element.style.transform = '';
