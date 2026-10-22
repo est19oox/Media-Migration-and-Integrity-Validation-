@@ -159,7 +159,21 @@ jobs:
           if grep -Fxq 'aws_docdb_cluster.reporting' "$RUNNER_TEMP/mmiv-data-state.txt"; then
             aws docdb modify-db-cluster --db-cluster-identifier mmiv-reporting \
               --no-deletion-protection --apply-immediately >/dev/null
-            aws docdb wait db-cluster-available --db-cluster-identifier mmiv-reporting
+            # The DocDB AWS CLI has no db-cluster-available waiter.
+            for attempt in {1..40}; do
+              status=$(aws docdb describe-db-clusters --db-cluster-identifier mmiv-reporting \
+                --query 'DBClusters[0].Status' --output text)
+              protection=$(aws docdb describe-db-clusters --db-cluster-identifier mmiv-reporting \
+                --query 'DBClusters[0].DeletionProtection' --output text)
+              if [ "$status" = available ] && [ "$protection" = False ]; then
+                break
+              fi
+              if [ "$attempt" -eq 40 ]; then
+                echo "::error::DocumentDB did not become available with deletion protection disabled within 10 minutes (status=$status, protection=$protection)."
+                exit 1
+              fi
+              sleep 15
+            done
           fi
       - name: Destroy ECS before managed data
         if: ${{ inputs.action == 'destroy' }}
