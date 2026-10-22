@@ -86,8 +86,8 @@ jobs:
             -backend-config=key=ecs-fargate/terraform.tfstate \
             -backend-config="region=${AWS_REGION}" \
             -backend-config=encrypt=true -backend-config=use_lockfile=true
-          terraform -chdir=infrastructure/aws-managed-data state list > "$RUNNER_TEMP/mmiv-data-state.txt"
-          terraform -chdir=infrastructure/ecs-fargate state list > "$RUNNER_TEMP/mmiv-ecs-state.txt"
+          bash scripts/cd/terraform-state-list-or-empty.sh infrastructure/aws-managed-data > "$RUNNER_TEMP/mmiv-data-state.txt"
+          bash scripts/cd/terraform-state-list-or-empty.sh infrastructure/ecs-fargate > "$RUNNER_TEMP/mmiv-ecs-state.txt"
           if [ -s "$RUNNER_TEMP/mmiv-ecs-state.txt" ]; then
             terraform -chdir=infrastructure/aws-managed-data output -json > "$RUNNER_TEMP/mmiv-data-outputs.json"
             export AWS_ACCOUNT_ID
@@ -184,8 +184,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test -z "$(terraform -chdir=infrastructure/ecs-fargate state list)"
-          test -z "$(terraform -chdir=infrastructure/aws-managed-data state list)"
+          test -z "$(bash scripts/cd/terraform-state-list-or-empty.sh infrastructure/ecs-fargate)"
+          test -z "$(bash scripts/cd/terraform-state-list-or-empty.sh infrastructure/aws-managed-data)"
           echo 'Both new Terraform roots contain no managed resources. Check shared resources and billing separately.'
       - name: Upload destroy plan summaries
         if: ${{ always() }}
