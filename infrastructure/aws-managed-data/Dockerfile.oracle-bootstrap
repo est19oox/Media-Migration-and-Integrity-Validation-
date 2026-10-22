@@ -1,7 +1,13 @@
-FROM python:3.12-slim
+ARG PYTHON_BASE=python:3.12-alpine@sha256:92abd2ba1bdfb48b1e2ac224b582dd1558d0d4bb11c903b126b5bf9c448fd656
+FROM ${PYTHON_BASE} AS dependencies
 
-RUN pip install --no-cache-dir boto3==1.35.99 oracledb==2.5.1 \
-    && useradd --system --uid 10001 --create-home mmiv
+RUN apk add --no-cache build-base \
+    && pip install --no-cache-dir --target /opt/deps boto3==1.35.99 oracledb==2.5.1
+
+FROM ${PYTHON_BASE}
+COPY --from=dependencies /opt/deps /opt/deps
+ENV PYTHONPATH=/opt/deps
+RUN adduser -D -u 10001 mmiv
 
 WORKDIR /app
 COPY bootstrap-oracle.py /app/bootstrap-oracle.py
