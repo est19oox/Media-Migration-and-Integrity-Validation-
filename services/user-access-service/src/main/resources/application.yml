@@ -16,8 +16,8 @@ spring:
 jwt:
   issuer: ${JWT_ISSUER:https://auth.mmiv.example}
   key-id: ${JWT_KEY_ID:mmiv-user-access-key-1}
-  private-key: ${JWT_PRIVATE_KEY_PATH}
-  public-key: ${JWT_PUBLIC_KEY_PATH}
+  private-key: ${JWT_PRIVATE_KEY_PATH:}
+  public-key: ${JWT_PUBLIC_KEY_PATH:}
 management:
   endpoints:
     web:

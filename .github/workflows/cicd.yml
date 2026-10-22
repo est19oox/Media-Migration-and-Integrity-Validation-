@@ -270,6 +270,9 @@ jobs:
   terraform:
 #    needs: [bootstrap]
     name: Terraform CI/CD
+    # The legacy EC2/Compose data stack is retired. Apply the new managed-data
+    # and ECS roots with reviewed state/configuration before enabling CD again.
+    if: false
     needs: [quality_gates]
     runs-on: ubuntu-latest
     outputs:
@@ -359,6 +362,7 @@ jobs:
 
   setup-host:
     name: Prepare shared EC2 host
+    if: false
     needs:
       - terraform
       - build-images
@@ -469,6 +473,7 @@ jobs:
       service-port: ${{ matrix.service.port }}
   deploy-stack:
     name: Deploy complete Docker release
+    if: false
     needs: [setup-host, build-images]
     runs-on: ubuntu-latest
     timeout-minutes: 100

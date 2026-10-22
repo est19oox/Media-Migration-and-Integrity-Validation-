@@ -260,26 +260,6 @@ export default function Page() {
             </div>
             {'\n          '}
             <ol id="reportTimeline" className="report-timeline"></ol>
-            {'\n          '}
-            <div className="reports-footer">
-              {'\n            '}
-              <span id="reportTimelineCount">{'0 events'}</span>
-              {'\n            '}
-              <div className="reports-pagination">
-                {'\n              '}
-                <span id="reportTimelinePage">{'Page 1 of 1'}</span>
-                {'\n              '}
-                <button id="reportTimelinePrevious" type="button" disabled={true}>
-                  {'Previous'}
-                </button>
-                {'\n              '}
-                <button id="reportTimelineNext" type="button" disabled={true}>
-                  {'Next'}
-                </button>
-                {'\n            '}
-              </div>
-              {'\n          '}
-            </div>
             {'\n        '}
           </section>
           {'\n\n        '}
@@ -323,26 +303,6 @@ export default function Page() {
                 <tbody id="adminEventRows"></tbody>
                 {'\n            '}
               </table>
-              {'\n          '}
-            </div>
-            {'\n          '}
-            <div className="reports-footer">
-              {'\n            '}
-              <span id="adminEventCount">{'0 events'}</span>
-              {'\n            '}
-              <div className="reports-pagination">
-                {'\n              '}
-                <span id="adminEventPage">{'Page 1 of 1'}</span>
-                {'\n              '}
-                <button id="adminEventPrevious" type="button" disabled={true}>
-                  {'Previous'}
-                </button>
-                {'\n              '}
-                <button id="adminEventNext" type="button" disabled={true}>
-                  {'Next'}
-                </button>
-                {'\n            '}
-              </div>
               {'\n          '}
             </div>
             {'\n        '}

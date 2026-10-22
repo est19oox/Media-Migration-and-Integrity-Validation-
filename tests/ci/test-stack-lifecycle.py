@@ -736,9 +736,7 @@ class RunnerAndBarrierTest(unittest.TestCase):
             with tempfile.TemporaryDirectory() as directory, \
                     patch.object(verification.subprocess, 'Popen', side_effect=launch), \
                     patch.object(verification.subprocess, 'run', return_value=SimpleNamespace(returncode=cleanup_code)) as cleanup:
-                # Cleanup is best-effort evidence hygiene. A failed service scan still blocks the
-                # release, but a cleanup-only failure must not roll back an otherwise verified release.
-                self.assertEqual(verification.verify(self.state(), Path(directory)), int(bool(scan_code)))
+                self.assertEqual(verification.verify(self.state(), Path(directory)), int(bool(scan_code or cleanup_code)))
                 self.assertEqual(len(account_paths), 1)
                 self.assertEqual(cleanup.call_count,2)
                 self.assertEqual(cleanup.call_args_list[0].kwargs['env']['DAST_DATA_CLEANUP_ONLY'],'true')

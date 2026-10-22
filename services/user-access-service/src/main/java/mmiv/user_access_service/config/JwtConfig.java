@@ -15,7 +15,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Profile;
-import org.springframework.core.io.Resource;
+import org.springframework.core.io.ResourceLoader;
 import org.springframework.security.oauth2.jose.jws.SignatureAlgorithm;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.jwt.JwtEncoder;
@@ -37,16 +37,32 @@ public class JwtConfig {
   }
 
   @Bean
-  public RSAPrivateKey rsaPrivateKey(@Value("${jwt.private-key}") Resource resource)
+  public RSAPrivateKey rsaPrivateKey(
+      @Value("${jwt.private-key:}") String location,
+      @Value("${JWT_PRIVATE_KEY_PEM:}") String inlinePem,
+      ResourceLoader resources)
       throws Exception {
-    String pem = resource.getContentAsString(StandardCharsets.UTF_8).strip();
+    String pem = loadKey(location, inlinePem, resources);
     return parsePrivateKey(pem);
   }
 
   @Bean
-  public RSAPublicKey rsaPublicKey(@Value("${jwt.public-key}") Resource resource) throws Exception {
-    String pem = resource.getContentAsString(StandardCharsets.UTF_8).strip();
+  public RSAPublicKey rsaPublicKey(
+      @Value("${jwt.public-key:}") String location,
+      @Value("${JWT_PUBLIC_KEY_PEM:}") String inlinePem,
+      ResourceLoader resources)
+      throws Exception {
+    String pem = loadKey(location, inlinePem, resources);
     return parsePublicKey(pem);
+  }
+
+  private static String loadKey(String location, String inlinePem, ResourceLoader resources)
+      throws Exception {
+    if (inlinePem != null && !inlinePem.isBlank()) return inlinePem.strip();
+    if (location == null || location.isBlank()) {
+      throw new IllegalArgumentException("JWT key resource or PEM secret is required");
+    }
+    return resources.getResource(location).getContentAsString(StandardCharsets.UTF_8).strip();
   }
 
   @Bean

@@ -7,7 +7,9 @@ import java.security.KeyPair;
 import java.security.KeyPairGenerator;
 import java.security.interfaces.RSAPrivateKey;
 import java.security.interfaces.RSAPublicKey;
+import java.util.Base64;
 import org.junit.jupiter.api.Test;
+import org.springframework.core.io.DefaultResourceLoader;
 
 class JwtConfigTest {
 
@@ -59,6 +61,22 @@ class JwtConfigTest {
   @Test
   void rejectsBlankKeyId() {
     assertThrows(IllegalArgumentException.class, () -> new JwtConfig(" "));
+  }
+
+  @Test
+  void loadsMatchingPemFromInjectedSecretsWithoutLocalFiles() throws Exception {
+    var pair = keyPair(2048);
+    var config = new JwtConfig("fargate-key");
+    var resources = new DefaultResourceLoader();
+    String privatePem = "-----BEGIN PRIVATE KEY-----\n"
+        + Base64.getMimeEncoder(64, new byte[]{'\n'}).encodeToString(pair.getPrivate().getEncoded())
+        + "\n-----END PRIVATE KEY-----";
+    String publicPem = "-----BEGIN PUBLIC KEY-----\n"
+        + Base64.getMimeEncoder(64, new byte[]{'\n'}).encodeToString(pair.getPublic().getEncoded())
+        + "\n-----END PUBLIC KEY-----";
+    var privateKey = config.rsaPrivateKey("", privatePem, resources);
+    var publicKey = config.rsaPublicKey("", publicPem, resources);
+    assertDoesNotThrow(() -> config.jwtEncoder(privateKey, publicKey));
   }
 
   private static KeyPair keyPair(int size) throws Exception {

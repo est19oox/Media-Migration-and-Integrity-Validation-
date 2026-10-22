@@ -71,53 +71,39 @@ public class MetadataPlanRepository implements InitializingBean {
 
   @org.springframework.transaction.annotation.Transactional
   public MetadataPlan saveNamed(MetadataPlan plan, Collection<String> occupied) {
-    return saveNamedBatch(List.of(plan), occupied).getFirst();
-  }
-
-  @org.springframework.transaction.annotation.Transactional
-  public List<MetadataPlan> saveNamedBatch(
-      List<MetadataPlan> requestedPlans, Collection<String> occupied) {
-    if (requestedPlans == null || requestedPlans.isEmpty())
-      throw new IllegalArgumentException("plans must not be empty");
-    String destination = requestedPlans.getFirst().destinationId();
-    if (requestedPlans.stream().anyMatch(plan -> !destination.equals(plan.destinationId())))
-      throw new IllegalArgumentException("all plans must share one destination");
     try {
       jdbc.update(
           "MERGE INTO MMIV_NAME_LOCKS t USING (SELECT ? FOLDER FROM dual) s ON (t.FOLDER=s.FOLDER)"
               + " WHEN NOT MATCHED THEN INSERT(FOLDER) VALUES(s.FOLDER)",
-          destination);
+          plan.destinationId());
     } catch (org.springframework.dao.DuplicateKeyException concurrentFirstUpload) {
       /* Another transaction initialized this folder lock. */
     }
     jdbc.queryForObject(
-        "SELECT FOLDER FROM MMIV_NAME_LOCKS WHERE FOLDER=? FOR UPDATE", String.class, destination);
+        "SELECT FOLDER FROM MMIV_NAME_LOCKS WHERE FOLDER=? FOR UPDATE",
+        String.class,
+        plan.destinationId());
     var used = new HashSet<>(occupied == null ? List.<String>of() : occupied);
     used.addAll(
         jdbc.queryForList(
             "SELECT OBJECT_PATH FROM MMIV_NAME_RESERVATIONS WHERE FOLDER=?",
             String.class,
-            destination));
-    var result = new ArrayList<MetadataPlan>(requestedPlans.size());
-    for (MetadataPlan plan : requestedPlans) {
-      MetadataPlan named;
-      try {
-        named = plan.reserveAvailableName(used);
-      } catch (IllegalArgumentException error) {
-        throw new org.springframework.web.server.ResponseStatusException(
-            org.springframework.http.HttpStatus.BAD_REQUEST, error.getMessage());
-      }
-      String path = named.objectPath();
-      save(named);
-      jdbc.update(
-          "INSERT INTO MMIV_NAME_RESERVATIONS(FOLDER,OBJECT_PATH,PLAN_ID) VALUES (?,?,?)",
-          named.destinationId(),
-          path,
-          named.metadataId().toString());
-      used.add(path);
-      result.add(named);
+            plan.destinationId()));
+    MetadataPlan named;
+    try {
+      named = plan.reserveAvailableName(used);
+    } catch (IllegalArgumentException error) {
+      throw new org.springframework.web.server.ResponseStatusException(
+          org.springframework.http.HttpStatus.BAD_REQUEST, error.getMessage());
     }
-    return List.copyOf(result);
+    String path = named.objectPath();
+    save(named);
+    jdbc.update(
+        "INSERT INTO MMIV_NAME_RESERVATIONS(FOLDER,OBJECT_PATH,PLAN_ID) VALUES (?,?,?)",
+        named.destinationId(),
+        path,
+        named.metadataId().toString());
+    return named;
   }
 
   public void releaseName(UUID id, String owner) {

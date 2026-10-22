@@ -211,59 +211,6 @@ public class MetadataClient {
                 .body(Plan.class));
   }
 
-  public BatchAllocation allocateBatch(
-      List<AllocationFile> files, String destinationId, Set<String> occupied) {
-    if (files == null || files.isEmpty()) throw new IllegalArgumentException("files are required");
-    var payload = new LinkedHashMap<String, Object>();
-    payload.put("destinationId", destinationId);
-    payload.put("occupiedPaths", occupied == null ? Set.of() : occupied);
-    payload.put("files", files);
-    try {
-      BatchAllocation batch =
-          metadata
-              .post()
-              .uri("/api/metadata/allocations/batch")
-              .headers(
-                  headers -> {
-                    headers.setBearerAuth(currentJwt().getTokenValue());
-                    if (org.springframework.web.context.request.RequestContextHolder
-                            .getRequestAttributes()
-                        instanceof
-                        org.springframework.web.context.request.ServletRequestAttributes
-                            attributes) {
-                      String run = attributes.getRequest().getHeader("X-MMIV-Verification-Run");
-                      if (run != null)
-                        headers.set("X-MMIV-Verification-Run", UUID.fromString(run).toString());
-                    }
-                  })
-              .body(payload)
-              .retrieve()
-              .body(BatchAllocation.class);
-      if (batch == null
-          || batch.migrationId() == null
-          || batch.plans() == null
-          || batch.plans().size() != files.size())
-        throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Invalid metadata assignment");
-      Set<UUID> metadataIds = new HashSet<>(), fileIds = new HashSet<>();
-      for (int i = 0; i < batch.plans().size(); i++) {
-        Plan plan = batch.plans().get(i);
-        validatePlan(plan, false);
-        if (!batch.migrationId().equals(plan.migrationId())
-            || !Objects.equals(destinationId, plan.destinationId())
-            || !matchesAllocation(plan, files.get(i))
-            || !metadataIds.add(plan.metadataId())
-            || !fileIds.add(plan.fileId()))
-          throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Invalid metadata assignment");
-      }
-      return new BatchAllocation(batch.migrationId(), List.copyOf(batch.plans()));
-    } catch (HttpClientErrorException error) {
-      throw new ResponseStatusException(error.getStatusCode(), "Metadata assignment rejected");
-    } catch (RestClientException error) {
-      throw new ResponseStatusException(
-          HttpStatus.SERVICE_UNAVAILABLE, "Metadata service unavailable");
-    }
-  }
-
   public List<Plan> verificationPlans(UUID run) {
     try {
       var response =
@@ -367,7 +314,25 @@ public class MetadataClient {
   private Plan request(java.util.function.Supplier<Plan> action) {
     try {
       var p = action.get();
-      validatePlan(p, true);
+      if (p == null
+          || p.metadataId() == null
+          || !p.metadataId().equals(p.migrationId())
+          || p.fileId() == null
+          || !currentJwt().getSubject().equals(p.ownerId())
+          || !bucket.equals(p.bucket())
+          || p.destinationId() == null
+          || !p.destinationId().matches("[A-Za-z0-9][A-Za-z0-9 _.-]{0,79}")
+          || p.fileName() == null
+          || !p.fileName().matches("[\\p{L}\\p{N}._ ()-]{1,200}")
+          || p.objectPath() == null
+          || p.objectPath().startsWith("/")
+          || p.objectPath().contains("\\")
+          || java.util.Arrays.stream(p.objectPath().split("/", -1))
+              .anyMatch(part -> part.isBlank() || part.equals(".") || part.equals(".."))
+          || !p.objectPath().substring(p.objectPath().lastIndexOf('/') + 1).equals(p.fileName())
+          || !(p.destinationId() + "/migrations/" + p.metadataId() + "/" + p.objectPath())
+              .equals(p.destinationKey()))
+        throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Invalid metadata assignment");
       return p;
     } catch (HttpClientErrorException e) {
       throw new ResponseStatusException(e.getStatusCode(), "Metadata assignment rejected");
@@ -377,59 +342,7 @@ public class MetadataClient {
     }
   }
 
-  private void validatePlan(Plan p, boolean single) {
-    if (p == null
-        || p.metadataId() == null
-        || p.migrationId() == null
-        || single && !p.metadataId().equals(p.migrationId())
-        || p.fileId() == null
-        || !currentJwt().getSubject().equals(p.ownerId())
-        || !bucket.equals(p.bucket())
-        || p.destinationId() == null
-        || !p.destinationId().matches("[A-Za-z0-9][A-Za-z0-9 _.-]{0,79}")
-        || p.fileName() == null
-        || !p.fileName().matches("[\\p{L}\\p{N}._ ()-]{1,200}")
-        || p.objectPath() == null
-        || p.objectPath().startsWith("/")
-        || p.objectPath().contains("\\")
-        || java.util.Arrays.stream(p.objectPath().split("/", -1))
-            .anyMatch(part -> part.isBlank() || part.equals(".") || part.equals(".."))
-        || !p.objectPath().substring(p.objectPath().lastIndexOf('/') + 1).equals(p.fileName())
-        || !(p.destinationId() + "/migrations/" + p.metadataId() + "/" + p.objectPath())
-            .equals(p.destinationKey()))
-      throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Invalid metadata assignment");
-  }
-
-  static boolean matchesAllocation(Plan plan, AllocationFile requested) {
-    if (plan == null
-        || requested == null
-        || plan.sizeBytes() != requested.sizeBytes()
-        || requested.fileName() == null
-        || requested.relativePath() == null) return false;
-    int requestedSlash = requested.relativePath().lastIndexOf('/');
-    int assignedSlash = plan.objectPath().lastIndexOf('/');
-    String requestedDirectory =
-        requestedSlash < 0 ? "" : requested.relativePath().substring(0, requestedSlash + 1);
-    String assignedDirectory =
-        assignedSlash < 0 ? "" : plan.objectPath().substring(0, assignedSlash + 1);
-    if (!requestedDirectory.equals(assignedDirectory)) return false;
-    String assignedName = plan.objectPath().substring(assignedSlash + 1);
-    if (!assignedName.equals(plan.fileName())) return false;
-    if (assignedName.equals(requested.fileName())) return true;
-    int dot = requested.fileName().lastIndexOf('.');
-    String base = dot > 0 ? requested.fileName().substring(0, dot) : requested.fileName();
-    String extension = dot > 0 ? requested.fileName().substring(dot) : "";
-    return assignedName.matches(
-        java.util.regex.Pattern.quote(base)
-            + " \\((?:[2-9]|[1-9][0-9]+)\\)"
-            + java.util.regex.Pattern.quote(extension));
-  }
-
   public record Decision(boolean authorised, String reason) {}
-
-  public record AllocationFile(String fileName, long sizeBytes, String relativePath) {}
-
-  public record BatchAllocation(UUID migrationId, List<Plan> plans) {}
 
   public record Plan(
       UUID metadataId,

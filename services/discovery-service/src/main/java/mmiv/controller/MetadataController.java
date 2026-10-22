@@ -37,14 +37,6 @@ public class MetadataController {
     return metadata.create(jwt, request, true, run);
   }
 
-  @PostMapping("/allocations/batch")
-  public BatchAllocationResponse allocateBatch(
-      @AuthenticationPrincipal Jwt jwt,
-      @RequestBody BatchAllocationRequest request,
-      @RequestHeader(value = "X-MMIV-Verification-Run", required = false) UUID run) {
-    return metadata.allocateBatch(jwt, request, run);
-  }
-
   @GetMapping("/verification/{run}/closed")
   public Object closed(@AuthenticationPrincipal Jwt jwt, @PathVariable UUID run) {
     return java.util.Map.of("closed", cleanup.closed(jwt, run));

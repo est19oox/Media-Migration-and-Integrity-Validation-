@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 import java.nio.file.*;
+import java.nio.file.attribute.FileTime;
 import java.util.*;
 import mmiv.events.EventPublisher;
 import org.junit.jupiter.api.Test;
@@ -71,5 +72,59 @@ class RabbitOutboxTest {
         .send(anyString(), anyString(), any(Message.class), any(CorrelationData.class));
     publisher.flush();
     assertEquals(1, Files.list(directory).count());
+  }
+
+  @Test
+  void separateReplicasShareOneOutboxWithoutPublishingAnEventTwice() throws Exception {
+    var rabbit = mock(RabbitTemplate.class);
+    doAnswer(
+            call -> {
+              CorrelationData correlation = call.getArgument(3);
+              correlation.getFuture().complete(new CorrelationData.Confirm(true, null));
+              return null;
+            })
+        .when(rabbit)
+        .send(anyString(), anyString(), any(Message.class), any(CorrelationData.class));
+    var first = new EventPublisher(rabbit, directory.toString(), "transfer-service", true);
+    var second = new EventPublisher(rabbit, directory.toString(), "transfer-service", true);
+    first.audit("UPLOAD", Map.of());
+    var a = new Thread(first::flush);
+    var b = new Thread(second::flush);
+    a.start();
+    b.start();
+    a.join();
+    b.join();
+    verify(rabbit, times(1))
+        .send(anyString(), anyString(), any(Message.class), any(CorrelationData.class));
+    try (var files = Files.list(directory)) {
+      assertEquals(0, files.count());
+    }
+  }
+
+  @Test
+  void abandonedClaimIsRecoveredAfterTaskReplacement() throws Exception {
+    var rabbit = mock(RabbitTemplate.class);
+    var publisher = new EventPublisher(rabbit, directory.toString(), "transfer-service", true);
+    publisher.audit("UPLOAD", Map.of());
+    Path pending;
+    try (var files = Files.list(directory)) {
+      pending = files.findFirst().orElseThrow();
+    }
+    var claimed = Files.move(pending, Path.of(pending + ".sending"));
+    Files.setLastModifiedTime(claimed, FileTime.fromMillis(System.currentTimeMillis() - 180_000));
+    doAnswer(
+            call -> {
+              CorrelationData correlation = call.getArgument(3);
+              correlation.getFuture().complete(new CorrelationData.Confirm(true, null));
+              return null;
+            })
+        .when(rabbit)
+        .send(anyString(), anyString(), any(Message.class), any(CorrelationData.class));
+    publisher.flush();
+    verify(rabbit, times(1))
+        .send(anyString(), anyString(), any(Message.class), any(CorrelationData.class));
+    try (var files = Files.list(directory)) {
+      assertEquals(0, files.count());
+    }
   }
 }

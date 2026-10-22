@@ -49,8 +49,6 @@ class FolderUploadTest {
   S3TransferStrategy strategy;
   FolderUploadService folders;
   MockMvc mvc;
-  mmiv.transfer.integration.MetadataClient metadata;
-  java.util.UUID migrationId;
 
   MockMultipartFile file(String name) {
     return new MockMultipartFile("files", name, "application/octet-stream", "hello".getBytes());
@@ -69,36 +67,28 @@ class FolderUploadTest {
             passingCleanup(),
             mock(mmiv.transfer.logging.FileEventLogger.class));
     folders = new FolderUploadService(transfers, validator);
-    metadata = mock(mmiv.transfer.integration.MetadataClient.class);
-    migrationId = java.util.UUID.randomUUID();
-    when(metadata.allocateBatch(anyList(), nullable(String.class), anySet()))
+    var metadata = mock(mmiv.transfer.integration.MetadataClient.class);
+    when(metadata.allocate(anyString(), anyLong(), nullable(String.class), anyString(), anySet()))
         .thenAnswer(
             call -> {
-              List<mmiv.transfer.integration.MetadataClient.AllocationFile> requested =
-                  call.getArgument(0);
-              var plans =
-                  requested.stream()
-                      .map(
-                          file -> {
-                            var id = java.util.UUID.randomUUID();
-                            return new mmiv.transfer.integration.MetadataClient.Plan(
-                                id,
-                                migrationId,
-                                java.util.UUID.randomUUID(),
-                                "owner",
-                                "landing",
-                                "test-bucket",
-                                "landing/migrations/" + id + "/" + file.relativePath(),
-                                null,
-                                file.fileName(),
-                                validator.uploadContentType(file.fileName()),
-                                file.sizeBytes(),
-                                "UPLOAD",
-                                file.relativePath());
-                          })
-                      .toList();
-              return new mmiv.transfer.integration.MetadataClient.BatchAllocation(
-                  migrationId, plans);
+              String name = call.getArgument(0);
+              long size = call.getArgument(1);
+              String path = call.getArgument(3);
+              var id = java.util.UUID.randomUUID();
+              return new mmiv.transfer.integration.MetadataClient.Plan(
+                  id,
+                  id,
+                  java.util.UUID.randomUUID(),
+                  "owner",
+                  "test-bucket",
+                  "test-bucket",
+                  "migrations/" + id + "/" + path,
+                  null,
+                  name,
+                  validator.uploadContentType(name),
+                  size,
+                  "UPLOAD",
+                  path);
             });
     mvc =
         MockMvcBuilders.standaloneSetup(
@@ -129,37 +119,17 @@ class FolderUploadTest {
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.succeeded").value(2))
         .andExpect(jsonPath("$.failed").value(0))
-        .andExpect(jsonPath("$.migrationId").value(migrationId.toString()))
         .andExpect(jsonPath("$.files[1].relativePath").value("album/sub/deep/a.txt"))
         .andExpect(jsonPath("$.files[1].upload.sha256").isNotEmpty());
     var sources = ArgumentCaptor.forClass(PreparedTransfer.class);
     verify(strategy, times(2)).transfer(sources.capture());
     var first = sources.getAllValues().get(0);
     var second = sources.getAllValues().get(1);
-    assertTrue(first.key().matches("landing/migrations/[0-9a-f-]+/album/a.txt"));
-    assertTrue(second.key().matches("landing/migrations/[0-9a-f-]+/album/sub/deep/a.txt"));
+    assertTrue(first.key().matches("migrations/[0-9a-f-]+/album/a.txt"));
+    assertTrue(second.key().matches("migrations/[0-9a-f-]+/album/sub/deep/a.txt"));
     assertNotEquals(first.key(), second.key());
     assertFalse(Files.exists(first.path()));
     assertFalse(Files.exists(second.path()));
-    verify(metadata).allocateBatch(anyList(), eq("landing"), anySet());
-  }
-
-  @Test
-  void batchAllocationFailureWritesNoObjects() throws Exception {
-    when(metadata.allocateBatch(anyList(), anyString(), anySet()))
-        .thenThrow(
-            new org.springframework.web.server.ResponseStatusException(
-                org.springframework.http.HttpStatus.SERVICE_UNAVAILABLE));
-
-    mvc.perform(
-            multipart("/api/v1/transfers/folder")
-                .param("destinationId", "landing")
-                .file(file("a.txt"))
-                .file(file("b.txt"))
-                .param("relativePaths", "album/a.txt", "album/b.txt"))
-        .andExpect(status().isServiceUnavailable());
-
-    verifyNoInteractions(s3);
   }
 
   @Test

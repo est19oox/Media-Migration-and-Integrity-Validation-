@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.file.*;
+import java.nio.file.attribute.FileTime;
 import java.nio.file.attribute.PosixFileAttributeView;
 import java.nio.file.attribute.PosixFilePermissions;
 import java.time.Instant;
@@ -103,24 +104,60 @@ public class EventPublisher {
   @Scheduled(fixedDelayString = "${mmiv.events.flush-delay-ms:5000}", initialDelay = 1000)
   public synchronized void flush() {
     if (!enabled) return;
+    // An EFS outbox can be shared by replicas. Recover work claimed by a task that died.
+    try (var files = Files.list(directory)) {
+      for (var claimed : files.filter(p -> p.toString().endsWith(".json.sending")).toList()) {
+        if (Files.getLastModifiedTime(claimed).toMillis() < System.currentTimeMillis() - 120_000) {
+          try {
+            Files.move(claimed, Path.of(claimed.toString().replaceFirst("\\.sending$", "")));
+          } catch (FileAlreadyExistsException | NoSuchFileException ignored) {
+            // Another replica recovered the event first.
+          }
+        }
+      }
+    } catch (IOException e) {
+      LOG.warn("Could not inspect shared event outbox; queued events will be retried");
+      return;
+    }
     try (var files = Files.list(directory)) {
       for (var file :
           files.filter(p -> p.toString().endsWith(".json")).sorted().limit(50).toList()) {
-        var pending = json.readTree(Files.readAllBytes(file));
-        byte[] body = json.writeValueAsBytes(pending.path("event"));
-        var props = new MessageProperties();
-        props.setContentType("application/json");
-        props.setDeliveryMode(MessageDeliveryMode.PERSISTENT);
-        props.setMessageId(pending.path("event").path("eventId").stringValue());
-        var correlation = new CorrelationData(props.getMessageId());
-        rabbit.send(
-            "mmiv.events",
-            pending.path("route").stringValue(),
-            new Message(body, props),
-            correlation);
-        var confirmation = correlation.getFuture().get(10, TimeUnit.SECONDS);
-        if (!confirmation.ack() || correlation.getReturned() != null) return;
-        Files.delete(file);
+        var claimed = Path.of(file.toString() + ".sending");
+        try {
+          Files.move(file, claimed, StandardCopyOption.ATOMIC_MOVE);
+          Files.setLastModifiedTime(claimed, FileTime.fromMillis(System.currentTimeMillis()));
+        } catch (AtomicMoveNotSupportedException unsupported) {
+          // A shared outbox requires atomic claims; do not risk duplicate sends.
+          throw new IllegalStateException("Outbox filesystem does not support atomic claims", unsupported);
+        } catch (NoSuchFileException | FileAlreadyExistsException ignored) {
+          // Another replica owns this event.
+          continue;
+        }
+        try {
+          var pending = json.readTree(Files.readAllBytes(claimed));
+          byte[] body = json.writeValueAsBytes(pending.path("event"));
+          var props = new MessageProperties();
+          props.setContentType("application/json");
+          props.setDeliveryMode(MessageDeliveryMode.PERSISTENT);
+          props.setMessageId(pending.path("event").path("eventId").stringValue());
+          var correlation = new CorrelationData(props.getMessageId());
+          rabbit.send(
+              "mmiv.events",
+              pending.path("route").stringValue(),
+              new Message(body, props),
+              correlation);
+          var confirmation = correlation.getFuture().get(10, TimeUnit.SECONDS);
+          if (!confirmation.ack() || correlation.getReturned() != null) return;
+          Files.delete(claimed);
+        } finally {
+          if (Files.exists(claimed)) {
+            try {
+              Files.move(claimed, file);
+            } catch (FileAlreadyExistsException | NoSuchFileException ignored) {
+              // A separate replica recovered it after this task stalled.
+            }
+          }
+        }
       }
     } catch (InterruptedException e) {
       Thread.currentThread().interrupt();

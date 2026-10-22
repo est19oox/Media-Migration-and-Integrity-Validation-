@@ -1,6 +1,7 @@
 package mmiv.gateway.ratelimit;
 
 import java.time.Duration;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.Ordered;
 import org.springframework.http.HttpStatus;
@@ -16,22 +17,41 @@ import reactor.core.publisher.Mono;
 public class RequestRateLimitFilter implements WebFilter, Ordered {
   private final RedisRequestLimiter limiter;
   private final boolean enabled;
+  private final boolean trustAlbXff;
+  private final boolean trustCloudFrontXff;
   private final int authLimit, uploadLimit, apiLimit;
   private static final int WINDOW_SECONDS = 60;
 
+  @Autowired
   public RequestRateLimitFilter(
       RedisRequestLimiter limiter,
       @Value("${mmiv.rate-limit.enabled:true}") boolean enabled,
       @Value("${mmiv.rate-limit.auth-per-minute:10}") int authLimit,
       @Value("${mmiv.rate-limit.uploads-per-minute:30}") int uploadLimit,
-      @Value("${mmiv.rate-limit.api-per-minute:120}") int apiLimit) {
+      @Value("${mmiv.rate-limit.api-per-minute:120}") int apiLimit,
+      @Value("${MMIV_RATE_LIMIT_TRUST_ALB_XFF:false}") boolean trustAlbXff,
+      @Value("${MMIV_RATE_LIMIT_TRUST_CLOUDFRONT_XFF:false}") boolean trustCloudFrontXff) {
     if (authLimit < 1 || uploadLimit < 1 || apiLimit < 1)
       throw new IllegalArgumentException("Rate limits must be positive");
     this.limiter = limiter;
     this.enabled = enabled;
+    this.trustAlbXff = trustAlbXff;
+    this.trustCloudFrontXff = trustCloudFrontXff;
     this.authLimit = authLimit;
     this.uploadLimit = uploadLimit;
     this.apiLimit = apiLimit;
+  }
+
+  // Preserve the existing constructor for direct tests and non-ALB deployments.
+  public RequestRateLimitFilter(
+      RedisRequestLimiter limiter, boolean enabled, int authLimit, int uploadLimit, int apiLimit) {
+    this(limiter, enabled, authLimit, uploadLimit, apiLimit, false, false);
+  }
+
+  public RequestRateLimitFilter(
+      RedisRequestLimiter limiter, boolean enabled, int authLimit, int uploadLimit, int apiLimit,
+      boolean trustAlbXff) {
+    this(limiter, enabled, authLimit, uploadLimit, apiLimit, trustAlbXff, false);
   }
 
   @Override
@@ -50,10 +70,22 @@ public class RequestRateLimitFilter implements WebFilter, Ordered {
             && path.startsWith("/api/v1/transfers");
     String policy = authentication ? "authentication" : upload ? "upload" : "api";
     int limit = authentication ? authLimit : upload ? uploadLimit : apiLimit;
-    // Do not trust client-supplied X-Forwarded-For. Deploying a proxy requires an
-    // explicitly trusted forwarding configuration before changing this identity.
     var remote = exchange.getRequest().getRemoteAddress();
     String ip = remote == null ? "unknown" : remote.getAddress().getHostAddress();
+    // ALB appends its socket peer. Behind CloudFront, that is the CloudFront
+    // address; CloudFront first appends the viewer address. Never trust a
+    // client-supplied prefix. Enable only with the CloudFront-only ALB rule.
+    if (trustAlbXff) {
+      String xff = exchange.getRequest().getHeaders().getFirst("X-Forwarded-For");
+      if (xff != null) {
+        String[] hops = xff.split(",", -1);
+        int position = hops.length - (trustCloudFrontXff ? 2 : 1);
+        if (position >= 0) {
+          String trusted = hops[position].trim();
+          if (trusted.length() <= 45 && trusted.matches("[0-9a-fA-F:.]+")) ip = trusted;
+        }
+      }
+    }
     Mono<String> identity =
         authentication
             ? Mono.just("ip:" + ip)

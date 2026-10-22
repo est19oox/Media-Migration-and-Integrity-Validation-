@@ -62,7 +62,7 @@ export default function Page() {
                 {'\n              '}
                 <strong id="account">{'MMIV account'}</strong>
                 {'\n              '}
-                <span id="accountRole">{'Workspace member'}</span>
+                <span>{'Workspace member'}</span>
                 {'\n            '}
               </div>
               {'\n            '}

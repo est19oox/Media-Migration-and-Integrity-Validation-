@@ -35,7 +35,7 @@ class CacheTest(unittest.TestCase):
         self.base = Path(self.temp.name)
         self.root = self.base/'repository with spaces'
         self.roots = [self.root/'infrastructure'/p for p in
-                      ['bootstrap', 'terraform', 'terraform/environments/dev']]
+                      ['bootstrap', 'terraform', 'terraform/environments/dev', 'ecs-fargate', 'aws-managed-data']]
         for p in self.roots:
             p.mkdir(parents=True, exist_ok=True)
             (p/'main.tf').write_text('terraform {}\n')
@@ -61,7 +61,7 @@ class CacheTest(unittest.TestCase):
         self.assertEqual(sum(bool(r.get('download')) for r in records), 1)
         commands = [r for r in records if 'args' in r]
         self.assertEqual([r['args'][1] for r in commands],
-                         ['fmt','init','validate','init','validate','init','validate'])
+                         ['fmt','init','validate','init','validate','init','validate','init','validate','init','validate'])
         self.assertEqual({r['cache'] for r in commands}, {str(cache)})
         for p in self.roots:
             self.assertEqual((p/'.terraform/providers/fixture-provider').resolve(),

@@ -39,6 +39,34 @@ class RequestRateLimitFilterTest {
   }
 
   @Test
+  void trustedAlbUsesAppendedClientAddressInsteadOfSpoofedPrefix() {
+    var redis = mock(RedisRequestLimiter.class);
+    when(redis.count("authentication", "ip:203.0.113.8", 60)).thenReturn(Mono.just(1L));
+    var filter = new RequestRateLimitFilter(redis, true, 10, 30, 120, true);
+    var exchange = MockServerWebExchange.from(
+        MockServerHttpRequest.post("/user-access/api/auth/login")
+            .remoteAddress(new InetSocketAddress("10.0.1.9", 1234))
+            .header("X-Forwarded-For", "198.51.100.1, 203.0.113.8"));
+    filter.filter(exchange, e -> Mono.empty()).block(Duration.ofSeconds(3));
+    verify(redis).count("authentication", "ip:203.0.113.8", 60);
+    verify(redis, never()).count("authentication", "ip:198.51.100.1", 60);
+  }
+
+  @Test
+  void trustedCloudFrontUsesViewerHopBeforeAlbAppendedHop() {
+    var redis = mock(RedisRequestLimiter.class);
+    when(redis.count("authentication", "ip:203.0.113.8", 60)).thenReturn(Mono.just(1L));
+    var filter = new RequestRateLimitFilter(redis, true, 10, 30, 120, true, true);
+    var exchange = MockServerWebExchange.from(
+        MockServerHttpRequest.post("/user-access/api/auth/login")
+            .remoteAddress(new InetSocketAddress("10.0.1.9", 1234))
+            .header("X-Forwarded-For", "198.51.100.1, 203.0.113.8, 192.0.2.4"));
+    filter.filter(exchange, e -> Mono.empty()).block(Duration.ofSeconds(3));
+    verify(redis).count("authentication", "ip:203.0.113.8", 60);
+    verify(redis, never()).count("authentication", "ip:198.51.100.1", 60);
+  }
+
+  @Test
   void redisFailureDoesNotInvokeBackend() {
     var redis = mock(RedisRequestLimiter.class);
     when(redis.count(anyString(), anyString(), eq(60)))

@@ -78,7 +78,7 @@ def verify_scans(deployments, report_root, account_file):
                     if not line.startswith('::add-mask::'):
                         log.write(line)
                 code = process.wait()
-            results.append({'service': name, 'exit_code': code, 'blocking': True})
+            results.append({'service': name, 'exit_code': code})
     finally:
         if account_file.exists() or (os.environ.get('USER_ACCESS_TEST_USERNAME') and os.environ.get('USER_ACCESS_TEST_PASSWORD')):
             directory=report_root/'data-cleanup';directory.mkdir(parents=True,exist_ok=True)
@@ -88,11 +88,8 @@ def verify_scans(deployments, report_root, account_file):
                  'MMIV_VERIFICATION_RUN_ID':run_id,'DAST_REPORT_DIR':str(directory.resolve())}
             with (directory/'cleanup.log').open('w') as log:
                 data_cleanup=subprocess.run(['bash',str(ROOT/'scripts/cd/run-dast-ssm.sh')],cwd=ROOT,env=env,stdout=log,stderr=subprocess.STDOUT)
-            results.append({'service':'verification-data-cleanup','exit_code':data_cleanup.returncode,
-                            'blocking':False,'runId':run_id})
-            if data_cleanup.returncode:
-                print('::warning::Verification data cleanup failed; release verification remains successful. '
-                      'See scoped run evidence and retry cleanup with the same run ID.',file=sys.stderr)
+            results.append({'service':'verification-data-cleanup','exit_code':data_cleanup.returncode,'runId':run_id})
+            if data_cleanup.returncode:print('Verification data cleanup failed; see scoped run evidence.',file=sys.stderr)
         if account_file.exists():
             directory = report_root / 'account-cleanup'
             directory.mkdir(parents=True, exist_ok=True)
@@ -104,14 +101,11 @@ def verify_scans(deployments, report_root, account_file):
             with (directory / 'cleanup.log').open('w') as log:
                 cleanup = subprocess.run(['bash', str(ROOT / 'scripts/cd/run-dast-ssm.sh')],
                                          cwd=ROOT, env=env, stdout=log, stderr=subprocess.STDOUT)
-            results.append({'service': 'verification-account-cleanup', 'exit_code': cleanup.returncode,
-                            'blocking': False})
+            results.append({'service': 'verification-account-cleanup', 'exit_code': cleanup.returncode})
             if cleanup.returncode:
-                print('::warning::Verification account cleanup failed; release verification remains '
-                      'successful. See cleanup evidence and remove the generated account manually.',
-                      file=sys.stderr)
+                print('Verification account cleanup failed; see cleanup evidence.', file=sys.stderr)
     (report_root / 'verification-summary.json').write_text(json.dumps(results, indent=2) + '\n')
-    return int(any(result['exit_code'] for result in results if result['blocking']))
+    return int(any(result['exit_code'] for result in results))
 
 
 def rollback(deployments, directory, report_root):
