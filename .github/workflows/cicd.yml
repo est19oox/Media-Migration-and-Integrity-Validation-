@@ -532,6 +532,14 @@ jobs:
             --image-ids "imageTag=oracle-bootstrap-$GITHUB_SHA" >/dev/null 2>&1; then
             docker push "$IMAGE"
           fi
+      - name: Upload Oracle bootstrap scan evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v6
+        with:
+          name: image-evidence-oracle-bootstrap-${{ github.sha }}
+          path: .ci/reports/trivy-image.json
+          if-no-files-found: warn
+          retention-days: 7
   release-ecs:
     name: Release ECS after all seven images pass
     if: ${{ github.ref == 'refs/heads/main' && vars.MMIV_ECS_AUTO_DEPLOY == 'true' && !inputs.deploy_demo }}
