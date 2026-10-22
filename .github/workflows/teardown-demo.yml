@@ -1,0 +1,199 @@
+name: Teardown MMIV ECS demo
+
+'on':
+  workflow_dispatch:
+    inputs:
+      action:
+        description: Plan only or permanently destroy the new ECS and managed-data stacks
+        type: choice
+        options: [plan, destroy]
+        default: plan
+        required: true
+      confirmation:
+        description: For destroy, enter DESTROY-MMIV-DEMO
+        type: string
+        required: false
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: mmiv-demo-teardown
+  cancel-in-progress: false
+
+jobs:
+  teardown:
+    name: Review or destroy only the new MMIV demo stacks
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    env:
+      AWS_REGION: ap-southeast-1
+      ECR_REPOSITORY: mmiv
+      MMIV_BUCKET_NAME: ${{ vars.MMIV_BUCKET_NAME || 'media-migration-dev-landing' }}
+      MMIV_STATE_BUCKET: ${{ vars.MMIV_STATE_BUCKET }}
+      MMIV_VPC_ID: ${{ vars.MMIV_VPC_ID }}
+      MMIV_PRIMARY_PUBLIC_SUBNET_ID: ${{ vars.MMIV_PRIMARY_PUBLIC_SUBNET_ID }}
+      MMIV_SECONDARY_PUBLIC_SUBNET_ID: ${{ vars.MMIV_SECONDARY_PUBLIC_SUBNET_ID }}
+      MMIV_JWT_ISSUER: ${{ vars.USER_ACCESS_JWT_ISSUER || 'https://auth.mmiv.example' }}
+      MMIV_JWT_KEY_ID: ${{ vars.USER_ACCESS_JWT_KEY_ID || 'mmiv-user-access-key-1' }}
+      MMIV_DEMO_SINGLE_AZ: ${{ vars.MMIV_DEMO_SINGLE_AZ || 'true' }}
+      MMIV_ECS_AUTO_DEPLOY: ${{ vars.MMIV_ECS_AUTO_DEPLOY || 'false' }}
+      TF_IN_AUTOMATION: 'true'
+    steps:
+      - uses: actions/checkout@v5
+      - name: Check destructive-action guard
+        env:
+          TEARDOWN_ACTION: ${{ inputs.action }}
+          TEARDOWN_CONFIRMATION: ${{ inputs.confirmation }}
+        run: |
+          set -euo pipefail
+          : "${MMIV_STATE_BUCKET:?Set MMIV_STATE_BUCKET repository variable}"
+          if [ "$TEARDOWN_ACTION" = destroy ]; then
+            if [ "$TEARDOWN_CONFIRMATION" != DESTROY-MMIV-DEMO ]; then
+              echo '::error::Type DESTROY-MMIV-DEMO to authorize permanent demo teardown.'
+              exit 1
+            fi
+            if [ "$MMIV_ECS_AUTO_DEPLOY" = true ]; then
+              echo '::error::Set MMIV_ECS_AUTO_DEPLOY=false before teardown so CI cannot recreate Tasks.'
+              exit 1
+            fi
+          fi
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v6.3.0
+        with:
+          role-to-assume: arn:aws:iam::275069781906:role/GitHubActions-MMIV-Terraform
+          aws-region: ${{ env.AWS_REGION }}
+      - name: Install Terraform
+        uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: 1.15.8
+          terraform_wrapper: false
+      - name: Prepare both Terraform states and preview deletion
+        shell: bash
+        run: |
+          set -euo pipefail
+          : "${MMIV_VPC_ID:?Set MMIV_VPC_ID repository variable}"
+          : "${MMIV_PRIMARY_PUBLIC_SUBNET_ID:?Set MMIV_PRIMARY_PUBLIC_SUBNET_ID repository variable}"
+          : "${MMIV_SECONDARY_PUBLIC_SUBNET_ID:?Set MMIV_SECONDARY_PUBLIC_SUBNET_ID repository variable}"
+          terraform -chdir=infrastructure/aws-managed-data init -input=false \
+            -backend-config="bucket=${MMIV_STATE_BUCKET}" \
+            -backend-config=key=aws-managed-data/terraform.tfstate \
+            -backend-config="region=${AWS_REGION}" \
+            -backend-config=encrypt=true -backend-config=use_lockfile=true
+          terraform -chdir=infrastructure/ecs-fargate init -input=false \
+            -backend-config="bucket=${MMIV_STATE_BUCKET}" \
+            -backend-config=key=ecs-fargate/terraform.tfstate \
+            -backend-config="region=${AWS_REGION}" \
+            -backend-config=encrypt=true -backend-config=use_lockfile=true
+          terraform -chdir=infrastructure/aws-managed-data state list > "$RUNNER_TEMP/mmiv-data-state.txt"
+          terraform -chdir=infrastructure/ecs-fargate state list > "$RUNNER_TEMP/mmiv-ecs-state.txt"
+          if [ -s "$RUNNER_TEMP/mmiv-ecs-state.txt" ]; then
+            terraform -chdir=infrastructure/aws-managed-data output -json > "$RUNNER_TEMP/mmiv-data-outputs.json"
+            export AWS_ACCOUNT_ID
+            AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+            python3 scripts/cd/render-ecs-release-vars.py \
+              "$RUNNER_TEMP/mmiv-data-outputs.json" "$RUNNER_TEMP/mmiv-ecs-teardown.tfvars.json"
+            terraform -chdir=infrastructure/ecs-fargate plan -destroy -input=false \
+              -var-file="$RUNNER_TEMP/mmiv-ecs-teardown.tfvars.json" -no-color \
+              > "$RUNNER_TEMP/mmiv-ecs-destroy-plan.txt"
+            grep -E '^Plan: ' "$RUNNER_TEMP/mmiv-ecs-destroy-plan.txt" || true
+          fi
+          if [ -s "$RUNNER_TEMP/mmiv-data-state.txt" ]; then
+            terraform -chdir=infrastructure/aws-managed-data plan -destroy -input=false \
+              -var="vpc_id=${MMIV_VPC_ID}" \
+              -var="subnet_ids=[\"${MMIV_PRIMARY_PUBLIC_SUBNET_ID}\",\"${MMIV_SECONDARY_PUBLIC_SUBNET_ID}\"]" \
+              -var="demo_single_az=${MMIV_DEMO_SINGLE_AZ}" -var=teardown_mode=true \
+              -no-color > "$RUNNER_TEMP/mmiv-data-destroy-plan.txt"
+            grep -E '^Plan: ' "$RUNNER_TEMP/mmiv-data-destroy-plan.txt" || true
+          fi
+      - name: Prepare databases to skip final snapshots
+        if: ${{ inputs.action == 'destroy' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          targets=()
+          if grep -Fxq 'aws_db_instance.oracle' "$RUNNER_TEMP/mmiv-data-state.txt"; then
+            targets+=(-target=aws_db_instance.oracle)
+          fi
+          if grep -Fxq 'aws_docdb_cluster.reporting' "$RUNNER_TEMP/mmiv-data-state.txt"; then
+            targets+=(-target=aws_docdb_cluster.reporting)
+          fi
+          if [ "${#targets[@]}" -gt 0 ]; then
+            terraform -chdir=infrastructure/aws-managed-data plan -input=false \
+              "${targets[@]}" -var="vpc_id=${MMIV_VPC_ID}" \
+              -var="subnet_ids=[\"${MMIV_PRIMARY_PUBLIC_SUBNET_ID}\",\"${MMIV_SECONDARY_PUBLIC_SUBNET_ID}\"]" \
+              -var="demo_single_az=${MMIV_DEMO_SINGLE_AZ}" -var=teardown_mode=true \
+              -out="$RUNNER_TEMP/mmiv-skip-final-snapshots.tfplan"
+            terraform -chdir=infrastructure/aws-managed-data show -json \
+              "$RUNNER_TEMP/mmiv-skip-final-snapshots.tfplan" > "$RUNNER_TEMP/mmiv-skip-final-snapshots.json"
+            python3 - "$RUNNER_TEMP/mmiv-skip-final-snapshots.json" <<'PY'
+          import json
+          import sys
+          with open(sys.argv[1], encoding='utf-8') as plan:
+              changes = json.load(plan).get('resource_changes', [])
+          unsafe = [item['address'] for item in changes
+                    if set(item.get('change', {}).get('actions', [])) & {'create', 'delete'}]
+          if unsafe:
+              raise SystemExit('Teardown preparation would create or delete: ' + ', '.join(unsafe))
+          PY
+            terraform -chdir=infrastructure/aws-managed-data apply -input=false \
+              "$RUNNER_TEMP/mmiv-skip-final-snapshots.tfplan"
+          fi
+      - name: Disable deletion protection on this demo's resources
+        if: ${{ inputs.action == 'destroy' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if grep -Fxq 'aws_lb.gateway' "$RUNNER_TEMP/mmiv-ecs-state.txt"; then
+            alb=$(aws elbv2 describe-load-balancers --names mmiv-fargate-gateway \
+              --query 'LoadBalancers[0].LoadBalancerArn' --output text)
+            aws elbv2 modify-load-balancer-attributes --load-balancer-arn "$alb" \
+              --attributes Key=deletion_protection.enabled,Value=false
+          fi
+          if grep -Fxq 'aws_db_instance.oracle' "$RUNNER_TEMP/mmiv-data-state.txt"; then
+            aws rds modify-db-instance --db-instance-identifier mmiv-oracle \
+              --no-deletion-protection --apply-immediately >/dev/null
+            aws rds wait db-instance-available --db-instance-identifier mmiv-oracle
+          fi
+          if grep -Fxq 'aws_docdb_cluster.reporting' "$RUNNER_TEMP/mmiv-data-state.txt"; then
+            aws docdb modify-db-cluster --db-cluster-identifier mmiv-reporting \
+              --no-deletion-protection --apply-immediately >/dev/null
+            aws docdb wait db-cluster-available --db-cluster-identifier mmiv-reporting
+          fi
+      - name: Destroy ECS before managed data
+        if: ${{ inputs.action == 'destroy' }}
+        shell: bash
+        run: |
+          if [ -s "$RUNNER_TEMP/mmiv-ecs-state.txt" ]; then
+            terraform -chdir=infrastructure/ecs-fargate destroy -auto-approve -input=false \
+              -lock-timeout=5m -var-file="$RUNNER_TEMP/mmiv-ecs-teardown.tfvars.json"
+          fi
+      - name: Destroy disposable databases without final snapshots
+        if: ${{ inputs.action == 'destroy' }}
+        shell: bash
+        run: |
+          if [ -s "$RUNNER_TEMP/mmiv-data-state.txt" ]; then
+            terraform -chdir=infrastructure/aws-managed-data destroy -auto-approve -input=false \
+              -lock-timeout=5m -var="vpc_id=${MMIV_VPC_ID}" \
+              -var="subnet_ids=[\"${MMIV_PRIMARY_PUBLIC_SUBNET_ID}\",\"${MMIV_SECONDARY_PUBLIC_SUBNET_ID}\"]" \
+              -var="demo_single_az=${MMIV_DEMO_SINGLE_AZ}" -var=teardown_mode=true
+          fi
+      - name: Check both Terraform states are empty
+        if: ${{ inputs.action == 'destroy' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -z "$(terraform -chdir=infrastructure/ecs-fargate state list)"
+          test -z "$(terraform -chdir=infrastructure/aws-managed-data state list)"
+          echo 'Both new Terraform roots contain no managed resources. Check shared resources and billing separately.'
+      - name: Upload destroy plan summaries
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v6
+        with:
+          name: mmiv-demo-destroy-plans-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/mmiv-ecs-destroy-plan.txt
+            ${{ runner.temp }}/mmiv-data-destroy-plan.txt
+          if-no-files-found: ignore
+          retention-days: 7

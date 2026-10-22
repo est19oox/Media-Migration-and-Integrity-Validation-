@@ -1,0 +1,173 @@
+name: Release MMIV to ECS
+
+'on':
+  workflow_call:
+    inputs:
+      apply:
+        type: boolean
+        required: true
+      first_release:
+        type: boolean
+        default: false
+        required: false
+      prepare_base:
+        type: boolean
+        default: false
+        required: false
+  workflow_dispatch:
+    inputs:
+      apply:
+        description: Apply the reviewed ECS plan (false only generates a plan)
+        type: boolean
+        default: false
+        required: true
+      prepare_base:
+        description: Prepare ECS infrastructure without starting services (first deployment only)
+        type: boolean
+        default: false
+        required: true
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: mmiv-ecs-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Plan and optionally release immutable ECS images
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      AWS_REGION: ap-southeast-1
+      ECR_REPOSITORY: mmiv
+      MMIV_BUCKET_NAME: ${{ vars.MMIV_BUCKET_NAME || 'media-migration-dev-landing' }}
+      MMIV_VPC_ID: ${{ vars.MMIV_VPC_ID }}
+      MMIV_PRIMARY_PUBLIC_SUBNET_ID: ${{ vars.MMIV_PRIMARY_PUBLIC_SUBNET_ID }}
+      MMIV_SECONDARY_PUBLIC_SUBNET_ID: ${{ vars.MMIV_SECONDARY_PUBLIC_SUBNET_ID }}
+      MMIV_JWT_ISSUER: ${{ vars.USER_ACCESS_JWT_ISSUER || 'https://auth.mmiv.example' }}
+      MMIV_JWT_KEY_ID: ${{ vars.USER_ACCESS_JWT_KEY_ID || 'mmiv-user-access-key-1' }}
+      MMIV_STATE_BUCKET: ${{ vars.MMIV_STATE_BUCKET }}
+      MMIV_DEMO_SINGLE_AZ: ${{ vars.MMIV_DEMO_SINGLE_AZ || 'true' }}
+      TF_IN_AUTOMATION: 'true'
+      MMIV_FIRST_RELEASE: ${{ inputs.first_release || false }}
+      MMIV_PREPARE_BASE: ${{ inputs.prepare_base || false }}
+      MMIV_START_SERVICES: ${{ inputs.prepare_base && 'false' || 'true' }}
+    steps:
+      - name: Checkout exact release commit
+        uses: actions/checkout@v5
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v6.3.0
+        with:
+          role-to-assume: arn:aws:iam::275069781906:role/GitHubActions-MMIV-Terraform
+          aws-region: ${{ env.AWS_REGION }}
+      - name: Install Terraform
+        uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: 1.15.8
+          terraform_wrapper: false
+      - name: Check configured state and immutable images
+        shell: bash
+        run: |
+          set -euo pipefail
+          : "${MMIV_STATE_BUCKET:?Set MMIV_STATE_BUCKET repository variable}"
+          for name in service-registry transfer-service integrity-service user-access-service reporting-service discovery-service api-gateway oracle-bootstrap; do
+            aws ecr describe-images --repository-name "$ECR_REPOSITORY" \
+              --image-ids "imageTag=${name}-${GITHUB_SHA}" --query 'imageDetails[0].imageDigest' --output text >/dev/null
+          done
+          aws sts get-caller-identity --query Account --output text > "$RUNNER_TEMP/mmiv-account-id"
+      - name: Read existing managed-data outputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          terraform -chdir=infrastructure/aws-managed-data init -input=false \
+            -backend-config="bucket=${MMIV_STATE_BUCKET}" \
+            -backend-config=key=aws-managed-data/terraform.tfstate \
+            -backend-config="region=${AWS_REGION}" \
+            -backend-config=encrypt=true -backend-config=use_lockfile=true
+          terraform -chdir=infrastructure/aws-managed-data output -json > "$RUNNER_TEMP/mmiv-data-outputs.json"
+      - name: Render ECS release inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          export AWS_ACCOUNT_ID
+          AWS_ACCOUNT_ID=$(cat "$RUNNER_TEMP/mmiv-account-id")
+          python3 scripts/cd/render-ecs-release-vars.py \
+            "$RUNNER_TEMP/mmiv-data-outputs.json" "$RUNNER_TEMP/mmiv-ecs.auto.tfvars.json"
+      - name: Plan ECS release
+        shell: bash
+        run: |
+          set -euo pipefail
+          terraform -chdir=infrastructure/ecs-fargate init -input=false \
+            -backend-config="bucket=${MMIV_STATE_BUCKET}" \
+            -backend-config=key=ecs-fargate/terraform.tfstate \
+            -backend-config="region=${AWS_REGION}" \
+            -backend-config=encrypt=true -backend-config=use_lockfile=true
+          terraform -chdir=infrastructure/ecs-fargate state list > "$RUNNER_TEMP/mmiv-ecs-state-list.txt"
+          if grep -Fxq 'aws_ecs_service.service["api-gateway"]' "$RUNNER_TEMP/mmiv-ecs-state-list.txt"; then
+            if [ "$MMIV_PREPARE_BASE" = true ]; then
+              echo '::error::Cannot prepare base after Gateway is already deployed; this would stop services.'
+              exit 1
+            fi
+          else
+            if [ "$MMIV_FIRST_RELEASE" != true ] && [ "$MMIV_PREPARE_BASE" != true ]; then
+              echo '::error::ECS services are not initialized. Run the Oracle bootstrap workflow successfully before the first release.'
+              exit 1
+            fi
+          fi
+          terraform -chdir=infrastructure/ecs-fargate validate
+          terraform -chdir=infrastructure/ecs-fargate plan -input=false -lock-timeout=5m \
+            -var-file="$RUNNER_TEMP/mmiv-ecs.auto.tfvars.json" -out="$RUNNER_TEMP/mmiv-ecs.tfplan" \
+            -no-color > "$RUNNER_TEMP/mmiv-ecs-plan.txt"
+          terraform -chdir=infrastructure/ecs-fargate show -no-color "$RUNNER_TEMP/mmiv-ecs.tfplan" \
+            > "$RUNNER_TEMP/mmiv-ecs-plan.txt"
+          terraform -chdir=infrastructure/ecs-fargate show -json "$RUNNER_TEMP/mmiv-ecs.tfplan" \
+            > "$RUNNER_TEMP/mmiv-ecs-plan.json"
+          python3 - "$RUNNER_TEMP/mmiv-ecs-plan.json" <<'PY'
+          import json
+          import sys
+          with open(sys.argv[1], encoding='utf-8') as plan:
+              changes = json.load(plan).get('resource_changes', [])
+          destructive = [item['address'] for item in changes
+                         if 'delete' in item.get('change', {}).get('actions', [])]
+          if destructive:
+              raise SystemExit('ECS plan would delete or replace resources: ' + ', '.join(destructive))
+          PY
+          grep -E '^Plan: ' "$RUNNER_TEMP/mmiv-ecs-plan.txt" || true
+      - name: Apply ECS release
+        if: ${{ inputs.apply }}
+        shell: bash
+        run: terraform -chdir=infrastructure/ecs-fargate apply -input=false -lock-timeout=5m "$RUNNER_TEMP/mmiv-ecs.tfplan"
+      - name: Check ECS rollout and Gateway health
+        if: ${{ inputs.apply && !inputs.prepare_base }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          cluster=$(terraform -chdir=infrastructure/ecs-fargate output -raw cluster_name)
+          for name in service-registry service-registry-peer transfer-service integrity-service user-access-service reporting-service discovery-service api-gateway; do
+            aws ecs wait services-stable --cluster "$cluster" --services "$name"
+          done
+          url=$(terraform -chdir=infrastructure/ecs-fargate output -raw browser_url)
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent --show-error --max-time 10 \
+              --output /dev/null "$url/actuator/health"; then
+              echo "Gateway is healthy at $url"
+              exit 0
+            fi
+            sleep 10
+          done
+          echo '::error::ECS is stable but the public Gateway health URL is not responding.'
+          exit 1
+      - name: Confirm prepared base for Oracle initialization
+        if: ${{ inputs.apply && inputs.prepare_base }}
+        run: echo 'ECS base is prepared with services stopped. Run Initialize MMIV Oracle schemas next.'
+      - name: Upload plan summary
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v6
+        with:
+          name: ecs-release-plan-${{ github.sha }}
+          path: ${{ runner.temp }}/mmiv-ecs-plan.txt
+          if-no-files-found: ignore
+          retention-days: 7

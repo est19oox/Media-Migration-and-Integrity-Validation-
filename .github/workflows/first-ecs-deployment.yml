@@ -1,0 +1,75 @@
+name: First MMIV ECS deployment
+
+'on':
+  workflow_call:
+    inputs:
+      apply:
+        type: boolean
+        required: true
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: mmiv-first-ecs-deployment
+  cancel-in-progress: false
+
+jobs:
+  preflight:
+    name: Check configuration and all eight immutable images
+    runs-on: ubuntu-latest
+    env:
+      AWS_REGION: ap-southeast-1
+      ECR_REPOSITORY: mmiv
+      MMIV_STATE_BUCKET: ${{ vars.MMIV_STATE_BUCKET }}
+      MMIV_VPC_ID: ${{ vars.MMIV_VPC_ID }}
+      MMIV_PRIMARY_PUBLIC_SUBNET_ID: ${{ vars.MMIV_PRIMARY_PUBLIC_SUBNET_ID }}
+      MMIV_SECONDARY_PUBLIC_SUBNET_ID: ${{ vars.MMIV_SECONDARY_PUBLIC_SUBNET_ID }}
+    steps:
+      - name: Check required repository variables
+        shell: bash
+        run: |
+          set -euo pipefail
+          : "${MMIV_STATE_BUCKET:?Set MMIV_STATE_BUCKET repository variable}"
+          : "${MMIV_VPC_ID:?Set MMIV_VPC_ID repository variable}"
+          : "${MMIV_PRIMARY_PUBLIC_SUBNET_ID:?Set MMIV_PRIMARY_PUBLIC_SUBNET_ID repository variable}"
+          : "${MMIV_SECONDARY_PUBLIC_SUBNET_ID:?Set MMIV_SECONDARY_PUBLIC_SUBNET_ID repository variable}"
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v6.3.0
+        with:
+          role-to-assume: arn:aws:iam::275069781906:role/GitHubActions-MMIV-Terraform
+          aws-region: ${{ env.AWS_REGION }}
+      - name: Verify release images exist for this commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          for name in service-registry transfer-service integrity-service user-access-service reporting-service discovery-service api-gateway oracle-bootstrap; do
+            aws ecr describe-images --repository-name "$ECR_REPOSITORY" \
+              --image-ids "imageTag=${name}-${GITHUB_SHA}" \
+              --query 'imageDetails[0].imageDigest' --output text >/dev/null
+          done
+
+  managed-data:
+    name: Plan and optionally create managed data
+    needs: preflight
+    uses: ./.github/workflows/managed-data.yml
+    with:
+      apply: ${{ inputs.apply }}
+    secrets: inherit
+
+  ecs-base:
+    name: Prepare ECS without application services
+    if: ${{ inputs.apply }}
+    needs: managed-data
+    uses: ./.github/workflows/ecs-release.yml
+    with:
+      apply: true
+      prepare_base: true
+    secrets: inherit
+
+  oracle-and-services:
+    name: Initialize Oracle and start application services
+    needs: ecs-base
+    uses: ./.github/workflows/oracle-bootstrap.yml
+    secrets: inherit

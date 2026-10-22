@@ -1,0 +1,93 @@
+name: Initialize MMIV Oracle schemas
+
+'on':
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: mmiv-oracle-bootstrap
+  cancel-in-progress: false
+
+jobs:
+  initialize:
+    name: Run idempotent Oracle bootstrap inside the VPC
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      AWS_REGION: ap-southeast-1
+      MMIV_STATE_BUCKET: ${{ vars.MMIV_STATE_BUCKET }}
+      MMIV_PRIMARY_PUBLIC_SUBNET_ID: ${{ vars.MMIV_PRIMARY_PUBLIC_SUBNET_ID }}
+      TF_IN_AUTOMATION: 'true'
+    steps:
+      - uses: actions/checkout@v5
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v6.3.0
+        with:
+          role-to-assume: arn:aws:iam::275069781906:role/GitHubActions-MMIV-Terraform
+          aws-region: ${{ env.AWS_REGION }}
+      - name: Install Terraform
+        uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: 1.15.8
+          terraform_wrapper: false
+      - name: Read deployed data and ECS state
+        shell: bash
+        run: |
+          set -euo pipefail
+          : "${MMIV_STATE_BUCKET:?Set MMIV_STATE_BUCKET repository variable}"
+          : "${MMIV_PRIMARY_PUBLIC_SUBNET_ID:?Set MMIV_PRIMARY_PUBLIC_SUBNET_ID repository variable}"
+          terraform -chdir=infrastructure/aws-managed-data init -input=false \
+            -backend-config="bucket=${MMIV_STATE_BUCKET}" \
+            -backend-config=key=aws-managed-data/terraform.tfstate \
+            -backend-config="region=${AWS_REGION}" \
+            -backend-config=encrypt=true -backend-config=use_lockfile=true
+          terraform -chdir=infrastructure/ecs-fargate init -input=false \
+            -backend-config="bucket=${MMIV_STATE_BUCKET}" \
+            -backend-config=key=ecs-fargate/terraform.tfstate \
+            -backend-config="region=${AWS_REGION}" \
+            -backend-config=encrypt=true -backend-config=use_lockfile=true
+          cluster=$(terraform -chdir=infrastructure/ecs-fargate output -raw cluster_name)
+          definition=$(terraform -chdir=infrastructure/ecs-fargate output -raw oracle_bootstrap_task_definition_arn)
+          task_group=$(terraform -chdir=infrastructure/aws-managed-data output -raw task_security_group_id)
+          image=$(aws ecs describe-task-definition --task-definition "$definition" \
+            --query 'taskDefinition.containerDefinitions[0].image' --output text)
+          image_tag=${image##*:}
+          aws ecr describe-images --repository-name mmiv \
+            --image-ids "imageTag=$image_tag" >/dev/null
+          echo "CLUSTER=$cluster" >> "$GITHUB_ENV"
+          echo "TASK_DEFINITION=$definition" >> "$GITHUB_ENV"
+          echo "TASK_SECURITY_GROUP=$task_group" >> "$GITHUB_ENV"
+      - name: Run Oracle bootstrap Task
+        shell: bash
+        run: |
+          set -euo pipefail
+          network=$(python3 -c 'import json,os; print(json.dumps({"awsvpcConfiguration": {"subnets": [os.environ["MMIV_PRIMARY_PUBLIC_SUBNET_ID"]], "securityGroups": [os.environ["TASK_SECURITY_GROUP"]], "assignPublicIp": "ENABLED"}}))')
+          task=$(aws ecs run-task --cluster "$CLUSTER" \
+            --task-definition "$TASK_DEFINITION" --launch-type FARGATE \
+            --network-configuration "$network" \
+            --query 'tasks[0].taskArn' --output text)
+          if [ -z "$task" ] || [ "$task" = None ]; then
+            echo '::error::ECS did not start the Oracle bootstrap Task.'
+            exit 1
+          fi
+          aws ecs wait tasks-stopped --cluster "$CLUSTER" --tasks "$task"
+          exit_code=$(aws ecs describe-tasks --cluster "$CLUSTER" --tasks "$task" \
+            --query 'tasks[0].containers[0].exitCode' --output text)
+          if [ "$exit_code" != 0 ]; then
+            echo "::error::Oracle bootstrap Task failed with exit code $exit_code"
+            aws logs tail /mmiv/oracle-bootstrap --since 30m || true
+            exit 1
+          fi
+          echo 'Oracle schemas and Integrity table initialized successfully.'
+  first-release:
+    name: Start all ECS services after Oracle bootstrap succeeds
+    needs: [initialize]
+    uses: ./.github/workflows/ecs-release.yml
+    with:
+      apply: true
+      first_release: true
+    secrets: inherit

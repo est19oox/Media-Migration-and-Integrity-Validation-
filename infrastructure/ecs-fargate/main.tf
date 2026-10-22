@@ -19,7 +19,7 @@ resource "aws_security_group" "alb" {
     from_port       = 8080
     to_port         = 8080
     protocol        = "tcp"
-    security_groups = [aws_security_group.tasks.id]
+    security_groups = [var.task_security_group_id]
   }
   tags = { Project = "MMIV" }
 }
@@ -42,23 +42,9 @@ resource "aws_vpc_security_group_ingress_rule" "alb_https" {
   cidr_ipv4         = "0.0.0.0/0"
 }
 
-resource "aws_security_group" "tasks" {
-  #checkov:skip=CKV_AWS_382:Tasks require outbound ECR, Secrets Manager, S3 and privately supplied dependencies; restrict destinations at VPC boundary before production.
-  name_prefix = "mmiv-ecs-tasks-"
-  description = "MMIV application Tasks, no direct public ingress"
-  vpc_id      = var.vpc_id
-  egress {
-    description = "External AWS endpoints and private dependencies"
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-  tags = { Project = "MMIV" }
-}
 resource "aws_vpc_security_group_ingress_rule" "gateway" {
   description                  = "ALB to Gateway"
-  security_group_id            = aws_security_group.tasks.id
+  security_group_id            = var.task_security_group_id
   referenced_security_group_id = aws_security_group.alb.id
   ip_protocol                  = "tcp"
   from_port                    = 8080
@@ -67,8 +53,8 @@ resource "aws_vpc_security_group_ingress_rule" "gateway" {
 resource "aws_vpc_security_group_ingress_rule" "peers" {
   description                  = "MMIV Tasks to service port ${each.value}"
   for_each                     = toset([for name, port in local.ports : tostring(port) if name != "api-gateway"])
-  security_group_id            = aws_security_group.tasks.id
-  referenced_security_group_id = aws_security_group.tasks.id
+  security_group_id            = var.task_security_group_id
+  referenced_security_group_id = var.task_security_group_id
   ip_protocol                  = "tcp"
   from_port                    = tonumber(each.value)
   to_port                      = tonumber(each.value)
@@ -83,7 +69,7 @@ resource "aws_security_group" "efs" {
     from_port       = 2049
     to_port         = 2049
     protocol        = "tcp"
-    security_groups = [aws_security_group.tasks.id]
+    security_groups = [var.task_security_group_id]
   }
   tags = { Project = "MMIV" }
 }
@@ -204,6 +190,22 @@ resource "aws_iam_role" "task" {
   name               = "MMIV-ECS-${each.key}"
   assume_role_policy = aws_iam_role.execution.assume_role_policy
 }
+resource "aws_iam_role" "oracle_bootstrap" {
+  name               = "MMIV-ECS-Oracle-Bootstrap"
+  assume_role_policy = aws_iam_role.execution.assume_role_policy
+}
+resource "aws_iam_role_policy" "oracle_bootstrap" {
+  role = aws_iam_role.oracle_bootstrap.name
+  policy = jsonencode({ Version = "2012-10-17", Statement = concat([
+    {
+      Effect   = "Allow",
+      Action   = ["secretsmanager:GetSecretValue"],
+      Resource = [var.oracle_master_secret_arn, var.secret_arns.user_access_db_password, var.secret_arns.discovery_db_password, var.secret_arns.integrity_db_password]
+    }
+    ], var.data_kms_key_arn == null ? [] : [{
+      Effect = "Allow", Action = ["kms:Decrypt"], Resource = [var.data_kms_key_arn]
+  }]) })
+}
 resource "aws_iam_role_policy" "s3" {
   for_each = toset(["transfer-service", "integrity-service"])
   role     = aws_iam_role.task[each.key].name
@@ -225,7 +227,8 @@ resource "aws_dynamodb_table" "transfer_coordination" {
   point_in_time_recovery { enabled = true }
   server_side_encryption { enabled = true }
   tags = { Name = "MMIV-Transfer-Coordination", Project = "MMIV" }
-  lifecycle { prevent_destroy = true }
+  # Normal release workflow rejects every delete action. Explicit teardown
+  # can remove this throwaway coordination table after the demo.
 }
 
 resource "aws_iam_role_policy" "transfer_coordination" {
@@ -287,6 +290,44 @@ resource "aws_ecs_task_definition" "service" {
       }
     }
   }
+}
+
+resource "aws_cloudwatch_log_group" "oracle_bootstrap" {
+  #checkov:skip=CKV_AWS_338:Thirty-day retention limits the cost of one-off bootstrap diagnostics; database audit logs have separate retention.
+  #checkov:skip=CKV_AWS_158:CloudWatch default encryption is used until a log-service KMS key policy is provisioned.
+  name              = "/mmiv/oracle-bootstrap"
+  retention_in_days = 30
+  tags              = { Project = "MMIV" }
+}
+resource "aws_ecs_task_definition" "oracle_bootstrap" {
+  family                   = "mmiv-oracle-bootstrap"
+  network_mode             = "awsvpc"
+  requires_compatibilities = ["FARGATE"]
+  cpu                      = 256
+  memory                   = 512
+  execution_role_arn       = aws_iam_role.execution.arn
+  task_role_arn            = aws_iam_role.oracle_bootstrap.arn
+  container_definitions = jsonencode([{
+    name      = "oracle-bootstrap"
+    image     = "${var.image_repository_url}:oracle-bootstrap-${var.image_revision}"
+    essential = true
+    environment = [
+      { name = "AWS_REGION", value = var.region },
+      { name = "ORACLE_HOST", value = split(":", split("@//", var.oracle_jdbc_url)[1])[0] },
+      { name = "ORACLE_MASTER_SECRET_ARN", value = var.oracle_master_secret_arn },
+      { name = "USER_ACCESS_DB_SECRET_ARN", value = var.secret_arns.user_access_db_password },
+      { name = "DISCOVERY_DB_SECRET_ARN", value = var.secret_arns.discovery_db_password },
+      { name = "INTEGRITY_DB_SECRET_ARN", value = var.secret_arns.integrity_db_password }
+    ]
+    logConfiguration = {
+      logDriver = "awslogs"
+      options = {
+        awslogs-group         = aws_cloudwatch_log_group.oracle_bootstrap.name
+        awslogs-region        = var.region
+        awslogs-stream-prefix = "bootstrap"
+      }
+    }
+  }])
 }
 
 resource "aws_lb" "gateway" {
@@ -497,7 +538,7 @@ resource "aws_ecs_service" "service" {
   }
   network_configuration {
     subnets          = var.demo_single_az ? [var.primary_public_subnet_id] : [var.primary_public_subnet_id, data.aws_subnet.secondary.id]
-    security_groups  = [aws_security_group.tasks.id]
+    security_groups  = [var.task_security_group_id]
     assign_public_ip = true
   }
   dynamic "service_registries" {
@@ -577,5 +618,5 @@ resource "aws_cloudwatch_dashboard" "ecs" {
 output "gateway_dns_name" { value = aws_lb.gateway.dns_name }
 output "browser_url" { value = var.use_cloudfront_default_domain ? "https://${aws_cloudfront_distribution.gateway[0].domain_name}" : "Use your ACM certificate hostname pointing to ${aws_lb.gateway.dns_name}" }
 output "cluster_name" { value = aws_ecs_cluster.mmiv.name }
-output "task_security_group_id" { value = aws_security_group.tasks.id }
+output "oracle_bootstrap_task_definition_arn" { value = aws_ecs_task_definition.oracle_bootstrap.arn }
 output "secondary_subnet_id" { value = data.aws_subnet.secondary.id }

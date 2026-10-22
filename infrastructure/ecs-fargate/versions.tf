@@ -26,6 +26,10 @@ variable "secondary_public_subnet_id" {
   type        = string
   description = "ID of the existing MMIV-Secondary-Public-Subnet in a different AZ from the primary subnet."
 }
+variable "task_security_group_id" {
+  type        = string
+  description = "Task security group ID created by the aws-managed-data Terraform root."
+}
 variable "certificate_arn" {
   type    = string
   default = null
@@ -58,6 +62,10 @@ variable "bucket_name" {
 }
 variable "oracle_jdbc_url" {
   type = string
+}
+variable "oracle_master_secret_arn" {
+  type        = string
+  description = "Secrets Manager ARN for the managed RDS Oracle master user; used only by the one-off schema bootstrap Task."
 }
 variable "rabbit_host" {
   type = string

@@ -1,0 +1,93 @@
+name: Prepare MMIV managed data
+
+'on':
+  workflow_call:
+    inputs:
+      apply:
+        type: boolean
+        required: true
+  workflow_dispatch:
+    inputs:
+      apply:
+        description: Create the reviewed RDS, DocumentDB, MQ, Valkey and secrets (false only plans)
+        type: boolean
+        default: false
+        required: true
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: mmiv-managed-data
+  cancel-in-progress: false
+
+jobs:
+  managed-data:
+    name: Plan and optionally apply the one-time data stack
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    env:
+      AWS_REGION: ap-southeast-1
+      MMIV_STATE_BUCKET: ${{ vars.MMIV_STATE_BUCKET }}
+      MMIV_VPC_ID: ${{ vars.MMIV_VPC_ID }}
+      MMIV_PRIMARY_PUBLIC_SUBNET_ID: ${{ vars.MMIV_PRIMARY_PUBLIC_SUBNET_ID }}
+      MMIV_SECONDARY_PUBLIC_SUBNET_ID: ${{ vars.MMIV_SECONDARY_PUBLIC_SUBNET_ID }}
+      MMIV_DEMO_SINGLE_AZ: ${{ vars.MMIV_DEMO_SINGLE_AZ || 'true' }}
+      TF_IN_AUTOMATION: 'true'
+    steps:
+      - uses: actions/checkout@v5
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v6.3.0
+        with:
+          role-to-assume: arn:aws:iam::275069781906:role/GitHubActions-MMIV-Terraform
+          aws-region: ${{ env.AWS_REGION }}
+      - name: Install Terraform
+        uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: 1.15.8
+          terraform_wrapper: false
+      - name: Validate configuration and inspect plan
+        shell: bash
+        run: |
+          set -euo pipefail
+          : "${MMIV_STATE_BUCKET:?Set MMIV_STATE_BUCKET repository variable}"
+          : "${MMIV_VPC_ID:?Set MMIV_VPC_ID repository variable}"
+          : "${MMIV_PRIMARY_PUBLIC_SUBNET_ID:?Set MMIV_PRIMARY_PUBLIC_SUBNET_ID repository variable}"
+          : "${MMIV_SECONDARY_PUBLIC_SUBNET_ID:?Set MMIV_SECONDARY_PUBLIC_SUBNET_ID repository variable}"
+          terraform -chdir=infrastructure/aws-managed-data init -input=false \
+            -backend-config="bucket=${MMIV_STATE_BUCKET}" \
+            -backend-config=key=aws-managed-data/terraform.tfstate \
+            -backend-config="region=${AWS_REGION}" \
+            -backend-config=encrypt=true -backend-config=use_lockfile=true
+          terraform -chdir=infrastructure/aws-managed-data validate
+          terraform -chdir=infrastructure/aws-managed-data plan -input=false -lock-timeout=5m \
+            -var="vpc_id=${MMIV_VPC_ID}" \
+            -var="subnet_ids=[\"${MMIV_PRIMARY_PUBLIC_SUBNET_ID}\",\"${MMIV_SECONDARY_PUBLIC_SUBNET_ID}\"]" \
+            -var="demo_single_az=${MMIV_DEMO_SINGLE_AZ}" \
+            -out="$RUNNER_TEMP/mmiv-data.tfplan" -no-color \
+            > "$RUNNER_TEMP/mmiv-data-plan.txt"
+          terraform -chdir=infrastructure/aws-managed-data show -json "$RUNNER_TEMP/mmiv-data.tfplan" \
+            > "$RUNNER_TEMP/mmiv-data-plan.json"
+          python3 - "$RUNNER_TEMP/mmiv-data-plan.json" <<'PY'
+          import json
+          import sys
+          with open(sys.argv[1], encoding='utf-8') as plan:
+              changes = json.load(plan).get('resource_changes', [])
+          destructive = [item['address'] for item in changes
+                         if 'delete' in item.get('change', {}).get('actions', [])]
+          if destructive:
+              raise SystemExit('Managed-data plan would delete or replace: ' + ', '.join(destructive))
+          PY
+          grep -E '^Plan: ' "$RUNNER_TEMP/mmiv-data-plan.txt" || true
+      - name: Apply managed data
+        if: ${{ inputs.apply }}
+        run: terraform -chdir=infrastructure/aws-managed-data apply -input=false -lock-timeout=5m "$RUNNER_TEMP/mmiv-data.tfplan"
+      - name: Upload plan summary
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v6
+        with:
+          name: managed-data-plan-${{ github.sha }}
+          path: ${{ runner.temp }}/mmiv-data-plan.txt
+          if-no-files-found: ignore
+          retention-days: 7

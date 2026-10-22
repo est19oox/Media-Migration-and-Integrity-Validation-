@@ -3,6 +3,7 @@ terraform {
   required_providers {
     aws    = { source = "hashicorp/aws", version = "~> 6.0" }
     random = { source = "hashicorp/random", version = "~> 3.6" }
+    tls    = { source = "hashicorp/tls", version = "~> 4.0" }
   }
   backend "s3" {}
 }
@@ -23,13 +24,15 @@ variable "subnet_ids" {
     error_message = "Provide subnets in at least two availability zones."
   }
 }
-variable "task_security_group_id" {
-  type = string
-}
 variable "demo_single_az" {
   type        = bool
   default     = true
   description = "Use one Oracle AZ, one DocumentDB instance and one Valkey node for a short-lived demo."
+}
+variable "teardown_mode" {
+  type        = bool
+  default     = false
+  description = "Skip final RDS and DocumentDB snapshots only during an explicit disposable-demo teardown."
 }
 variable "rabbit_cluster_subnet_ids" {
   type        = list(string)
@@ -88,6 +91,22 @@ resource "aws_kms_alias" "data" {
   target_key_id = aws_kms_key.data.key_id
 }
 
+resource "aws_security_group" "tasks" {
+  #checkov:skip=CKV_AWS_382:Tasks need ECR, Secrets Manager, S3 and private dependency egress; ingress is managed by the ECS root.
+  #checkov:skip=CKV2_AWS_5:The ECS root attaches this exported group to Fargate Tasks; cross-root references are not visible to this scan.
+  name_prefix = "mmiv-ecs-tasks-"
+  description = "MMIV application Tasks, no direct public ingress"
+  vpc_id      = var.vpc_id
+  egress {
+    description = "External AWS endpoints and private dependencies"
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+  tags = { Project = "MMIV" }
+}
+
 resource "aws_security_group" "oracle" {
   name_prefix = "mmiv-rds-oracle-"
   description = "Oracle from MMIV application Tasks"
@@ -121,7 +140,7 @@ resource "aws_vpc_security_group_ingress_rule" "app" {
   }
   description                  = "MMIV Tasks only"
   security_group_id            = each.value.group
-  referenced_security_group_id = var.task_security_group_id
+  referenced_security_group_id = aws_security_group.tasks.id
   ip_protocol                  = "tcp"
   from_port                    = each.value.port
   to_port                      = each.value.port
@@ -143,6 +162,34 @@ resource "random_password" "rabbit" {
 resource "random_password" "redis" {
   length  = 32
   special = false
+}
+
+resource "tls_private_key" "jwt" {
+  algorithm = "RSA"
+  rsa_bits  = 3072
+}
+
+resource "aws_secretsmanager_secret" "jwt_private" {
+  #checkov:skip=CKV2_AWS_57:Rotating signing keys requires coordinated JWKS publication and Task rollout; automatic uncoordinated rotation would invalidate sessions.
+  name_prefix             = "mmiv/jwt-private/"
+  recovery_window_in_days = 7
+  kms_key_id              = aws_kms_key.data.arn
+  tags                    = { Project = "MMIV" }
+}
+resource "aws_secretsmanager_secret_version" "jwt_private" {
+  secret_id     = aws_secretsmanager_secret.jwt_private.id
+  secret_string = tls_private_key.jwt.private_key_pem_pkcs8
+}
+resource "aws_secretsmanager_secret" "jwt_public" {
+  #checkov:skip=CKV2_AWS_57:Rotate the public key in lockstep with its private signing key and JWKS rollout.
+  name_prefix             = "mmiv/jwt-public/"
+  recovery_window_in_days = 7
+  kms_key_id              = aws_kms_key.data.arn
+  tags                    = { Project = "MMIV" }
+}
+resource "aws_secretsmanager_secret_version" "jwt_public" {
+  secret_id     = aws_secretsmanager_secret.jwt_public.id
+  secret_string = tls_private_key.jwt.public_key_pem
 }
 
 resource "aws_secretsmanager_secret" "schema" {
@@ -223,8 +270,8 @@ resource "aws_db_instance" "oracle" {
   monitoring_interval             = 60
   monitoring_role_arn             = aws_iam_role.rds_monitoring.arn
   deletion_protection             = true
-  skip_final_snapshot             = false
-  final_snapshot_identifier       = "mmiv-oracle-final"
+  skip_final_snapshot             = var.teardown_mode
+  final_snapshot_identifier       = var.teardown_mode ? null : "mmiv-oracle-final"
   auto_minor_version_upgrade      = true
   copy_tags_to_snapshot           = true
   tags                            = { Project = "MMIV" }
@@ -247,8 +294,8 @@ resource "aws_docdb_cluster" "reporting" {
   enabled_cloudwatch_logs_exports = ["audit", "profiler"]
   backup_retention_period         = 7
   deletion_protection             = true
-  skip_final_snapshot             = false
-  final_snapshot_identifier       = "mmiv-reporting-final"
+  skip_final_snapshot             = var.teardown_mode
+  final_snapshot_identifier       = var.teardown_mode ? null : "mmiv-reporting-final"
   tags                            = { Project = "MMIV" }
 }
 resource "aws_docdb_cluster_instance" "reporting" {
@@ -361,4 +408,13 @@ output "rabbit_port" {
 }
 output "redis_port" {
   value = 6379
+}
+output "task_security_group_id" {
+  value = aws_security_group.tasks.id
+}
+output "jwt_private_key_secret_arn" {
+  value = aws_secretsmanager_secret.jwt_private.arn
+}
+output "jwt_public_key_secret_arn" {
+  value = aws_secretsmanager_secret.jwt_public.arn
 }

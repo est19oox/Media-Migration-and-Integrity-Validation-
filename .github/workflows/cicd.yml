@@ -12,6 +12,8 @@ on:
       # a complete immutable seven-service deployment.
       - 'frontend/**'
       - 'infrastructure/bootstrap/**'
+      - 'infrastructure/aws-managed-data/**'
+      - 'infrastructure/ecs-fargate/**'
       - 'infrastructure/terraform/**'
       - 'infrastructure/ansible/**'
       - 'scripts/cd/**'
@@ -20,8 +22,19 @@ on:
       - 'tests/ci/**'
       - '.github/workflows/cicd.yml'
       - '.github/workflows/build-service.yml'
+      - '.github/workflows/ecs-release.yml'
+      - '.github/workflows/oracle-bootstrap.yml'
+      - '.github/workflows/managed-data.yml'
+      - '.github/workflows/teardown-demo.yml'
+      - '.github/workflows/first-ecs-deployment.yml'
       - '.github/workflows/verify-services.yml'
   workflow_dispatch:
+    inputs:
+      deploy_demo:
+        description: After all checks and images pass, create managed data, initialize Oracle and deploy ECS
+        type: boolean
+        default: false
+        required: true
 
 concurrency:
   group: mmiv-production
@@ -206,6 +219,8 @@ jobs:
           python3 tests/ci/test-runtime-config.py
           python3 tests/ci/test-gateway-frontend-ownership.py
           python3 tests/ci/test-cd-contract.py
+          python3 tests/ci/test-ecs-release-config.py
+          python3 tests/ci/test-demo-teardown.py
           python3 tests/ci/test-terraform-sqs-policy.py
           python3 tests/ci/test-verification-permission.py
           python3 tests/ci/test-verification-data-cleanup.py
@@ -439,6 +454,7 @@ jobs:
         run: ansible-playbook -i inventory/ci.generated.ini stage-user-access.yml
   build-images:
     name: Build and scan release images
+    if: ${{ vars.MMIV_BUILD_IMAGES != 'false' }}
     needs: [quality_gates]
     strategy:
       fail-fast: false
@@ -471,6 +487,67 @@ jobs:
       service-name: ${{ matrix.service.name }}
       service-path: ${{ matrix.service.path }}
       service-port: ${{ matrix.service.port }}
+  build-oracle-bootstrap:
+    name: Build and scan one-off Oracle bootstrap image
+    if: ${{ vars.MMIV_BUILD_IMAGES != 'false' }}
+    needs: [quality_gates]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install Trivy
+        env:
+          TRIVY_VERSION: 0.74.0
+          TRIVY_SHA256: cf1e32ec8d4d8823e023096a28cadb14f5b5123ce03f201fb633c5b76aa712dd
+        run: |
+          PACKAGE="trivy_${TRIVY_VERSION}_Linux-64bit.deb"
+          curl -fsSLo "/tmp/${PACKAGE}" \
+            "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/${PACKAGE}"
+          echo "${TRIVY_SHA256}  /tmp/${PACKAGE}" | sha256sum --check --strict
+          sudo apt-get install --yes "/tmp/${PACKAGE}"
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v6.3.0
+        with:
+          role-to-assume: arn:aws:iam::275069781906:role/GitHubActions-MMIV-App
+          aws-region: ${{ env.AWS_REGION }}
+      - name: Login to Amazon ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+      - name: Build, scan and push immutable bootstrap image
+        env:
+          ECR_REGISTRY: ${{ steps.ecr.outputs.registry }}
+        run: |
+          set -euo pipefail
+          IMAGE="$ECR_REGISTRY/$ECR_REPOSITORY:oracle-bootstrap-$GITHUB_SHA"
+          if aws ecr describe-images --repository-name "$ECR_REPOSITORY" \
+            --image-ids "imageTag=oracle-bootstrap-$GITHUB_SHA" >/dev/null 2>&1; then
+            docker pull "$IMAGE"
+          else
+            docker build -f infrastructure/aws-managed-data/Dockerfile.oracle-bootstrap \
+              -t "$IMAGE" infrastructure/aws-managed-data
+          fi
+          mkdir -p .ci
+          printf '%s\n' "$IMAGE" > .ci/image-ref
+          bash scripts/ci/scan-image.sh .
+          if ! aws ecr describe-images --repository-name "$ECR_REPOSITORY" \
+            --image-ids "imageTag=oracle-bootstrap-$GITHUB_SHA" >/dev/null 2>&1; then
+            docker push "$IMAGE"
+          fi
+  release-ecs:
+    name: Release ECS after all seven images pass
+    if: ${{ github.ref == 'refs/heads/main' && vars.MMIV_ECS_AUTO_DEPLOY == 'true' && !inputs.deploy_demo }}
+    needs: [build-images, build-oracle-bootstrap]
+    uses: ./.github/workflows/ecs-release.yml
+    with:
+      apply: true
+    secrets: inherit
+  first-ecs-deployment:
+    name: Create data and deploy ECS after all checks and images pass
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.deploy_demo && vars.MMIV_BUILD_IMAGES != 'false' }}
+    needs: [build-images, build-oracle-bootstrap]
+    uses: ./.github/workflows/first-ecs-deployment.yml
+    with:
+      apply: true
+    secrets: inherit
   deploy-stack:
     name: Deploy complete Docker release
     if: false

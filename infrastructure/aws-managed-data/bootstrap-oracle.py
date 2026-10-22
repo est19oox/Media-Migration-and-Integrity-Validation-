@@ -14,11 +14,11 @@ import oracledb
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--host", required=True)
-    parser.add_argument("--master-secret-arn", required=True)
-    parser.add_argument("--user-access-secret-arn", required=True)
-    parser.add_argument("--discovery-secret-arn", required=True)
-    parser.add_argument("--integrity-secret-arn", required=True)
+    parser.add_argument("--host", default=os.getenv("ORACLE_HOST"), required=not os.getenv("ORACLE_HOST"))
+    parser.add_argument("--master-secret-arn", default=os.getenv("ORACLE_MASTER_SECRET_ARN"), required=not os.getenv("ORACLE_MASTER_SECRET_ARN"))
+    parser.add_argument("--user-access-secret-arn", default=os.getenv("USER_ACCESS_DB_SECRET_ARN"), required=not os.getenv("USER_ACCESS_DB_SECRET_ARN"))
+    parser.add_argument("--discovery-secret-arn", default=os.getenv("DISCOVERY_DB_SECRET_ARN"), required=not os.getenv("DISCOVERY_DB_SECRET_ARN"))
+    parser.add_argument("--integrity-secret-arn", default=os.getenv("INTEGRITY_DB_SECRET_ARN"), required=not os.getenv("INTEGRITY_DB_SECRET_ARN"))
     args = parser.parse_args()
     secrets = boto3.client("secretsmanager")
 

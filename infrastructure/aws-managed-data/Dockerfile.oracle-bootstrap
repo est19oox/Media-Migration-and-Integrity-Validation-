@@ -1,0 +1,9 @@
+FROM python:3.12-slim
+
+RUN pip install --no-cache-dir boto3==1.35.99 oracledb==2.5.1 \
+    && useradd --system --uid 10001 --create-home mmiv
+
+WORKDIR /app
+COPY bootstrap-oracle.py /app/bootstrap-oracle.py
+USER 10001:10001
+CMD ["python", "/app/bootstrap-oracle.py"]

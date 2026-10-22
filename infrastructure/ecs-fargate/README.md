@@ -28,8 +28,9 @@ Terraform state, so the state bucket must remain private.
 
 ## Required before planning or applying
 
-1. Build and push all seven `service-name-<commit>` images to ECR. Set
-   `image_revision` to that exact commit. The existing image workflow does this.
+1. Build and push all seven `service-name-<commit>` images and the
+   `oracle-bootstrap-<commit>` image to ECR. Set `image_revision` to that exact
+   commit. CI builds and scans all eight images.
 2. No domain or ACM certificate is required for the default
    `use_cloudfront_default_domain=true` demo. Open the `browser_url` Terraform
    output after apply. CloudFront takes time to distribute changes and adds
@@ -40,12 +41,11 @@ Terraform state, so the state bucket must remain private.
 3. Apply `infrastructure/aws-managed-data` for fresh RDS Oracle, Amazon
    DocumentDB, Amazon MQ RabbitMQ and ElastiCache Valkey. This ECS root does
    **not** use the former EC2 data host. Initialize the three Oracle schemas
-   using that root's bootstrap script before starting Tasks. Check DocumentDB
+   using the one-off ECS bootstrap Task before starting application services. Check DocumentDB
    API compatibility and TLS trust before cutover. Configure connection limits
    for the maximum Task counts, not just the initial counts.
 4. The managed-data root creates RabbitMQ password, three Oracle schema
-   passwords and a DocumentDB URI in Secrets Manager. Create a matching
-   private/public JWT PEM key pair in Secrets Manager separately. Supply the
+   passwords, a DocumentDB URI and a fresh JWT RSA key pair in Secrets Manager. Supply the
    output ARNs in `secret_arns`; the ECS root state contains ARNs, not secret
    values. Each entry must contain the raw value expected by its environment
    variable, rather than a JSON object. Supply `redis_password` from the
@@ -60,19 +60,20 @@ Terraform state, so the state bucket must remain private.
    different AZs. Terraform reuses them and does not create or change their
    route tables. Verify both have a route to an Internet Gateway before using
    public-IP Fargate Tasks; the ALB also requires both subnets.
-   Existing stateful services must accept private traffic from the Terraform
-   output `task_security_group_id`. HTTPS egress and the required database ports
+   Managed data services accept private traffic from the Task security group
+   exported by the managed-data root. HTTPS egress and the required database ports
    must be allowed by their network policy.
 
 Use a **new S3 state key** for this root. Example commands, with your reviewed
 `terraform.tfvars` kept outside Git:
 
-Set `start_services=false` for the first ECS apply. This creates the ECS Task
-security group without starting application Tasks against uninitialized data.
-Apply the managed-data root using that security group ID, run its Oracle
-bootstrap, set its output addresses and secret ARNs here, then set
-`start_services=true` and apply again. Set `rabbit_tls=true`, `rabbit_port=5671`
-and `redis_tls=true` for the managed endpoints.
+Apply `aws-managed-data` first; it creates and exports the Task security group.
+Use the **Release MMIV to ECS** workflow with `prepare_base=true` to create
+the ECS base and bootstrap Task Definition with `start_services=false`. Then
+run **Initialize MMIV Oracle schemas**; it starts an idempotent Fargate Task
+inside the VPC and calls the same release workflow to start services only after
+the Task exits successfully. No placeholder apply or local Oracle client is
+needed. These applies create chargeable infrastructure.
 Keep `demo_single_az=true` in both Terraform roots for the lower-cost demo.
 The ECS root then starts one Task per scalable business service and can grow
 it independently. Set it to `false` in both roots only for a multi-AZ release;
@@ -94,6 +95,7 @@ terraform apply ecs.tfplan
 ```
 
 The variable file needs `vpc_id`, `primary_public_subnet_id`, `secondary_public_subnet_id`,
+`task_security_group_id`, `oracle_master_secret_arn`,
 `image_repository_url`, `image_revision`, `bucket_arn`,
 `bucket_name`, `oracle_jdbc_url`, `rabbit_host`, `redis_host`, `jwt_issuer`,
 `jwt_key_id` and `secret_arns`. `certificate_arn` is needed only in the
@@ -116,10 +118,69 @@ that the replacement registers and the EFS outbox drains. Switch
 DNS only after these checks; keep the old stack available for a controlled
 rollback if it contains user data.
 
-To release another commit, build the seven immutable images, update
-`image_revision` in the variable file, plan, review and apply. The existing
-EC2 CI/CD workflow remains active and does not deploy ECS. Disable it or remove
-its push trigger before declaring ECS the production deployment target.
+After the first release, `.github/workflows/ecs-release.yml` can render ECS
+inputs from managed-data state and the current Git commit SHA, verify all seven
+ECR tags, plan, reject destructive changes, apply and wait for ECS stability.
+Use its manual plan-only dispatch first. Automatic releases from `main` are
+disabled until repository variable `MMIV_ECS_AUTO_DEPLOY=true` is set. The old
+EC2 deployment jobs remain disabled.
+
+For a first deployment, run **MMIV Microservices CI/CD** manually on the release
+branch with `deploy_demo=true`. Its quality gates, seven service image builds,
+and Oracle bootstrap image build must all succeed before it creates any managed
+data. It then verifies the eight ECR tags for the exact commit, plans and
+applies managed data, prepares the ECS base without running services, executes
+the Oracle bootstrap Task, and starts the services. A failure stops dependent
+jobs; after managed data is created, charges can continue even if a later job
+fails, so use **Teardown MMIV ECS demo** when finished or abandoning the attempt.
+Keep `MMIV_ECS_AUTO_DEPLOY=false` during the first deployment. The older
+**Prepare MMIV managed data**, **Release MMIV to ECS**, and **Initialize MMIV
+Oracle schemas** workflows remain available for plan review and recovery.
+Each workflow uses the Terraform OIDC role and the same protected state
+bucket. The bootstrap Task uses an IAM role limited to the
+Oracle master and schema password secrets plus their KMS key. No full database
+passwords are passed in Action inputs or ECS environment variables.
+
+For the release workflow, set these GitHub repository variables on the
+repository that runs Actions: `MMIV_STATE_BUCKET` (the existing protected
+Terraform state bucket), `MMIV_VPC_ID`, `MMIV_PRIMARY_PUBLIC_SUBNET_ID`,
+`MMIV_SECONDARY_PUBLIC_SUBNET_ID`, and optionally `MMIV_BUCKET_NAME`,
+`MMIV_DEMO_SINGLE_AZ`, `USER_ACCESS_JWT_ISSUER` and
+`USER_ACCESS_JWT_KEY_ID`. The workflow reads database addresses, Task
+security group and all Secret ARNs from the managed-data state; it never
+accepts raw passwords in repository variables. The seven ECR tags must exist
+for the workflow commit. The Terraform OIDC role must have access to both
+state keys, ECR read and the ECS/ALB/CloudFront/EFS/DynamoDB/IAM resources in
+this root. Successful OIDC authentication by itself does not grant those
+permissions. The workflow refuses an uninitialized ECS state and any plan
+containing deletion or replacement. Run the plan-only dispatch after the
+first deployment; set `MMIV_ECS_AUTO_DEPLOY=true` only after its output has
+been reviewed. Automatic releases currently run on `main` after CI and all
+seven image jobs pass. A manual dispatch can select an allowed branch.
+
+## Stop the demo and its recurring infrastructure charges
+
+The same shutdown applies whether tests pass or fail. First set repository
+variable `MMIV_ECS_AUTO_DEPLOY=false` and cancel any running deployment. Set
+`MMIV_BUILD_IMAGES=false` if further pushes should not build and store more
+ECR images; disable the CI workflow as well if GitHub Actions minutes are no
+longer needed. Run Actions > **Teardown MMIV ECS demo** once with `action=plan`
+and inspect both plan artifacts. Then run it with `action=destroy` and enter
+`DESTROY-MMIV-DEMO`. The workflow disables ALB/RDS/DocumentDB deletion
+protection, destroys ECS first, then managed data with no final database
+snapshots, and verifies both new Terraform states are empty. This permanently
+removes the new databases and their contents. If teardown fails partway,
+rerun it after investigating the error; any remaining state resources may
+still incur charges. Do not delete the state objects before both states are
+empty.
+
+The workflow deliberately leaves pre-existing VPC/subnets, the shared
+`media-migration-dev-landing` S3 bucket, the shared ECR repository, the
+Terraform state bucket and any old EC2 stack alone. After teardown, inspect
+AWS Billing/Cost Explorer and the RDS/DocumentDB snapshot lists, ECR images,
+S3 objects/versions, CloudWatch logs and any old EC2 infrastructure. Delete
+only items you own and no longer need; those shared or residual items can
+continue to cost money. AWS billing data lags resource deletion.
 
 ## Operational limits
 
