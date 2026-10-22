@@ -9,7 +9,8 @@ subnet groups still require subnets in at least two AZs. Setting
 and Valkey automatic failover. Amazon MQ is single-instance unless you provide
 three subnet IDs in distinct AZs via `rabbit_cluster_subnet_ids`. A cluster
 costs substantially more and needs a cluster-capable `rabbit_instance_type`;
-the single-instance demo defaults to `mq.t3.micro`. Single-AZ mode does not
+the single-instance demo defaults to `mq.m5.large`. `mq.t3.micro` is an
+ActiveMQ broker type and cannot be used for RabbitMQ. Single-AZ mode does not
 provide AZ failure recovery.
 
 Use a **new encrypted, access-restricted Terraform S3 state key**. Terraform

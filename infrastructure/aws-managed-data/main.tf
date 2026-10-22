@@ -57,7 +57,11 @@ variable "redis_node_type" {
 }
 variable "rabbit_instance_type" {
   type    = string
-  default = "mq.t3.micro"
+  default = "mq.m5.large"
+  validation {
+    condition     = var.rabbit_instance_type != "mq.t3.micro"
+    error_message = "mq.t3.micro is an ActiveMQ broker type and cannot be used for RabbitMQ. Use a RabbitMQ-supported type such as mq.m5.large."
+  }
 }
 variable "rabbit_engine_version" {
   type    = string
@@ -339,12 +343,6 @@ resource "aws_mq_broker" "rabbit" {
     password = random_password.rabbit.result
   }
   tags = { Project = "MMIV" }
-  lifecycle {
-    precondition {
-      condition     = !local.rabbit_cluster || var.rabbit_instance_type != "mq.t3.micro"
-      error_message = "RabbitMQ multi-AZ clusters require a cluster-capable broker instance type."
-    }
-  }
 }
 
 resource "aws_elasticache_subnet_group" "redis" {
