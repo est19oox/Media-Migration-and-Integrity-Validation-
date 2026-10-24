@@ -61,17 +61,24 @@ jobs:
         run: terraform init -input=false -reconfigure
       - name: Generate plan without apply
         run: terraform plan -input=false -lock-timeout=60s -out=secondary.tfplan
-      - name: Reject changes to anything except initial five creates
+      - name: Verify HA demo additions (plan only)
         run: |
           terraform show -json secondary.tfplan | python3 -c '
           import json,sys
           p=json.load(sys.stdin)
-          expected={"aws_subnet.secondary","aws_route_table.secondary","aws_route_table_association.secondary","aws_security_group.secondary","aws_instance.secondary"}
-          changes={x["address"]:x["change"]["actions"] for x in p.get("resource_changes",[]) if x["change"]["actions"]!=["no-op"]}
-          if set(changes)!=expected or any(v!=["create"] for v in changes.values()):
-              sys.exit("Unexpected plan (only initial five creates are allowed): "+repr(changes))
-          for name in sorted(changes): print("PROPOSED CREATE:",name)
-          print("PASS: 5 additions, 0 changes, 0 deletions. No apply.")
+          expected={
+            "aws_security_group.secondary":("update",),
+            "aws_security_group.ha_alb":("create",),
+            "aws_lb.ha_demo":("create",),
+            "aws_lb_target_group.ha_demo":("create",),
+            "aws_lb_target_group_attachment.primary":("create",),
+            "aws_lb_target_group_attachment.secondary":("create",),
+            "aws_lb_listener.ha_demo":("create",),
+          }
+          changes={x["address"]:tuple(x["change"]["actions"]) for x in p.get("resource_changes",[]) if x["change"]["actions"]!=["no-op"]}
+          if changes!=expected:
+              sys.exit("Unexpected HA plan; refusing: "+repr(changes))
+          print("PASS: six HA additions and secondary SG update; no primary changes or deletions.")
           '
 
   apply:
@@ -107,16 +114,30 @@ jobs:
         run: terraform init -input=false -reconfigure
       - name: Generate fresh locked plan
         run: terraform plan -input=false -lock-timeout=60s -out=secondary.tfplan
-      - name: Reject changes to anything except initial five creates
+      - name: Verify HA demo-only apply plan
         run: |
           terraform show -json secondary.tfplan | python3 -c '
           import json,sys
           p=json.load(sys.stdin)
-          expected={"aws_subnet.secondary","aws_route_table.secondary","aws_route_table_association.secondary","aws_security_group.secondary","aws_instance.secondary"}
-          changes={x["address"]:x["change"]["actions"] for x in p.get("resource_changes",[]) if x["change"]["actions"]!=["no-op"]}
-          if set(changes)!=expected or any(v!=["create"] for v in changes.values()):
-              sys.exit("Unexpected plan; refusing apply: "+repr(changes))
-          print("Approved initial create-only resource set.")
+          expected={
+            "aws_security_group.secondary":("update",),
+            "aws_security_group.ha_alb":("create",),
+            "aws_lb.ha_demo":("create",),
+            "aws_lb_target_group.ha_demo":("create",),
+            "aws_lb_target_group_attachment.primary":("create",),
+            "aws_lb_target_group_attachment.secondary":("create",),
+            "aws_lb_listener.ha_demo":("create",),
+          }
+          changes={x["address"]:tuple(x["change"]["actions"]) for x in p.get("resource_changes",[]) if x["change"]["actions"]!=["no-op"]}
+          if changes!=expected:
+              sys.exit("Unexpected HA apply plan; refusing: "+repr(changes))
+          primary=data=None
+          for item in p.get("resource_changes",[]):
+              if item["address"]=="aws_lb_target_group_attachment.primary":
+                  primary=item["change"]["after"].get("target_id")
+          if primary!="i-0674efed441197be5":
+              sys.exit("Unexpected primary target registration: "+repr(primary))
+          print("PASS: exact HA demo resources, expected primary target, no primary changes or deletes.")
           '
       - name: Apply exactly the reviewed plan
         run: terraform apply -input=false -auto-approve secondary.tfplan

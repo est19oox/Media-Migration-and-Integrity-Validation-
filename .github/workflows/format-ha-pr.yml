@@ -1,0 +1,54 @@
+name: Apply Pinned Prettier Formatting
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feature/secondary-ec2-isolated
+    paths:
+      - '.github/workflows/format-ha-pr.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  format:
+    if: github.ref == 'refs/heads/feature/secondary-ec2-isolated'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/secondary-ec2-isolated
+          persist-credentials: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - name: Format six reported files
+        run: |
+          npx prettier --write \
+            frontend/js/file-manager.js \
+            infrastructure/monitoring/grafana/dashboards/integrity-validation.json \
+            infrastructure/secondary-ec2/gateway.compose.yml \
+            infrastructure/secondary-ec2/ha-demo/compose.yml \
+            infrastructure/secondary-ec2/ha-demo/fallback.compose.yml \
+            infrastructure/secondary-ec2/ha-demo/fallback-site/index.html
+          npm run format:check
+      - name: Commit formatting-only changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- \
+            frontend/js/file-manager.js \
+            infrastructure/monitoring/grafana/dashboards/integrity-validation.json \
+            infrastructure/secondary-ec2/gateway.compose.yml \
+            infrastructure/secondary-ec2/ha-demo/compose.yml \
+            infrastructure/secondary-ec2/ha-demo/fallback.compose.yml \
+            infrastructure/secondary-ec2/ha-demo/fallback-site/index.html
+          if git diff --cached --quiet; then
+            echo "No formatting changes."
+          else
+            git commit -m "Apply pinned Prettier formatting to six CI-reported files"
+            git push origin HEAD:feature/secondary-ec2-isolated
+          fi

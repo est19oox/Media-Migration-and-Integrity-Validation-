@@ -1,0 +1,10 @@
+services:
+  fallback:
+    image: nginx:1.27-alpine
+    container_name: mmiv-ha-fallback
+    restart: unless-stopped
+    ports:
+      - '8080:80'
+    volumes:
+      - ./fallback-site:/usr/share/nginx/html:ro
+    mem_limit: 64m

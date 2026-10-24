@@ -1,0 +1,21 @@
+# MMIV academic service-level failover demo.
+# Runs ONLY on the secondary EC2. Does not interact with the primary MMIV stack.
+services:
+  demo-a:
+    image: nginx:1.27-alpine
+    container_name: mmiv-ha-demo-a
+    restart: unless-stopped
+    ports:
+      - '8091:80'
+    volumes:
+      - ./site-a:/usr/share/nginx/html:ro
+    mem_limit: 64m
+  demo-b:
+    image: nginx:1.27-alpine
+    container_name: mmiv-ha-demo-b
+    restart: unless-stopped
+    ports:
+      - '8092:80'
+    volumes:
+      - ./site-b:/usr/share/nginx/html:ro
+    mem_limit: 64m

@@ -1,10 +1,7 @@
 {
   "uid": "mmiv-integrity",
   "title": "MMIV Integrity validation",
-  "tags": [
-    "mmiv",
-    "integrity"
-  ],
+  "tags": ["mmiv", "integrity"],
   "timezone": "browser",
   "schemaVersion": 41,
   "version": 1,
