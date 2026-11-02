@@ -1,61 +1,27 @@
-# MMIV API 契约
+# MMIV API 与事件契约
 
-> **状态：草案——需要团队讨论**
->
-> 本目录用于记录 MMIV 微服务之间的 API 契约。
+MMIV 服务通过明确的 HTTP 接口和带版本的 RabbitMQ 事件契约进行通信。契约与负责实现它们的服务一起维护。
 
-## 1. 待确定事项
+## HTTP API
 
-定义跨服务 API 前，相关服务负责人应确认：
+每个服务负责自己的公开端点，并对其执行的操作验证身份和权限。Gateway 提供浏览器访问路由；服务间客户端调用服务 API，不共享内部 Java 模型，也不直接访问其他服务的数据库。
 
-1. 谁调用该 API？
-2. 端点和 HTTP 方法是什么？
-3. 服务之间共享哪些标识符？
-4. 请求包含哪些内容？
-5. 响应包含哪些内容？
-6. 预期的 HTTP 状态码和错误是什么？
+当前服务通信边界包括：
 
-## 2. API 契约原则
+| 提供方 → 消费方         | 契约用途                   |
+| ----------------------- | -------------------------- |
+| User Access → Discovery | 权限、用户资料和文件夹检查 |
+| Discovery → Transfer    | 计划分配与解析             |
+| Transfer → Discovery    | 传输执行结果               |
+| Integrity → Transfer    | 验证请求与响应             |
+| Discovery → Integrity   | 授权计划解析               |
 
-微服务应通过明确的 API 契约进行通信。
+适配器边界和安全行为见[服务通信文档](../architecture/service-communication.md)。各服务的端点详情由对应服务文档维护；Transfer API 测试契约位于 [`tests/api/transfer-openapi.json`](../../tests/api/transfer-openapi.json)。
 
-服务不应直接依赖其他服务的内部 Java 类或实现细节。
+## 事件契约
 
-每份已确认的契约应定义：
+Discovery、Transfer 和 Integrity 发布生命周期事件，由 Reporting 消费。[事件 v2 指南](../../contracts/events/v2/README.md)介绍事件所有权、标识符、传递规则和安全限制；[JSON Schema](../../contracts/events/v2/mmiv-event.schema.json)及示例是统一的机器可读契约。
 
-- 端点和 HTTP 方法；
-- 请求格式；
-- 响应格式；
-- 共享标识符；
-- 允许的值；
-- HTTP 状态码；
-- 错误行为。
+## 变更管理
 
-## 3. 待讨论的契约
-
-当前需要讨论的跨服务关系包括：
-
-- Discovery ↔ User Access
-- Transfer ↔ User Access
-- Transfer ↔ Integrity
-- Integrity ↔ Reporting
-
-这些关系的确切调用方向和 API 契约尚未最终确定。
-
-## 4. 契约变更
-
-共享 API 的变更应由所有受影响服务的负责人共同评审。
-
-在受影响服务同意更新后的契约之前，不应合并破坏性变更。
-
-## 5. 下一步
-
-架构流程确定后，可在本目录使用 OpenAPI 或简明 Markdown 规范记录每个已确认的跨服务 API。
-
-架构讨论维护在：
-
-`docs/architecture/`
-
-已确认的架构决策维护在：
-
-`docs/decisions/`
+明确维护请求/响应格式、状态码、标识符和错误行为。接口变化时，应更新负责服务的文档和相关契约测试。不兼容的事件变更需要创建新的 Schema 版本；不要在各服务中复制共享事件 Schema。
