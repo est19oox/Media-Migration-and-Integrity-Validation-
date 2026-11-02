@@ -53,10 +53,11 @@ the GitHub verification runner with separate SSM tunnels for each service port.
 | Transfer                    |               8081 | Backend group    |
 | Integrity                   |               8082 | Backend group    |
 | User Access                 |               8083 | Backend group    |
+| Reporting                   |               8084 | Backend group    |
+| Discovery                   |               8085 | Backend group    |
 | API Gateway                 |               8080 | Last             |
 
-Reporting 8084 and Discovery 8085 remain commented out until their owners complete the services.
-User Access uses a private immutable Oracle/JWT configuration bundle. Reporting now consumes RabbitMQ events; retained SQS queues are legacy storage.
+All seven application services are included in the release. User Access uses a private immutable Oracle/JWT configuration bundle. Reporting consumes RabbitMQ events; retained SQS queues are legacy storage.
 Gateway readiness checks its Transfer routes; each enabled backend must also pass
 its health and current-instance Eureka registration checks.
 

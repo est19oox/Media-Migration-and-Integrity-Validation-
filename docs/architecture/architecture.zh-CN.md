@@ -1,93 +1,35 @@
 # MMIV 架构
 
-> **状态：草案**
->
-> 本文总结当前 MMIV 架构以及仍需团队确认的关键决策。
+MMIV 是一个媒体迁移微服务系统。API Gateway 为浏览器应用提供服务，并将请求路由到独立部署的 Spring Boot 服务。Eureka 负责服务注册；服务通过明确的 HTTP 接口处理请求/响应，通过 RabbitMQ 传递生命周期和运行事件。
 
-## 1. 待确定事项
+## 服务
 
-确定跨服务 API 前，团队需要达成以下共识：
+| 服务 | 默认端口 | 职责 |
+| --- | ---: | --- |
+| Service Registry | 8761 | Eureka 注册与服务发现 |
+| API Gateway | 8080 | 浏览器入口、会话、路由和请求限流 |
+| Transfer | 8081 | 授权后的存储操作与传输协调 |
+| Integrity | 8082 | 已存储对象的校验和验证记录 |
+| User Access | 8083 | 账户、身份验证和目标位置权限 |
+| Reporting | 8084 | 事件投影、报告和管理视图 |
+| Discovery | 8085 | 来源发现和迁移元数据 |
 
-1. 端到端的媒体迁移流程是什么？
-2. 哪个服务调用哪个服务？
-3. Discovery 是否需要 User Access 的 `READ` 授权？
-4. Transfer 是否需要 User Access 的 `READ` / `WRITE` 授权？
-5. 服务之间共享哪些标识符？
-6. `userId` 从哪里获得？
-7. 谁负责协调 Transfer → Integrity → Reporting？
-8. GitHub Actions 和 Jenkins 分别承担什么职责？
+以上端口为应用默认值。实际暴露端口由所选运行环境配置决定；集成 Compose 环境发布 Gateway，并将后端应用端口绑定到本机。
 
-## 2. 当前服务
+## 所有权与通信
 
-| 服务        | 端口 | 职责                   |
-| ----------- | ---: | ---------------------- |
-| Transfer    | 8081 | 在存储位置之间传输媒体 |
-| Discovery   | 8085 | 发现媒体和资源         |
-| User Access | 8083 | 检查用户访问权限       |
-| Reporting   | 8084 | 生成迁移和验证报告     |
-| Integrity   | 8082 | 验证已迁移媒体的完整性 |
+各服务负责自己的业务数据和规则：User Access 管理账户和授权；Discovery 管理迁移计划和元数据；Transfer 执行存储操作；Integrity 管理验证结果；Reporting 管理事件投影。Gateway 和 Service Registry 属于基础设施组件，不是业务领域。
 
-每个服务都独立构建并容器化。
+服务使用 HTTP 进行权限检查、计划分配、传输执行和验证请求。Discovery、Transfer 与 Integrity 发布带版本的事件，由 Reporting 投影。RabbitMQ 负责传递事件，不负责协调迁移流程。
 
-当前团队/服务分组如下：
+已实现的上下文关系和安全边界见[服务通信文档](service-communication.md)；聚合规则和持久化所有权见[聚合设计](aggregate-design.md)。
 
-```text
-Discovery ────── User Access
+## 数据与基础设施
 
-Transfer ────── Integrity ────── Reporting
-```
+- Oracle 存储 User Access 和 Discovery 数据。
+- MongoDB 存储 Reporting 投影。
+- Amazon S3 存储迁移后的媒体。
+- RabbitMQ 传递生命周期和运行事件。
+- Redis 为 Gateway 提供共享限流计数。
 
-该分组**不代表**最终的运行时调用流程。
-
-## 3. 草案领域上下文
-
-| 上下文         | 职责                           |
-| -------------- | ------------------------------ |
-| Discovery      | 从来源发现媒体资源             |
-| Access Control | 判断用户是否可以对资源执行操作 |
-| Migration      | 将媒体从来源传输到目标         |
-| Integrity      | 验证已迁移媒体的完整性         |
-| Reporting      | 生成迁移和验证报告             |
-
-仍需确认的潜在关系：
-
-```text
-Discovery ── READ? ─────────► Access Control
-
-Migration ── READ/WRITE? ───► Access Control
-
-Migration ──────────────────► Integrity
-
-Integrity ──────────────────► Reporting
-```
-
-这些箭头表示待讨论的关系，**不是最终的服务调用方向**。
-
-## 4. 共享语言
-
-以下术语在各服务中应保持一致含义：
-
-| 术语           | 含义                    |
-| -------------- | ----------------------- |
-| User / Subject | 执行操作的身份          |
-| Resource       | 受访问控制保护的对象    |
-| Source         | 读取媒体的位置          |
-| Destination    | 写入媒体的位置          |
-| Media Asset    | 被发现或迁移的媒体/文件 |
-| READ           | 读取/访问资源           |
-| WRITE          | 写入资源                |
-
-## 5. API 原则
-
-服务应通过明确的 API 契约通信，而不是依赖其他服务的内部 Java 类。
-
-已达成共识的跨服务契约应定义：
-
-- 端点和 HTTP 方法；
-- 请求和响应；
-- 共享标识符；
-- HTTP 状态和错误行为。
-
-已确认的契约维护在 `docs/api/` 下。
-
-重要架构决策可记录在 `docs/decisions/` 下。
+本地开发和部署需要按目标环境配置这些依赖。不要将凭据或生成的基础设施状态提交到版本控制。

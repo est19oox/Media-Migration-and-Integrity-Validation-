@@ -92,39 +92,24 @@ npm run format:check
 - Run one Maven service's unit and integration-test lifecycle with `mvn -B -f services/<service>/pom.xml clean verify`
 - Run the repository test script with `bash scripts/ci/run-tests.sh .` on Linux, macOS, or WSL (requires Maven and Python 3)
 - Run the Prettier check with `npm run format:check`
-- The repository-wide formatting scripts also check Maven Spotless and Terraform formatting. See [testing and formatting](docs/testing/README.md)
+- The repository-wide formatting scripts also check Maven Spotless and Terraform formatting. See [verification evidence and scope](docs/verification/README.md).
 
 ## Documentation
 
-Start with the [English documentation index](docs/README.md) or the [Simplified Chinese index](docs/README.zh-CN.md). Each guide is linked directly below; Chinese links are provided where a paired translation is available.
+| Topic                 | Guide                                                                                                                                               |
+| --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Architecture          | [Overview](docs/architecture/architecture.md), [aggregate design](docs/architecture/aggregate-design.md), [service communication](docs/architecture/service-communication.md) |
+| API contracts         | [HTTP and event contracts](docs/api/api-contracts.md)                                                                                                |
+| Services              | [Service Registry](services/service-registry/README.md), [API Gateway](services/api-gateway/README.md), and the service guides in `services/`       |
+| Event contract        | [Event v2 guide](contracts/events/v2/README.md) and [JSON Schema](contracts/events/v2/mmiv-event.schema.json)                                      |
+| Development           | [Frontend](frontend/README.md), [database](database/README.md), and [API tests](tests/api/README.md)                                                |
+| Deployment            | [Docker deployment](docs/ci-cd/docker-deployment.md), [Gateway access](docs/ci-cd/gateway-access.md), [Ansible](infrastructure/ansible/README.md), and [Terraform](infrastructure/terraform/README.md) |
+| CI/CD                 | [Workflow overview](docs/ci-cd/ci-cd.md)                                                                                                             |
+| Administration        | [Administrator access](docs/admin/administrator-access.md) and [folder workspace](docs/admin/folder-workspace.md)                                  |
+| Verification          | [Verification evidence and scope](docs/verification/README.md)                                                                                     |
+| Optional local CI     | [Jenkins setup](docs/jenkins/local-setup.md)                                                                                                        |
 
-| Topic                 | English                                                             | 简体中文                                                           |
-| --------------------- | ------------------------------------------------------------------- | ------------------------------------------------------------------ |
-| Architecture          | [Architecture](docs/architecture.md)                                | [架构](docs/architecture.zh-CN.md)                                 |
-| Development           | [Local setup](docs/development/local-setup.md)                      | [本地开发](docs/development/local-setup.zh-CN.md)                  |
-| Development           | [Local Oracle database](docs/database/README.md)                    | [本地 Oracle 数据库](docs/database/README.zh-CN.md)                |
-| Services              | [Service catalog](docs/services/catalog.md)                         | [服务目录](docs/services/catalog.zh-CN.md)                         |
-| Services              | [API Gateway](docs/services/api-gateway.md)                         | [API Gateway](docs/services/api-gateway.zh-CN.md)                  |
-| Services              | [Reporting](docs/services/reporting.md)                             | [Reporting](docs/services/reporting.zh-CN.md)                      |
-| Services              | [Transfer and Integrity](docs/services/transfer-integrity.md)       | [Transfer 与 Integrity](docs/services/transfer-integrity.zh-CN.md) |
-| Services              | [Integrated service flow](docs/services/integration.md)             | [服务集成流程](docs/services/integration.zh-CN.md)                 |
-| Services              | [Circuit breakers](docs/services/circuit-breakers.md)               | [服务熔断器](docs/services/circuit-breakers.zh-CN.md)              |
-| Testing               | [Testing and formatting](docs/testing/README.md)                    | [测试与格式化](docs/testing/README.zh-CN.md)                       |
-| Testing               | [API and DAST validation](docs/testing/api-validation.md)           | [API 与 DAST 验证](docs/testing/api-validation.zh-CN.md)           |
-| Deployment            | [Docker release](docs/deployment/docker-release.md)                 | [Docker 发布部署](docs/deployment/docker-release.zh-CN.md)         |
-| Deployment            | [Gateway access](docs/deployment/gateway-access.md)                 | [Gateway 访问](docs/deployment/gateway-access.zh-CN.md)            |
-| Deployment            | [Login and protected access](docs/deployment/login-access.md)       | [登录与受保护访问](docs/deployment/login-access.zh-CN.md)          |
-| Deployment            | [Ansible](docs/deployment/ansible.md)                               | [Ansible](docs/deployment/ansible.zh-CN.md)                        |
-| Deployment            | [Manual Ansible role](docs/deployment/ansible-manual-role.md)       | [手动 Ansible role](docs/deployment/ansible-manual-role.zh-CN.md)  |
-| Deployment            | [Terraform](docs/deployment/terraform.md)                           | [Terraform](docs/deployment/terraform.zh-CN.md)                    |
-| Deployment            | [Optional local Jenkins](docs/jenkins/local-setup.md)               | [可选本地 Jenkins](docs/jenkins/local-setup.zh-CN.md)              |
-| Administration        | [Administrator access](docs/admin/administrator-access.md)          | English only                                                       |
-| Administration        | [Folder workspace](docs/admin/folder-workspace.md)                  | English only                                                       |
-| Historical operations | [Bootstrap recovery notes](docs/infrastructure/bootstrap/README.md) | English only; verify current AWS state before use                  |
-| Event contract        | [Event v2 guide](docs/contracts/events/v2/README.md)                | [事件契约 v2](docs/contracts/events/v2/README.zh-CN.md)            |
-| Event contract        | [JSON Schema](contracts/events/v2/mmiv-event.schema.json)           | Language-neutral schema                                            |
-
-The optional Jenkins guide documents a local demonstration controller. GitHub Actions automatically runs the repository's hosted CI/CD workflows.
+GitHub Actions runs the hosted validation and deployment workflows. Jenkins is an optional local demonstration environment.
 
 ## Contributing
 
@@ -132,4 +117,4 @@ Keep service changes within the relevant Maven project unless a shared contract 
 
 ## Project Status
 
-✅ **Production Ready** - The MMIV system is fully implemented and tested. All seven microservices are operational with complete integration, deployment automation, and comprehensive documentation.
+**Project complete and public.** The repository contains seven Spring Boot services, the browser frontend, deployment automation, tests, and operational documentation. Runtime deployment still requires environment-specific infrastructure, credentials, and service configuration; the verification evidence describes its scope and limitations.
