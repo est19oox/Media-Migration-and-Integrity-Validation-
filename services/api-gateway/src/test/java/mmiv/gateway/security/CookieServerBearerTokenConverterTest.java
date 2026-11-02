@@ -15,7 +15,8 @@ class CookieServerBearerTokenConverterTest {
       var exchange =
           MockServerWebExchange.from(
               MockServerHttpRequest.post("/user-access/api/auth/" + endpoint)
-                  .cookie(new org.springframework.http.HttpCookie("MMIV_SESSION", "expired-token")));
+                  .cookie(
+                      new org.springframework.http.HttpCookie("MMIV_SESSION", "expired-token")));
       assertTrue(GatewaySecurityConfiguration.isPublicAuthPost(exchange), endpoint);
       assertTrue(converter.convert(exchange).blockOptional().isEmpty(), endpoint);
     }
