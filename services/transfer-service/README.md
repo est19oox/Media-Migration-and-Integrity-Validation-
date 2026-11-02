@@ -1,25 +1,42 @@
 # MMIV Transfer Service
 
-Transfer executes authorized uploads and transfers to Amazon S3. It resolves migration plans through Discovery, validates stored objects through Integrity, and publishes lifecycle events for Reporting.
-
-## API
-
-- `POST /api/v1/transfers` with JSON `{"metadataId":"<plan-id>"}` executes a transfer for an assigned metadata plan.
-- `POST /api/v1/transfers` with multipart form data accepts a `file` and optional `destinationId`.
-- Folder uploads and portal operations are documented by their controllers under `src/main/java/mmiv/transfer/controller/`.
-
-Requests are authenticated and authorized by the service; the browser frontend is not an authorization boundary.
-
-## Build and test
-
-From the repository root, with JDK 25:
-
-```sh
-./services/user-access-service/mvnw -B -f services/transfer-service/pom.xml clean verify
-```
+Standalone microservice prepared for merging into the AWS setup branch.
 
 ## Configuration
 
-The service listens on port 8081 by default. `AWS_REGION` configures the AWS region and `MMIV_BUCKET_NAME` configures the S3 bucket. The AWS SDK default credential chain supports an EC2 instance profile; do not store AWS keys in the repository.
+- `AWS_REGION` defaults to `ap-southeast-1`.
+- `MMIV_BUCKET_NAME` defaults to `media-migration-dev-landing`.
+- The service uses the AWS SDK default credential chain, so an EC2 instance profile can provide credentials without storing AWS keys in the container.
 
-Transfer also requires the configured User Access and Discovery APIs, Integrity, RabbitMQ, and a writable event outbox. See [service communication](../../docs/architecture/service-communication.md) for the implemented boundaries and [SQS logging](SQS-LOGGING.md) for the separate operational file-log queue.
+## Build
+
+```bash
+mvn -B clean package
+```
+
+## Run
+
+```bash
+java -jar target/transfer-service.jar
+```
+
+## Transfer API
+
+```http
+POST /api/v1/transfers
+Content-Type: application/json
+
+{
+  "sourcePath": "/data/media/example.mp4",
+  "destinationKey": "AY2026-2027/Semester_1/CS2103/Lectures/example.mp4",
+  "contentType": "video/mp4"
+}
+```
+
+The implementation uses the Strategy Pattern and a factory so additional transfer targets can be added later.
+
+## Asynchronous file logs
+
+Uploads, transfers, downloads and previews publish records through a persistent
+SQS outbox. See [SQS-LOGGING.md](SQS-LOGGING.md) for message variable names, UTC
+timestamps, consumer requirements and the one-time bootstrap permission update.

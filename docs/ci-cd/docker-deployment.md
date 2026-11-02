@@ -1,6 +1,6 @@
 # Current integration
 
-RabbitMQ, MongoDB, and all seven services are enabled. See [the integration guide](../integration/services.md) for the current logging and destination authorization contracts. RabbitMQ carries business events; SQS remains in use for Transfer file logs and retained legacy queues.
+RabbitMQ, MongoDB, and all seven services are now enabled. See [the integration guide](../integration/services.md) for the current logging and destination authorization contracts. The SQS sections below describe the retained legacy infrastructure only.
 
 # Docker release deployment
 
@@ -53,11 +53,10 @@ the GitHub verification runner with separate SSM tunnels for each service port.
 | Transfer                    |               8081 | Backend group    |
 | Integrity                   |               8082 | Backend group    |
 | User Access                 |               8083 | Backend group    |
-| Reporting                   |               8084 | Backend group    |
-| Discovery                   |               8085 | Backend group    |
 | API Gateway                 |               8080 | Last             |
 
-All seven application services are included in the release. User Access uses a private immutable Oracle/JWT configuration bundle. Reporting consumes RabbitMQ events; retained SQS queues are legacy storage.
+Reporting 8084 and Discovery 8085 remain commented out until their owners complete the services.
+User Access uses a private immutable Oracle/JWT configuration bundle. Reporting now consumes RabbitMQ events; retained SQS queues are legacy storage.
 Gateway readiness checks its Transfer routes; each enabled backend must also pass
 its health and current-instance Eureka registration checks.
 
@@ -118,6 +117,38 @@ seconds. Polling starts quickly and backs off. Host Docker commands, image pulls
 health and registration checks have separate bounds. Normal completion returns
 immediately; these limits do not impose fixed waits.
 
+## Validation and applying the update
+
+Each DAST scan selects an available runner-local tunnel port automatically;
+`DAST_LOCAL_PORT=0` also requests automatic selection. Set `DAST_LOCAL_PORT` to
+a specific port only when required. An occupied explicit port produces a clear
+error without stopping the unrelated listener. Readiness requires the plugin's
+port-open acknowledgement before sending HTTP requests. Cleanup terminates the
+owned tunnel process group and forcibly stops any remaining plugin child after
+a bounded wait, so sequential scans do not depend on reusing port 18081.
+
+Local tests exercise health dependency order, one deployment invocation, credential/key reuse,
+database preservation, idempotency, partial updates, optional Integrity configuration changes,
+failed rollout recovery, first-release cleanup, migration, interrupted release
+recovery, stale rollback rejection, manifest completeness, SSM eventual visibility,
+scan sequencing and scanner image reuse. Static configuration and existing shell
+runtime checks also run. Actual AWS/SSM, Docker/Compose, Terraform, Maven
+and live ZAP execution are not available in this editing environment; run the
+workflow on the new commit to validate that integration.
+
+Copy the complete updated tree into your checkout and remove the superseded files:
+
+- `.github/workflows/deploy-service.yml`
+- `scripts/cd/docker-service-remote.py`
+- `scripts/cd/docker-service-ssm.py`
+- `tests/ci/test-docker-lifecycle.py`
+
+The optional legacy
+Ansible deployment role remains for separate/manual deployments; use stack release
+recovery for hosts migrated to `mmiv-stack`. Neither the package nor local tests
+prove the runtime cause of the earlier Office folder-upload failure; its diagnostic
+fields and integrity assertions remain intact for the next live report.
+
 ## Transfer log queue
 
 Terraform provisions the encrypted SQS file-log queue and DLQ. Its queue URL is
@@ -125,4 +156,9 @@ passed through Terraform job outputs and setup-host into the release manifest an
 Transfer container. Apply the updated bootstrap once to grant queue provisioning
 permissions. Host setup creates a private persistent Transfer log outbox without
 another Ansible install. See [Transfer SQS logging](../../services/transfer-service/SQS-LOGGING.md)
-for timestamp meanings and producer configuration. Reporting consumes business events through RabbitMQ; the SQS log queue is a separate operational channel.
+for timestamp meanings and producer configuration. The Reporting consumer is deferred to its owner.
+
+## Current main additions
+
+See [main-update.md](main-update.md) for automatic User Access credentials, persistent Oracle,
+optional external configuration and the log service handoff. User Access is enabled; Reporting and Discovery remain commented out.

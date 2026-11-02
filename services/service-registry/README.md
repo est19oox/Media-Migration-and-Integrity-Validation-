@@ -48,10 +48,11 @@ replicas keep their service ports on different container IPs. Use the gateway
 README for replica testing and routes. AWS credentials and bucket configuration
 are needed for actual S3 transfers.
 
-The CI/CD matrix includes all seven implemented services. Terraform still precedes
-deployment. Matrix ordering is not guaranteed; clients retry registration while
-the registry starts. Eureka registration confirms service discovery only; use the
-service health checks and routed integration tests to verify application behavior.
+The existing CI/CD matrix now includes all seven services with active entries.
+Terraform still precedes deployment. Matrix ordering is not guaranteed; clients
+retry registration while the registry starts. Business endpoints in placeholder
+services still need their own implementation. Registering a service does not
+implement those endpoints.
 
 Unit/context tests disable external Eureka connections only in test properties.
 Production registration remains enabled. Registry port 8761 binds to host

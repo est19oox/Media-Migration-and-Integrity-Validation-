@@ -170,12 +170,9 @@
     }
   });
 
-  window.mmivAuth.ready
-    .then(loadProfile)
-    .then(load)
-    .catch(() => {
-      rows.replaceChildren();
-      count.textContent = '0 reports';
-      status.textContent = 'Your session could not be verified.';
-    });
+  window.mmivAuth.ready.then(loadProfile).then(load).catch(() => {
+    rows.replaceChildren();
+    count.textContent = '0 reports';
+    status.textContent = 'Your session could not be verified.';
+  });
 })();
