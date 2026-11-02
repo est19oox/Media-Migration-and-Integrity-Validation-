@@ -1,16 +1,35 @@
 # MMIV CI/CD
 
-GitHub Actions provides the hosted validation, service-verification, and deployment workflows. The workflow definitions are in [`.github/workflows/`](../../.github/workflows/); the main pipeline is [`cicd.yml`](../../.github/workflows/cicd.yml).
+> **Status: Draft — Team Discussion Required**
 
-## Hosted workflows
+## 1. Current Setup
 
-- Repository validation and formatting checks run through GitHub Actions.
-- Service build and verification workflows validate the Spring Boot services.
-- The main CI/CD pipeline validates Terraform and runs CI/security gates, builds service images, deploys through AWS Systems Manager, and verifies the deployed application.
-- Workflows are triggered by their configured branch/path filters or manual dispatch. Required repository secrets and cloud resources depend on the selected workflow.
+MMIV currently uses both:
 
-The deployment sequence, runtime assumptions, and recovery behavior are documented in the [Docker deployment guide](docker-deployment.md). Do not run deployment workflows without verifying the AWS account, Terraform state, and target environment.
+- **GitHub Actions**
+- **Jenkins**
 
-## Optional local Jenkins
+GitHub Actions provides automated validation and AWS deployment workflows.
 
-Jenkins is an optional local demonstration environment, not a second authority for hosted CI or production deployment. See [local Jenkins setup](../jenkins/local-setup.md) for its Compose-based installation and usage.
+Jenkins provides a reproducible Docker-based CI environment and can run builds, tests, security checks, and local integration validation.
+
+## 2. Decisions Required
+
+The team needs to confirm:
+
+1. Which system is the authoritative CI pipeline?
+2. Which checks are required before merging a PR?
+3. Should a local Jenkins instance be a required merge check?
+4. Which system is responsible for AWS deployment?
+5. Which CI stages are intentionally shared between GitHub Actions and Jenkins?
+6. How should duplicate builds and checks be avoided?
+
+## 3. Current Principle
+
+Until the responsibilities are agreed, GitHub Actions and Jenkins should be treated as separate CI/CD mechanisms.
+
+Their final ownership and merge/deployment responsibilities should not be assumed.
+
+Detailed Jenkins setup instructions are available under:
+
+`docs/jenkins/`

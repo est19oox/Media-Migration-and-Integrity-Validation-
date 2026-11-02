@@ -1,35 +1,93 @@
 # MMIV Architecture
 
-MMIV is a service-based media migration system. The API Gateway serves the browser application and routes requests to independently deployed Spring Boot services. Eureka provides service registration; services use explicit HTTP interfaces for request/response work and RabbitMQ for lifecycle and operational events.
+> **Status: Draft**
+>
+> This document summarises the current MMIV architecture and the key decisions that still require team agreement.
 
-## Services
+## 1. Decisions Required
 
-| Service          | Default port | Responsibility                                                |
-| ---------------- | -----------: | ------------------------------------------------------------- |
-| Service Registry |         8761 | Eureka registration and discovery                             |
-| API Gateway      |         8080 | Browser entry point, sessions, routing, and request admission |
-| Transfer         |         8081 | Authorized storage operations and transfer coordination       |
-| Integrity        |         8082 | Stored-object checksum validation and audit records           |
-| User Access      |         8083 | Accounts, authentication, and destination permissions         |
-| Reporting        |         8084 | Event projections, reports, and administrative views          |
-| Discovery        |         8085 | Source discovery and migration metadata                       |
+Before finalising cross-service APIs, the team needs to agree on:
 
-The ports are application defaults. Deployment exposure is controlled by the selected runtime configuration; the integrated Compose stack publishes the Gateway and keeps backend application ports on loopback.
+1. What is the end-to-end Media Migration flow?
+2. Which service calls which?
+3. Does Discovery require User Access `READ` authorization?
+4. Does Transfer require User Access `READ` / `WRITE` authorization?
+5. What identifiers are shared between services?
+6. Where does `userId` come from?
+7. Who coordinates Transfer → Integrity → Reporting?
+8. What are the respective roles of GitHub Actions and Jenkins?
 
-## Ownership and communication
+## 2. Current Services
 
-Each service owns its business data and rules. User Access owns accounts and grants; Discovery owns migration plans and metadata; Transfer owns storage execution; Integrity owns validation outcomes; Reporting owns event projections. The Gateway and Service Registry are infrastructure components, not business contexts.
+| Service     | Port | Responsibility                           |
+| ----------- | ---: | ---------------------------------------- |
+| Transfer    | 8081 | Transfer media between storage locations |
+| Discovery   | 8085 | Discover media/resources                 |
+| User Access | 8083 | Check user access permissions            |
+| Reporting   | 8084 | Generate migration/validation reports    |
+| Integrity   | 8082 | Validate migrated media integrity        |
 
-Services use HTTP for permission checks, plan allocation, transfer execution, and validation requests. Discovery, Transfer, and Integrity publish versioned events for Reporting to project. RabbitMQ transports these events; it does not coordinate the migration workflow.
+Each service is independently built and containerized.
 
-For the implemented context map and security boundaries, see [service communication](service-communication.md). For aggregate invariants and persistence ownership, see [aggregate design](aggregate-design.md).
+The current team/service grouping is:
 
-## Data and infrastructure
+```text id="ruxmgu"
+Discovery ────── User Access
 
-- Oracle stores User Access and Discovery data.
-- MongoDB stores reporting projections.
-- Amazon S3 stores migrated media.
-- RabbitMQ carries lifecycle and operational events.
-- Redis backs shared Gateway rate limits.
+Transfer ────── Integrity ────── Reporting
+```
 
-Local development and deployment require environment-specific configuration for these dependencies. Keep credentials and generated infrastructure state out of version control.
+This grouping does **not** define the final runtime call flow.
+
+## 3. Draft Domain Contexts
+
+| Context        | Responsibility                                            |
+| -------------- | --------------------------------------------------------- |
+| Discovery      | Discover media resources from a source                    |
+| Access Control | Decide whether a user can perform an action on a resource |
+| Migration      | Transfer media from source to destination                 |
+| Integrity      | Validate migrated media integrity                         |
+| Reporting      | Produce migration and validation reports                  |
+
+Potential relationships that still require agreement:
+
+```text id="hrmbku"
+Discovery ── READ? ─────────► Access Control
+
+Migration ── READ/WRITE? ───► Access Control
+
+Migration ──────────────────► Integrity
+
+Integrity ──────────────────► Reporting
+```
+
+These arrows represent relationships to discuss, **not final service call directions**.
+
+## 4. Shared Language
+
+The following terms should have consistent meanings across services:
+
+| Term           | Meaning                                 |
+| -------------- | --------------------------------------- |
+| User / Subject | Identity performing an operation        |
+| Resource       | Object protected by access control      |
+| Source         | Location from which media is read       |
+| Destination    | Location to which media is written      |
+| Media Asset    | Media/file being discovered or migrated |
+| READ           | Read/access a resource                  |
+| WRITE          | Write to a resource                     |
+
+## 5. API Principle
+
+Services should communicate through explicit API contracts rather than depending on another service's internal Java classes.
+
+Agreed cross-service contracts should define:
+
+- endpoint and HTTP method;
+- request and response;
+- shared identifiers;
+- HTTP status and error behaviour.
+
+Confirmed contracts will be maintained under `docs/api/`.
+
+Significant architecture decisions can be recorded under `docs/decisions/`.
