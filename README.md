@@ -53,7 +53,7 @@ tests/              API, browser, integration, and CI contract tests
 - **Docker Compose v2** for local Oracle, supporting services, and integrated runtime tests
 - **Python 3** for selected CI and deployment validation scripts
 
-Some runtime operations also require configured Oracle schemas, RabbitMQ, MongoDB, AWS credentials, and access to the configured S3 bucket. Do not put credentials in tracked files. See [local development](docs/development/local-setup.md) before attempting to run the integrated application.
+Some runtime operations also require configured Oracle schemas, RabbitMQ, MongoDB, AWS credentials, and access to the configured S3 bucket. Do not put credentials in tracked files. See the [database setup](database/README.md) and [deployment guide](docs/ci-cd/docker-deployment.md) before running the integrated application.
 
 ## Quick Start
 
