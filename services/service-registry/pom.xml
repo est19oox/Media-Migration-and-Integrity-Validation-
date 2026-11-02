@@ -22,6 +22,7 @@
     <httpcore5.version>5.4.3</httpcore5.version>
     <bouncycastle.version>1.85</bouncycastle.version>
     <freemarker.version>2.3.35</freemarker.version>
+    <guava.version>33.7.2-jre</guava.version>
   </properties>
   <dependencyManagement>
     <dependencies>
@@ -54,6 +55,11 @@
         <groupId>org.bouncycastle</groupId>
         <artifactId>bcutil-jdk18on</artifactId>
         <version>${bouncycastle.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>com.google.guava</groupId>
+        <artifactId>guava</artifactId>
+        <version>${guava.version}</version>
       </dependency>
       <dependency>
         <groupId>org.freemarker</groupId>
