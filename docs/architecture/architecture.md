@@ -4,15 +4,15 @@ MMIV is a service-based media migration system. The API Gateway serves the brows
 
 ## Services
 
-| Service | Default port | Responsibility |
-| --- | ---: | --- |
-| Service Registry | 8761 | Eureka registration and discovery |
-| API Gateway | 8080 | Browser entry point, sessions, routing, and request admission |
-| Transfer | 8081 | Authorized storage operations and transfer coordination |
-| Integrity | 8082 | Stored-object checksum validation and audit records |
-| User Access | 8083 | Accounts, authentication, and destination permissions |
-| Reporting | 8084 | Event projections, reports, and administrative views |
-| Discovery | 8085 | Source discovery and migration metadata |
+| Service          | Default port | Responsibility                                                |
+| ---------------- | -----------: | ------------------------------------------------------------- |
+| Service Registry |         8761 | Eureka registration and discovery                             |
+| API Gateway      |         8080 | Browser entry point, sessions, routing, and request admission |
+| Transfer         |         8081 | Authorized storage operations and transfer coordination       |
+| Integrity        |         8082 | Stored-object checksum validation and audit records           |
+| User Access      |         8083 | Accounts, authentication, and destination permissions         |
+| Reporting        |         8084 | Event projections, reports, and administrative views          |
+| Discovery        |         8085 | Source discovery and migration metadata                       |
 
 The ports are application defaults. Deployment exposure is controlled by the selected runtime configuration; the integrated Compose stack publishes the Gateway and keeps backend application ports on loopback.
 

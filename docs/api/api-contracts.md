@@ -8,13 +8,13 @@ Each service owns its public endpoints and validates authentication and authoriz
 
 Current communication boundaries include:
 
-| Provider → consumer | Contract purpose |
-| --- | --- |
+| Provider → consumer     | Contract purpose                       |
+| ----------------------- | -------------------------------------- |
 | User Access → Discovery | Permission, profile, and folder checks |
-| Discovery → Transfer | Plan allocation and resolution |
-| Transfer → Discovery | Transfer execution response |
-| Integrity → Transfer | Validation request and response |
-| Discovery → Integrity | Authorized plan resolution |
+| Discovery → Transfer    | Plan allocation and resolution         |
+| Transfer → Discovery    | Transfer execution response            |
+| Integrity → Transfer    | Validation request and response        |
+| Discovery → Integrity   | Authorized plan resolution             |
 
 See [service communication](../architecture/service-communication.md) for adapter boundaries and security behavior. Service-specific endpoint details are documented with the relevant service; the transfer API test contract is in [`tests/api/transfer-openapi.json`](../../tests/api/transfer-openapi.json).
 

@@ -96,18 +96,18 @@ npm run format:check
 
 ## Documentation
 
-| Topic                 | Guide                                                                                                                                               |
-| --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Architecture          | [Overview](docs/architecture/architecture.md), [aggregate design](docs/architecture/aggregate-design.md), [service communication](docs/architecture/service-communication.md) |
-| API contracts         | [HTTP and event contracts](docs/api/api-contracts.md)                                                                                                |
-| Services              | [Service Registry](services/service-registry/README.md), [API Gateway](services/api-gateway/README.md), and the service guides in `services/`       |
-| Event contract        | [Event v2 guide](contracts/events/v2/README.md) and [JSON Schema](contracts/events/v2/mmiv-event.schema.json)                                      |
-| Development           | [Frontend](frontend/README.md), [database](database/README.md), and [API tests](tests/api/README.md)                                                |
-| Deployment            | [Docker deployment](docs/ci-cd/docker-deployment.md), [Gateway access](docs/ci-cd/gateway-access.md), [Ansible](infrastructure/ansible/README.md), and [Terraform](infrastructure/terraform/README.md) |
-| CI/CD                 | [Workflow overview](docs/ci-cd/ci-cd.md)                                                                                                             |
-| Administration        | [Administrator access](docs/admin/administrator-access.md) and [folder workspace](docs/admin/folder-workspace.md)                                  |
-| Verification          | [Verification evidence and scope](docs/verification/README.md)                                                                                     |
-| Optional local CI     | [Jenkins setup](docs/jenkins/local-setup.md)                                                                                                        |
+| Topic             | Guide                                                                                                                                                                                                  |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Architecture      | [Overview](docs/architecture/architecture.md), [aggregate design](docs/architecture/aggregate-design.md), [service communication](docs/architecture/service-communication.md)                          |
+| API contracts     | [HTTP and event contracts](docs/api/api-contracts.md)                                                                                                                                                  |
+| Services          | [Service Registry](services/service-registry/README.md), [API Gateway](services/api-gateway/README.md), and the service guides in `services/`                                                          |
+| Event contract    | [Event v2 guide](contracts/events/v2/README.md) and [JSON Schema](contracts/events/v2/mmiv-event.schema.json)                                                                                          |
+| Development       | [Frontend](frontend/README.md), [database](database/README.md), and [API tests](tests/api/README.md)                                                                                                   |
+| Deployment        | [Docker deployment](docs/ci-cd/docker-deployment.md), [Gateway access](docs/ci-cd/gateway-access.md), [Ansible](infrastructure/ansible/README.md), and [Terraform](infrastructure/terraform/README.md) |
+| CI/CD             | [Workflow overview](docs/ci-cd/ci-cd.md)                                                                                                                                                               |
+| Administration    | [Administrator access](docs/admin/administrator-access.md) and [folder workspace](docs/admin/folder-workspace.md)                                                                                      |
+| Verification      | [Verification evidence and scope](docs/verification/README.md)                                                                                                                                         |
+| Optional local CI | [Jenkins setup](docs/jenkins/local-setup.md)                                                                                                                                                           |
 
 GitHub Actions runs the hosted validation and deployment workflows. Jenkins is an optional local demonstration environment.
 

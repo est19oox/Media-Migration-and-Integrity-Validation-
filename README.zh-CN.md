@@ -6,15 +6,15 @@ MMIV 是一个基于 Java 和 Spring Boot 的媒体迁移系统，支持媒体�
 
 ## 服务架构
 
-| 服务 | 端口 | 职责 |
-| --- | ---: | --- |
-| Service Registry | 8761 | Eureka 服务注册与发现 |
-| API Gateway | 8080 | 前端入口、浏览器会话和 API 路由 |
-| Transfer | 8081 | 执行授权后的文件传输并协调验证 |
-| Integrity | 8082 | 校验已存储对象的内容 |
-| User Access | 8083 | 用户身份验证、账户和目标位置权限 |
-| Reporting | 8084 | 消费事件并提供用户报告和管理视图 |
-| Discovery | 8085 | 发现来源媒体并管理迁移元数据 |
+| 服务             | 端口 | 职责                             |
+| ---------------- | ---: | -------------------------------- |
+| Service Registry | 8761 | Eureka 服务注册与发现            |
+| API Gateway      | 8080 | 前端入口、浏览器会话和 API 路由  |
+| Transfer         | 8081 | 执行授权后的文件传输并协调验证   |
+| Integrity        | 8082 | 校验已存储对象的内容             |
+| User Access      | 8083 | 用户身份验证、账户和目标位置权限 |
+| Reporting        | 8084 | 消费事件并提供用户报告和管理视图 |
+| Discovery        | 8085 | 发现来源媒体并管理迁移元数据     |
 
 服务通过明确的 HTTP API 通信；RabbitMQ 传递生命周期和运行事件。Oracle、MongoDB 和 Amazon S3 分别用于账户/元数据、报告以及媒体存储。集成 Compose 环境仅向所有主机接口发布 Gateway，其他应用端口仅绑定本机。
 

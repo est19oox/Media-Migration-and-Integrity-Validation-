@@ -8,13 +8,13 @@ MMIV 服务通过明确的 HTTP 接口和带版本的 RabbitMQ 事件契约进�
 
 当前服务通信边界包括：
 
-| 提供方 → 消费方 | 契约用途 |
-| --- | --- |
+| 提供方 → 消费方         | 契约用途                   |
+| ----------------------- | -------------------------- |
 | User Access → Discovery | 权限、用户资料和文件夹检查 |
-| Discovery → Transfer | 计划分配与解析 |
-| Transfer → Discovery | 传输执行结果 |
-| Integrity → Transfer | 验证请求与响应 |
-| Discovery → Integrity | 授权计划解析 |
+| Discovery → Transfer    | 计划分配与解析             |
+| Transfer → Discovery    | 传输执行结果               |
+| Integrity → Transfer    | 验证请求与响应             |
+| Discovery → Integrity   | 授权计划解析               |
 
 适配器边界和安全行为见[服务通信文档](../architecture/service-communication.md)。各服务的端点详情由对应服务文档维护；Transfer API 测试契约位于 [`tests/api/transfer-openapi.json`](../../tests/api/transfer-openapi.json)。
 
