@@ -2,6 +2,10 @@ data "aws_vpc" "mmiv" { id = var.vpc_id }
 data "aws_subnet" "primary" { id = var.primary_public_subnet_id }
 data "aws_subnet" "secondary" { id = var.secondary_public_subnet_id }
 data "aws_caller_identity" "current" {}
+data "aws_ec2_managed_prefix_list" "cloudfront_origin" {
+  count = var.use_cloudfront_default_domain ? 1 : 0
+  name  = "com.amazonaws.global.cloudfront.origin-facing"
+}
 resource "random_password" "origin_token" {
   count   = var.use_cloudfront_default_domain ? 1 : 0
   length  = 40
@@ -31,6 +35,15 @@ resource "aws_vpc_security_group_ingress_rule" "alb_cloudfront" {
   from_port         = 80
   to_port           = 80
   cidr_ipv4         = data.aws_vpc.mmiv.cidr_block
+}
+resource "aws_vpc_security_group_ingress_rule" "alb_cloudfront_prefix" {
+  count             = var.use_cloudfront_default_domain ? 1 : 0
+  description       = "CloudFront VPC Origin managed source on the origin listener"
+  security_group_id = aws_security_group.alb.id
+  ip_protocol       = "tcp"
+  from_port         = 80
+  to_port           = 80
+  prefix_list_id    = data.aws_ec2_managed_prefix_list.cloudfront_origin[0].id
 }
 resource "aws_vpc_security_group_ingress_rule" "alb_https" {
   count             = var.use_cloudfront_default_domain ? 0 : 1
@@ -427,7 +440,7 @@ resource "aws_cloudfront_vpc_origin" "gateway" {
       quantity = 1
     }
   }
-  depends_on = [aws_lb_listener_rule.cloudfront_origin, aws_vpc_security_group_ingress_rule.alb_cloudfront]
+  depends_on = [aws_lb_listener_rule.cloudfront_origin, aws_vpc_security_group_ingress_rule.alb_cloudfront_prefix]
 }
 
 resource "aws_cloudfront_cache_policy" "no_cache" {

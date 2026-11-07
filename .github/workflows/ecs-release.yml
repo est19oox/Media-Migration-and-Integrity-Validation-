@@ -40,6 +40,8 @@ jobs:
     name: Plan and optionally release immutable ECS images
     runs-on: ubuntu-latest
     timeout-minutes: 90
+    outputs:
+      browser_url: ${{ steps.health.outputs.browser_url }}
     env:
       AWS_REGION: ap-southeast-1
       ECR_REPOSITORY: mmiv
@@ -132,6 +134,7 @@ jobs:
         shell: bash
         run: terraform -chdir=infrastructure/ecs-fargate apply -input=false -lock-timeout=5m "$RUNNER_TEMP/mmiv-ecs.tfplan"
       - name: Check ECS rollout and Gateway health
+        id: health
         if: ${{ inputs.apply && !inputs.prepare_base }}
         shell: bash
         run: |
@@ -145,6 +148,7 @@ jobs:
             if curl --fail --silent --show-error --max-time 10 \
               --output /dev/null "$url/actuator/health"; then
               echo "Gateway is healthy at $url"
+              echo "browser_url=$url" >> "$GITHUB_OUTPUT"
               exit 0
             fi
             sleep 10
@@ -161,4 +165,35 @@ jobs:
           name: ecs-release-plan-${{ github.sha }}
           path: ${{ runner.temp }}/mmiv-ecs-plan.txt
           if-no-files-found: ignore
+          retention-days: 7
+  dast:
+    name: ZAP baseline against released ECS Gateway
+    needs: release
+    if: ${{ inputs.apply && !inputs.prepare_base }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+      - name: Scan public HTTPS Gateway
+        env:
+          ECS_BROWSER_URL: ${{ needs.release.outputs.browser_url }}
+          MMIV_TEST_NETWORK: bridge
+        run: |
+          set -euo pipefail
+          [[ "$ECS_BROWSER_URL" == https://* ]] || {
+            echo '::error::ECS release did not provide a CloudFront HTTPS URL.'
+            exit 1
+          }
+          bash scripts/ci/run-dast.sh "$ECS_BROWSER_URL/"
+      - name: Upload ECS DAST evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v6
+        with:
+          name: ecs-dast-${{ github.sha }}
+          path: |
+            .ci/reports/zap.log
+            .ci/reports/zap-report.json
+            .ci/reports/zap-report.html
+          if-no-files-found: warn
           retention-days: 7

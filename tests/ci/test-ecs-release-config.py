@@ -124,6 +124,19 @@ class EcsReleaseConfigTest(unittest.TestCase):
             ["aws_service_discovery_service.registry", "aws_service_discovery_service.registry_peer"],
         )
 
+    def test_cloudfront_vpc_origin_allows_managed_source_without_replacing_existing_rule(self):
+        terraform = (ROOT / "infrastructure/ecs-fargate/main.tf").read_text()
+        self.assertIn('name  = "com.amazonaws.global.cloudfront.origin-facing"', terraform)
+        rule = re.search(
+            r'resource "aws_vpc_security_group_ingress_rule" "alb_cloudfront_prefix" \{(.*?)\n\}',
+            terraform,
+            re.S,
+        )
+        self.assertIsNotNone(rule)
+        self.assertIn('prefix_list_id    = data.aws_ec2_managed_prefix_list.cloudfront_origin[0].id',
+                      rule.group(1))
+        self.assertIn('cidr_ipv4         = data.aws_vpc.mmiv.cidr_block', terraform)
+
     def test_oracle_schema_password_stays_within_identifier_limit(self):
         terraform = (ROOT / "infrastructure/aws-managed-data/main.tf").read_text()
         bootstrap = (ROOT / "infrastructure/aws-managed-data/bootstrap-oracle.py").read_text()
@@ -172,6 +185,26 @@ class EcsReleaseConfigTest(unittest.TestCase):
         bootstrap = yaml.safe_load((ROOT / ".github/workflows/oracle-bootstrap.yml").read_text())
         self.assertEqual(bootstrap["jobs"]["first-release"]["needs"], ["initialize"])
         self.assertTrue(bootstrap["jobs"]["first-release"]["with"]["first_release"])
+
+    def test_zap_runs_after_healthy_ecs_release_and_archives_reports(self):
+        import yaml
+
+        workflow = yaml.safe_load((ROOT / ".github/workflows/ecs-release.yml").read_text())
+        release = workflow["jobs"]["release"]
+        dast = workflow["jobs"]["dast"]
+        self.assertEqual(dast["needs"], "release")
+        self.assertIn("inputs.apply", dast["if"])
+        self.assertIn("!inputs.prepare_base", dast["if"])
+        self.assertIn("steps.health.outputs.browser_url", release["outputs"]["browser_url"])
+        health = next(step for step in release["steps"] if step.get("id") == "health")
+        self.assertIn("browser_url=$url", health["run"])
+        scan = next(step for step in dast["steps"] if step.get("name") == "Scan public HTTPS Gateway")
+        self.assertEqual(scan["env"]["MMIV_TEST_NETWORK"], "bridge")
+        self.assertIn("run-dast.sh", scan["run"])
+        self.assertIn("https://", scan["run"])
+        evidence = next(step for step in dast["steps"] if step.get("name") == "Upload ECS DAST evidence")
+        self.assertIn("zap-report.json", evidence["with"]["path"])
+        self.assertIn("zap-report.html", evidence["with"]["path"])
 
     def test_manual_first_deployment_waits_for_checks_and_images_before_spending(self):
         import yaml
