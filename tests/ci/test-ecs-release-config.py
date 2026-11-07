@@ -110,6 +110,33 @@ class EcsReleaseConfigTest(unittest.TestCase):
             ["aws_ecs_task_definition.oracle_bootstrap"],
         )
 
+    def test_registry_replacement_only_before_services_start(self):
+        replacements = {"resource_changes": [
+            {"address": address, "change": {"actions": ["delete", "create"]}}
+            for address in sorted(plan_module.REGISTRY_SERVICES)
+        ]}
+        self.assertTrue(plan_module.allow_registry_replacement(True, [
+            "aws_ecs_task_definition.oracle_bootstrap",
+            "aws_service_discovery_service.registry",
+        ]))
+        self.assertEqual(plan_module.forbidden_deletions(replacements, True), [])
+        self.assertFalse(plan_module.allow_registry_replacement(True, [
+            'aws_ecs_service.service["api-gateway"]',
+        ]))
+        self.assertFalse(plan_module.allow_registry_replacement(False, []))
+        self.assertEqual(
+            plan_module.forbidden_deletions(replacements),
+            sorted(plan_module.REGISTRY_SERVICES),
+        )
+        replacements["resource_changes"].append({
+            "address": "aws_service_discovery_private_dns_namespace.mmiv",
+            "change": {"actions": ["delete", "create"]},
+        })
+        self.assertEqual(
+            plan_module.forbidden_deletions(replacements, True),
+            ["aws_service_discovery_private_dns_namespace.mmiv"],
+        )
+
     def test_oracle_schema_password_stays_within_identifier_limit(self):
         terraform = (ROOT / "infrastructure/aws-managed-data/main.tf").read_text()
         bootstrap = (ROOT / "infrastructure/aws-managed-data/bootstrap-oracle.py").read_text()

@@ -125,7 +125,8 @@ jobs:
             > "$RUNNER_TEMP/mmiv-ecs-plan.txt"
           terraform -chdir=infrastructure/ecs-fargate show -json "$RUNNER_TEMP/mmiv-ecs.tfplan" \
             > "$RUNNER_TEMP/mmiv-ecs-plan.json"
-          python3 scripts/cd/check-ecs-release-plan.py "$RUNNER_TEMP/mmiv-ecs-plan.json"
+          python3 scripts/cd/check-ecs-release-plan.py \
+            "$RUNNER_TEMP/mmiv-ecs-plan.json" "$RUNNER_TEMP/mmiv-ecs-state-list.txt" "$MMIV_PREPARE_BASE"
           grep -E '^Plan: ' "$RUNNER_TEMP/mmiv-ecs-plan.txt" || true
       - name: Apply ECS release
         if: ${{ inputs.apply }}
