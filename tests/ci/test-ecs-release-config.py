@@ -2,6 +2,7 @@
 """Guard automated ECS releases against missing state and stale image revisions."""
 
 import importlib.util
+import re
 import unittest
 from pathlib import Path
 
@@ -12,6 +13,11 @@ SPEC = importlib.util.spec_from_file_location(
 )
 module = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(module)
+PLAN_SPEC = importlib.util.spec_from_file_location(
+    "ecs_plan", ROOT / "scripts/cd/check-ecs-release-plan.py"
+)
+plan_module = importlib.util.module_from_spec(PLAN_SPEC)
+PLAN_SPEC.loader.exec_module(plan_module)
 
 
 class EcsReleaseConfigTest(unittest.TestCase):
@@ -74,6 +80,40 @@ class EcsReleaseConfigTest(unittest.TestCase):
             plan,
         )
         self.assertNotIn("terraform -chdir=infrastructure/ecs-fargate state list", plan)
+
+    def test_image_revision_can_replace_task_definitions_without_destroying_infrastructure(self):
+        changes = [
+            {"address": 'aws_ecs_task_definition.service["api-gateway"]',
+             "change": {"actions": ["delete", "create"]}},
+            {"address": "aws_ecs_task_definition.oracle_bootstrap",
+             "change": {"actions": ["create", "delete"]}},
+            {"address": "aws_ecs_service.service[\"api-gateway\"]",
+             "change": {"actions": ["update"]}},
+        ]
+        self.assertEqual(plan_module.forbidden_deletions({"resource_changes": changes}), [])
+        changes.append({"address": "aws_efs_file_system.outbox",
+                        "change": {"actions": ["delete", "create"]}})
+        self.assertEqual(
+            plan_module.forbidden_deletions({"resource_changes": changes}),
+            ["aws_efs_file_system.outbox"],
+        )
+        self.assertEqual(
+            plan_module.forbidden_deletions({"resource_changes": [
+                {"address": "aws_ecs_task_definition.oracle_bootstrap",
+                 "change": {"actions": ["delete"]}}
+            ]}),
+            ["aws_ecs_task_definition.oracle_bootstrap"],
+        )
+
+    def test_oracle_schema_password_stays_within_identifier_limit(self):
+        terraform = (ROOT / "infrastructure/aws-managed-data/main.tf").read_text()
+        bootstrap = (ROOT / "infrastructure/aws-managed-data/bootstrap-oracle.py").read_text()
+        configured = re.search(r'resource "random_password" "schema" \{[^}]*length\s*=\s*(\d+)', terraform)
+        accepted = re.search(r're.fullmatch\(r"\[A-Za-z0-9\]\{(\d+)\}"', bootstrap)
+        self.assertIsNotNone(configured)
+        self.assertIsNotNone(accepted)
+        self.assertEqual(int(configured.group(1)), int(accepted.group(1)))
+        self.assertLessEqual(int(configured.group(1)), 30)
 
     def test_workflow_waits_for_all_images_and_keeps_old_host_disabled(self):
         import yaml

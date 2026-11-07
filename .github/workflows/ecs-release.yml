@@ -125,16 +125,7 @@ jobs:
             > "$RUNNER_TEMP/mmiv-ecs-plan.txt"
           terraform -chdir=infrastructure/ecs-fargate show -json "$RUNNER_TEMP/mmiv-ecs.tfplan" \
             > "$RUNNER_TEMP/mmiv-ecs-plan.json"
-          python3 - "$RUNNER_TEMP/mmiv-ecs-plan.json" <<'PY'
-          import json
-          import sys
-          with open(sys.argv[1], encoding='utf-8') as plan:
-              changes = json.load(plan).get('resource_changes', [])
-          destructive = [item['address'] for item in changes
-                         if 'delete' in item.get('change', {}).get('actions', [])]
-          if destructive:
-              raise SystemExit('ECS plan would delete or replace resources: ' + ', '.join(destructive))
-          PY
+          python3 scripts/cd/check-ecs-release-plan.py "$RUNNER_TEMP/mmiv-ecs-plan.json"
           grep -E '^Plan: ' "$RUNNER_TEMP/mmiv-ecs-plan.txt" || true
       - name: Apply ECS release
         if: ${{ inputs.apply }}

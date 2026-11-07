@@ -32,8 +32,9 @@ def main():
         "INTEGRITY_SERVICE": secret(args.integrity_secret_arn),
     }
     # CREATE USER accepts a quoted password identifier, not a bind variable.
+    # Keep the generated password below Oracle's 30-byte identifier limit.
     for password in passwords.values():
-        if not re.fullmatch(r"[A-Za-z0-9]{32}", password):
+        if not re.fullmatch(r"[A-Za-z0-9]{24}", password):
             raise ValueError("Unexpected schema password format")
     with oracledb.connect(
         user=master["username"],

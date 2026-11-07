@@ -152,8 +152,9 @@ resource "aws_vpc_security_group_ingress_rule" "app" {
 
 resource "random_password" "schema" {
   for_each = local.app_users
-  length   = 32
-  special  = false
+  # CREATE USER treats a quoted password as an identifier on this Oracle configuration.
+  length  = 24
+  special = false
 }
 resource "random_password" "reporting" {
   length  = 32
