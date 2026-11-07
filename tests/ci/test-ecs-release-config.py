@@ -63,6 +63,18 @@ class EcsReleaseConfigTest(unittest.TestCase):
         self.env["MMIV_START_SERVICES"] = "false"
         self.assertFalse(module.render(self.outputs, self.env)["start_services"])
 
+    def test_first_release_accepts_unapplied_ecs_state(self):
+        import yaml
+
+        workflow = yaml.safe_load((ROOT / ".github/workflows/ecs-release.yml").read_text())
+        steps = workflow["jobs"]["release"]["steps"]
+        plan = next(step["run"] for step in steps if step.get("name") == "Plan ECS release")
+        self.assertIn(
+            "bash scripts/cd/terraform-state-list-or-empty.sh infrastructure/ecs-fargate",
+            plan,
+        )
+        self.assertNotIn("terraform -chdir=infrastructure/ecs-fargate state list", plan)
+
     def test_workflow_waits_for_all_images_and_keeps_old_host_disabled(self):
         import yaml
 
