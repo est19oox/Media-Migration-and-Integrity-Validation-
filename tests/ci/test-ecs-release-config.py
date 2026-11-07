@@ -18,6 +18,11 @@ PLAN_SPEC = importlib.util.spec_from_file_location(
 )
 plan_module = importlib.util.module_from_spec(PLAN_SPEC)
 PLAN_SPEC.loader.exec_module(plan_module)
+DATA_PLAN_SPEC = importlib.util.spec_from_file_location(
+    "managed_data_plan", ROOT / "scripts/cd/check-managed-data-plan.py"
+)
+data_plan_module = importlib.util.module_from_spec(DATA_PLAN_SPEC)
+DATA_PLAN_SPEC.loader.exec_module(data_plan_module)
 
 
 class EcsReleaseConfigTest(unittest.TestCase):
@@ -114,6 +119,31 @@ class EcsReleaseConfigTest(unittest.TestCase):
         self.assertIsNotNone(accepted)
         self.assertEqual(int(configured.group(1)), int(accepted.group(1)))
         self.assertLessEqual(int(configured.group(1)), 30)
+
+    def test_managed_data_plan_allows_only_schema_password_replacements(self):
+        import yaml
+
+        workflow = yaml.safe_load((ROOT / ".github/workflows/managed-data.yml").read_text())
+        step = next(step["run"] for step in workflow["jobs"]["managed-data"]["steps"]
+                    if step.get("name") == "Validate configuration and inspect plan")
+        self.assertIn("python3 scripts/cd/check-managed-data-plan.py", step)
+        changes = [
+            {"address": address, "change": {"actions": ["delete", "create"]}}
+            for address in sorted(data_plan_module.PASSWORD_RESOURCES)
+        ]
+        self.assertEqual(data_plan_module.forbidden_deletions({"resource_changes": changes}), [])
+        changes.extend([
+            {"address": "aws_db_instance.oracle", "change": {"actions": ["delete", "create"]}},
+            {"address": 'random_password.schema["UNEXPECTED"]',
+             "change": {"actions": ["delete", "create"]}},
+            {"address": 'aws_secretsmanager_secret_version.schema["USER_ACCESS"]',
+             "change": {"actions": ["delete"]}},
+        ])
+        self.assertEqual(
+            data_plan_module.forbidden_deletions({"resource_changes": changes}),
+            ["aws_db_instance.oracle", 'random_password.schema["UNEXPECTED"]',
+             'aws_secretsmanager_secret_version.schema["USER_ACCESS"]'],
+        )
 
     def test_workflow_waits_for_all_images_and_keeps_old_host_disabled(self):
         import yaml
