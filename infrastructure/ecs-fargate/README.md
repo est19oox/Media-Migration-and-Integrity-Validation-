@@ -12,7 +12,8 @@ and replication topology. In demo mode, application Tasks run in one AZ. The
 two subnets remain in different AZs because the ALB requires them. By default,
 CloudFront provides an AWS-managed HTTPS `cloudfront.net` address without a
 custom domain or ACM certificate. Its VPC Origin connects to an internal ALB,
-whose HTTP listener accepts only VPC addresses and forwards requests only when
+whose HTTP listener accepts VPC addresses and the AWS-managed CloudFront
+origin-facing IPv4 prefix list, and forwards requests only when
 they carry the private origin header. Gateway Tasks remain in the primary AZ.
 Its ECS-only rate-limit setting uses the CloudFront-appended viewer address
 just before the ALB-appended hop; Task port 8080 accepts traffic
@@ -25,6 +26,11 @@ query strings and upload methods. Its origin read timeout is 120 seconds;
 uploads that take longer to return a response need a separate direct-to-S3
 upload flow or an increased origin timeout quota. The origin token is stored in
 Terraform state, so the state bucket must remain private.
+The CloudFront prefix list consumes 55 inbound security-group rule slots; the
+new ALB security group uses one further slot for the VPC CIDR rule. Verify
+the regional inbound-rule quota is at least 56 if the account has customized
+it. The Terraform OIDC role needs `ec2:DescribeManagedPrefixLists` to resolve
+the prefix list during planning.
 
 ## Required before planning or applying
 

@@ -137,6 +137,18 @@ class EcsReleaseConfigTest(unittest.TestCase):
                       rule.group(1))
         self.assertIn('cidr_ipv4         = data.aws_vpc.mmiv.cidr_block', terraform)
 
+    def test_failed_gateway_check_reports_cloudfront_and_alb_health(self):
+        import yaml
+
+        workflow = yaml.safe_load((ROOT / ".github/workflows/ecs-release.yml").read_text())
+        health = next(step["run"] for step in workflow["jobs"]["release"]["steps"]
+                      if step.get("name") == "Check ECS rollout and Gateway health")
+        self.assertIn("--max-time 40", health)
+        self.assertIn("--write-out 'HTTP %{http_code}", health)
+        self.assertIn("aws elbv2 describe-target-health", health)
+        self.assertIn("aws cloudfront get-distribution", health)
+        self.assertIn("aws cloudfront get-vpc-origin", health)
+
     def test_oracle_schema_password_stays_within_identifier_limit(self):
         terraform = (ROOT / "infrastructure/aws-managed-data/main.tf").read_text()
         bootstrap = (ROOT / "infrastructure/aws-managed-data/bootstrap-oracle.py").read_text()

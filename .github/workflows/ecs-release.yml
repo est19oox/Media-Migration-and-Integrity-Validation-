@@ -144,6 +144,7 @@ jobs:
             aws ecs wait services-stable --cluster "$cluster" --services "$name"
           done
           url=$(terraform -chdir=infrastructure/ecs-fargate output -raw browser_url)
+          echo "Checking public Gateway health at $url/actuator/health"
           for attempt in $(seq 1 30); do
             if curl --fail --silent --show-error --max-time 10 \
               --output /dev/null "$url/actuator/health"; then
@@ -153,6 +154,22 @@ jobs:
             fi
             sleep 10
           done
+          echo 'Gateway health diagnostic (one request long enough to capture a CloudFront 504):'
+          curl --silent --show-error --max-time 40 --output /dev/null \
+            --write-out 'HTTP %{http_code}; DNS %{time_namelookup}s; connect %{time_connect}s; TLS %{time_appconnect}s; first byte %{time_starttransfer}s; total %{time_total}s\n' \
+            "$url/actuator/health" || true
+          target_group=$(terraform -chdir=infrastructure/ecs-fargate output -raw gateway_target_group_arn)
+          aws elbv2 describe-target-health --target-group-arn "$target_group" \
+            --query 'TargetHealthDescriptions[].{target:Target.Id,state:TargetHealth.State,reason:TargetHealth.Reason}' \
+            --output json || true
+          distribution=$(terraform -chdir=infrastructure/ecs-fargate output -raw cloudfront_distribution_id)
+          if [ -n "$distribution" ]; then
+            aws cloudfront get-distribution --id "$distribution" \
+              --query 'Distribution.{status:Status,enabled:DistributionConfig.Enabled,domain:DomainName}' \
+              --output json || true
+            origin=$(terraform -chdir=infrastructure/ecs-fargate output -raw cloudfront_vpc_origin_id)
+            aws cloudfront get-vpc-origin --id "$origin" --query 'VpcOrigin.Status' --output text || true
+          fi
           echo '::error::ECS is stable but the public Gateway health URL is not responding.'
           exit 1
       - name: Confirm prepared base for Oracle initialization

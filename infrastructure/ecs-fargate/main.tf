@@ -37,6 +37,7 @@ resource "aws_vpc_security_group_ingress_rule" "alb_cloudfront" {
   cidr_ipv4         = data.aws_vpc.mmiv.cidr_block
 }
 resource "aws_vpc_security_group_ingress_rule" "alb_cloudfront_prefix" {
+  #checkov:skip=CKV_AWS_260:Port 80 accepts only the AWS-managed CloudFront origin-facing prefix list; the internal ALB is not open to 0.0.0.0/0.
   count             = var.use_cloudfront_default_domain ? 1 : 0
   description       = "CloudFront VPC Origin managed source on the origin listener"
   security_group_id = aws_security_group.alb.id
@@ -628,6 +629,9 @@ resource "aws_cloudwatch_dashboard" "ecs" {
 
 output "gateway_dns_name" { value = aws_lb.gateway.dns_name }
 output "browser_url" { value = var.use_cloudfront_default_domain ? "https://${aws_cloudfront_distribution.gateway[0].domain_name}" : "Use your ACM certificate hostname pointing to ${aws_lb.gateway.dns_name}" }
+output "gateway_target_group_arn" { value = aws_lb_target_group.gateway.arn }
+output "cloudfront_distribution_id" { value = var.use_cloudfront_default_domain ? aws_cloudfront_distribution.gateway[0].id : "" }
+output "cloudfront_vpc_origin_id" { value = var.use_cloudfront_default_domain ? aws_cloudfront_vpc_origin.gateway[0].id : "" }
 output "cluster_name" { value = aws_ecs_cluster.mmiv.name }
 output "oracle_bootstrap_task_definition_arn" { value = aws_ecs_task_definition.oracle_bootstrap.arn }
 output "secondary_subnet_id" { value = data.aws_subnet.secondary.id }
