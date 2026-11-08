@@ -51,12 +51,16 @@ the prefix list during planning.
    API compatibility and TLS trust before cutover. Configure connection limits
    for the maximum Task counts, not just the initial counts.
 4. The managed-data root creates RabbitMQ password, three Oracle schema
-   passwords, a DocumentDB URI and a fresh JWT RSA key pair in Secrets Manager. Supply the
+   passwords, a one-time bootstrap administrator password, a DocumentDB URI
+   and a fresh JWT RSA key pair in Secrets Manager. Supply the
    output ARNs in `secret_arns`; the ECS root state contains ARNs, not secret
    values. Each entry must contain the raw value expected by its environment
    variable, rather than a JSON object. Supply `redis_password` from the
    managed-data output and set `data_kms_key_arn` to that root's KMS output,
-   allowing ECS to decrypt its Secrets Manager values.
+   allowing ECS to decrypt its Secrets Manager values. User Access receives
+   the administrator secret and creates `admin` once; see
+   [administrator access](../../docs/admin/administrator-access.md#first-administrator-on-ecs-fargate)
+   for secure retrieval and existing-account behavior.
 5. For a fresh deployment, accounts, metadata, history, EFS outboxes and
    `/media` start empty. Use a new S3 bucket if its objects must also start
    empty. If existing users, files or sessions must be kept,
@@ -80,6 +84,10 @@ run **Initialize MMIV Oracle schemas**; it starts an idempotent Fargate Task
 inside the VPC and calls the same release workflow to start services only after
 the Task exits successfully. No placeholder apply or local Oracle client is
 needed. These applies create chargeable infrastructure.
+For an existing ECS application, run **MMIV Microservices CI/CD** on the updated
+branch with `deploy_demo=true`; the same entry point builds images, applies
+managed-data additions and updates ECS services without repeating the
+base-preparation or Oracle-bootstrap jobs.
 Keep `demo_single_az=true` in both Terraform roots for the lower-cost demo.
 The ECS root then starts one Task per scalable business service and can grow
 it independently. Set it to `false` in both roots only for a multi-AZ release;

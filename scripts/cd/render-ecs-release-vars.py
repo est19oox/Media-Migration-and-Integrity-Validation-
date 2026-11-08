@@ -67,6 +67,7 @@ def render(outputs, env):
         "secret_arns": {
             "rabbit_password": output(outputs, "rabbit_password_arn"),
             "user_access_db_password": output(outputs, "user_access_db_password_arn"),
+            "bootstrap_admin_password": output(outputs, "bootstrap_admin_password_arn"),
             "discovery_db_password": output(outputs, "discovery_db_password_arn"),
             "integrity_db_password": output(outputs, "integrity_db_password_arn"),
             "mongo_uri": output(outputs, "mongo_uri_arn"),

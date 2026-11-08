@@ -22,6 +22,45 @@ The administration page reuses the same HttpOnly browser cookie as Home, Upload,
 
 For an externally managed Oracle deployment, default-account creation is opt-in: configure `MMIV_BOOTSTRAP_ADMIN_ENABLED=true`, `MMIV_BOOTSTRAP_ADMIN_USERNAME`, and a private `MMIV_BOOTSTRAP_ADMIN_PASSWORD` of at least 16 characters and at most 72 UTF-8 bytes before first startup. Never put this password in tracked configuration. Managed EC2 injects these values only into User Access, not other services.
 
+## First administrator on ECS Fargate
+
+The managed-data Terraform root generates a 32-character password and stores it
+in an encrypted Secrets Manager secret named `mmiv/bootstrap-admin/<suffix>`.
+The ECS Task Definition injects that secret only into User Access, which creates
+the `admin` account once on its first successful startup. Later Task replacements,
+restarts and scale-out do not reset its password. If an administrator or a
+bootstrap-history record already exists, the initializer leaves accounts
+unchanged; the generated secret is then **not** necessarily the password of an
+existing administrator. An ordinary account already named `admin` must be
+resolved before bootstrap; it is never promoted automatically.
+
+For an already running ECS demo, run **MMIV Microservices CI/CD** on the updated
+branch with `deploy_demo=true`. After quality checks and image builds, the
+workflow applies managed-data changes and detects that the ECS application
+already exists, so it updates the services without preparing the base or
+reinitializing Oracle. Its managed-data plan should add the bootstrap password
+generator and Secrets Manager secret/version without deleting or replacing the
+databases. No teardown is required. The ECS release reads the new secret ARN
+from the managed-data Terraform output.
+
+To retrieve the initial password, open **AWS Console → Secrets Manager → Secrets**
+in **ap-southeast-1**, search `mmiv/bootstrap-admin/`, open the secret and select
+**Retrieve secret value**. The account name is `admin`. Alternatively, use the
+`bootstrap_admin_password_arn` output from the managed-data Terraform state:
+
+```sh
+aws secretsmanager get-secret-value \
+  --secret-id 'PASTE_BOOTSTRAP_ADMIN_PASSWORD_ARN' \
+  --query SecretString --output text --region ap-southeast-1
+```
+
+Your IAM identity needs `secretsmanager:GetSecretValue` on that secret and
+`kms:Decrypt` on the managed-data KMS key. Do not paste the password into CI
+logs, Terraform variables, chat or source control. After signing in, change it
+through the account page; the stored bootstrap secret remains the **initial**
+password and will not track later password changes. Terraform state also
+contains the generated secret material, so keep the state bucket private.
+
 ## Invite an external administrator
 
 1. The external administrator registers a normal account at `/signup.html` and chooses their own password.

@@ -31,6 +31,7 @@ class EcsReleaseConfigTest(unittest.TestCase):
             "oracle_jdbc_url", "oracle_master_secret_arn", "rabbit_host", "redis_host", "rabbit_port",
             "redis_port", "kms_key_arn", "rabbit_password_arn",
             "user_access_db_password_arn", "discovery_db_password_arn",
+            "bootstrap_admin_password_arn",
             "integrity_db_password_arn", "mongo_uri_arn", "redis_password_arn",
             "task_security_group_id", "jwt_private_key_secret_arn",
             "jwt_public_key_secret_arn",
@@ -51,6 +52,7 @@ class EcsReleaseConfigTest(unittest.TestCase):
         result = module.render(self.outputs, self.env)
         self.assertEqual(result["image_revision"], "a" * 40)
         self.assertEqual(result["secret_arns"]["mongo_uri"], "mongo_uri_arn-value")
+        self.assertEqual(result["secret_arns"]["bootstrap_admin_password"], "bootstrap_admin_password_arn-value")
         self.assertEqual(result["secondary_public_subnet_id"], "subnet-secondary")
         self.assertEqual(result["task_security_group_id"], "task_security_group_id-value")
         self.assertTrue(result["demo_single_az"])
@@ -219,7 +221,7 @@ class EcsReleaseConfigTest(unittest.TestCase):
         self.assertIn("zap-report.json", evidence["with"]["path"])
         self.assertIn("zap-report.html", evidence["with"]["path"])
 
-    def test_manual_first_deployment_waits_for_checks_and_images_before_spending(self):
+    def test_manual_demo_deployment_uses_one_entry_point_for_new_and_existing_ecs(self):
         import yaml
 
         cicd = yaml.safe_load((ROOT / ".github/workflows/cicd.yml").read_text())
@@ -235,9 +237,16 @@ class EcsReleaseConfigTest(unittest.TestCase):
         orchestrator = yaml.safe_load((ROOT / ".github/workflows/first-ecs-deployment.yml").read_text())
         jobs = orchestrator["jobs"]
         self.assertIn("oracle-bootstrap", jobs["preflight"]["steps"][-1]["run"])
+        state = next(step for step in jobs["preflight"]["steps"] if step.get("id") == "state")
+        self.assertIn("terraform-state-list-or-empty.sh", state["run"])
+        self.assertIn('aws_ecs_service.service["api-gateway"]', state["run"])
         self.assertEqual(jobs["managed-data"]["needs"], "preflight")
-        self.assertEqual(jobs["ecs-base"]["needs"], "managed-data")
+        self.assertEqual(jobs["ecs-base"]["needs"], ["preflight", "managed-data"])
+        self.assertIn("ecs_initialized == 'false'", jobs["ecs-base"]["if"])
         self.assertEqual(jobs["oracle-and-services"]["needs"], "ecs-base")
+        self.assertEqual(jobs["ecs-update"]["needs"], ["preflight", "managed-data"])
+        self.assertIn("ecs_initialized == 'true'", jobs["ecs-update"]["if"])
+        self.assertTrue(jobs["ecs-update"]["with"]["apply"])
         self.assertTrue(jobs["ecs-base"]["with"]["prepare_base"])
         self.assertTrue(jobs["ecs-base"]["with"]["apply"])
         self.assertIn("workflow_call", orchestrator["on"])

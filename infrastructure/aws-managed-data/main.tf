@@ -168,6 +168,10 @@ resource "random_password" "redis" {
   length  = 32
   special = false
 }
+resource "random_password" "bootstrap_admin" {
+  length  = 32
+  special = false
+}
 
 resource "tls_private_key" "jwt" {
   algorithm = "RSA"
@@ -209,6 +213,17 @@ resource "aws_secretsmanager_secret_version" "schema" {
   for_each      = local.app_users
   secret_id     = aws_secretsmanager_secret.schema[each.key].id
   secret_string = random_password.schema[each.key].result
+}
+resource "aws_secretsmanager_secret" "bootstrap_admin" {
+  #checkov:skip=CKV2_AWS_57:Rotation requires a coordinated administrator password change; this is a one-time bootstrap credential.
+  name_prefix             = "mmiv/bootstrap-admin/"
+  recovery_window_in_days = 7
+  kms_key_id              = aws_kms_key.data.arn
+  tags                    = { Project = "MMIV" }
+}
+resource "aws_secretsmanager_secret_version" "bootstrap_admin" {
+  secret_id     = aws_secretsmanager_secret.bootstrap_admin.id
+  secret_string = random_password.bootstrap_admin.result
 }
 resource "aws_secretsmanager_secret" "rabbit" {
   #checkov:skip=CKV2_AWS_57:Broker password rotation must also update Amazon MQ and Tasks.
@@ -377,6 +392,9 @@ output "oracle_master_secret_arn" {
 }
 output "user_access_db_password_arn" {
   value = aws_secretsmanager_secret.schema["USER_ACCESS"].arn
+}
+output "bootstrap_admin_password_arn" {
+  value = aws_secretsmanager_secret.bootstrap_admin.arn
 }
 output "discovery_db_password_arn" {
   value = aws_secretsmanager_secret.schema["DISCOVERY"].arn

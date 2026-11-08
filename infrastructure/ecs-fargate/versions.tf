@@ -87,14 +87,15 @@ variable "data_kms_key_arn" {
 # Values are existing Secrets Manager ARNs, not plaintext. Create/import them before apply.
 variable "secret_arns" {
   type = object({
-    rabbit_password         = string
-    user_access_db_password = string
-    discovery_db_password   = string
-    integrity_db_password   = string
-    mongo_uri               = string
-    jwt_private_key_pem     = string
-    jwt_public_key_pem      = string
-    redis_password          = optional(string)
+    rabbit_password          = string
+    user_access_db_password  = string
+    bootstrap_admin_password = string
+    discovery_db_password    = string
+    integrity_db_password    = string
+    mongo_uri                = string
+    jwt_private_key_pem      = string
+    jwt_public_key_pem       = string
+    redis_password           = optional(string)
   })
 }
 
@@ -184,10 +185,12 @@ locals {
         MMIV_RATE_LIMIT_TRUST_CLOUDFRONT_XFF = tostring(var.use_cloudfront_default_domain)
       } : {},
       name == "user-access-service" ? {
-        ORACLE_JDBC_URL = var.oracle_jdbc_url
-        ORACLE_USER     = var.user_access_db_username
-        JWT_ISSUER      = var.jwt_issuer
-        JWT_KEY_ID      = var.jwt_key_id
+        ORACLE_JDBC_URL               = var.oracle_jdbc_url
+        ORACLE_USER                   = var.user_access_db_username
+        JWT_ISSUER                    = var.jwt_issuer
+        JWT_KEY_ID                    = var.jwt_key_id
+        MMIV_BOOTSTRAP_ADMIN_ENABLED  = "true"
+        MMIV_BOOTSTRAP_ADMIN_USERNAME = "admin"
       } : {},
       name == "discovery-service" ? {
         ORACLE_JDBC_URL = var.oracle_jdbc_url
@@ -209,9 +212,10 @@ locals {
       }, name == "api-gateway" && var.secret_arns.redis_password != null ? {
       SPRING_DATA_REDIS_PASSWORD = var.secret_arns.redis_password
       } : {}, name == "user-access-service" ? {
-      ORACLE_PASSWORD     = var.secret_arns.user_access_db_password
-      JWT_PRIVATE_KEY_PEM = var.secret_arns.jwt_private_key_pem
-      JWT_PUBLIC_KEY_PEM  = var.secret_arns.jwt_public_key_pem
+      ORACLE_PASSWORD               = var.secret_arns.user_access_db_password
+      MMIV_BOOTSTRAP_ADMIN_PASSWORD = var.secret_arns.bootstrap_admin_password
+      JWT_PRIVATE_KEY_PEM           = var.secret_arns.jwt_private_key_pem
+      JWT_PUBLIC_KEY_PEM            = var.secret_arns.jwt_public_key_pem
       } : {}, name == "discovery-service" ? {
       ORACLE_PASSWORD = var.secret_arns.discovery_db_password
       } : {}, name == "integrity-service" ? {
