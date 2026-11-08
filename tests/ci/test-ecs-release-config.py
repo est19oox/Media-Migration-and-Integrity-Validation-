@@ -148,6 +148,7 @@ class EcsReleaseConfigTest(unittest.TestCase):
         self.assertIn("aws elbv2 describe-target-health", health)
         self.assertIn("aws cloudfront get-distribution", health)
         self.assertIn("aws cloudfront get-vpc-origin", health)
+        self.assertIn('"$url/user-access/actuator/health"', health)
 
     def test_oracle_schema_password_stays_within_identifier_limit(self):
         terraform = (ROOT / "infrastructure/aws-managed-data/main.tf").read_text()
