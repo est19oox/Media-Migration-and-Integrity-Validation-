@@ -25,7 +25,8 @@ class TrivyInstallerTest(unittest.TestCase):
             (directory / "sudo").write_text(
                 '#!/bin/sh\nprintf "%s\\n" "$*" >> "$MMIV_TEST_INSTALL_LOG"\n'
             )
-            for name in ("curl", "sudo"):
+            (directory / "docker").write_text('#!/bin/sh\nexit 1\n')
+            for name in ("curl", "sudo", "docker"):
                 (directory / name).chmod(0o755)
             log = directory / "install.log"
             env = os.environ | {
@@ -41,6 +42,12 @@ class TrivyInstallerTest(unittest.TestCase):
             failure = subprocess.run(["bash", str(INSTALLER)], env=env, capture_output=True)
             self.assertNotEqual(failure.returncode, 0)
             self.assertFalse(log.exists())
+
+    def test_official_image_and_binary_are_pinned(self):
+        installer = INSTALLER.read_text()
+        self.assertIn('ghcr.io/aquasecurity/trivy@sha256:ee940acbf1f58ebadb42d01434ce4609530bf1b52536afbd1eee66cd7123c5c9', installer)
+        self.assertIn('d89bcc6510a267f11b773398cbf1be5520ce39f9e8b6633178c4487f05b7d791', installer)
+        self.assertLess(installer.index('sha256sum --check --strict'), installer.index('sudo install'))
 
     def test_every_workflow_uses_shared_installer(self):
         import yaml
