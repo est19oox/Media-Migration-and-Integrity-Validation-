@@ -181,6 +181,7 @@ locals {
       } : {},
       name == "api-gateway" ? {
         JWT_COOKIE_SECURE                    = tostring(var.gateway_cookie_secure)
+        MMIV_RATE_LIMIT_ENABLED              = "false" # Temporary public Gateway load-test branch only.
         MMIV_RATE_LIMIT_TRUST_ALB_XFF        = "true"
         MMIV_RATE_LIMIT_TRUST_CLOUDFRONT_XFF = tostring(var.use_cloudfront_default_domain)
       } : {},
